@@ -11,7 +11,7 @@ Split the KruAir web app so the React UI talks to a real Express API, and all st
 - `sql/` — SQL Server schema for SSMS.
 - `data/` — seed JSON for packages, accounts, reviews.
 - `backend/` — Express on port 3001. Routes, JWT, bcrypt, `mssql` + `msnodesqlv8`.
-- SQL Server database `TheVocal_KruAir` created by `backend/sql/schema.sql`.
+- SQL Server database `BD_AIR` created by `sql/schema.sql`.
 
 ## Auth
 - Login/register return JWT (7 days).

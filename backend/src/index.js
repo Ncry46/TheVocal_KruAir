@@ -2,7 +2,7 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import { registerRoutes } from './routes.js';
-import { getPool } from './db.js';
+import { getAuthMode, getPool } from './db.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -13,7 +13,7 @@ app.use(express.json());
 
 app.get('/api/health', async (_req, res) => {
     await getPool();
-    res.json({ ok: true, database: process.env.SQL_DATABASE || 'TheVocal_KruAir' });
+    res.json({ ok: true, database: process.env.SQL_DATABASE || 'BD_AIR' });
 });
 
 registerRoutes(app);
@@ -29,7 +29,7 @@ const server = app.listen(port, () => {
 });
 
 getPool()
-    .then(() => console.log('Connected to SQL Server with Windows Authentication'))
+    .then(() => console.log(`Connected to SQL Server with ${getAuthMode()}`))
     .catch((err) => {
         console.error('SQL Server connection failed:', err.message);
         server.close();
