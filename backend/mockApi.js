@@ -1,4 +1,4 @@
-import { adminSlots, bookingSummary, currentUser, teacherProfile, days, history, moveRequests, myLessons, notifications, packageStatus, packages, receipts, salesReport, slotsByDay, studentRows, voucherCodes, vouchers, } from './data';
+import { adminSlots, bookingSummary, currentUser, teacherProfile, days, history, moveRequests, myLessons, notifications, packageStatus, packages, receipts, salesReport, slotsByDay, studentRows, voucherCodes, vouchers, } from '../data/mockData';
 const delay = (ms = 450) => new Promise((r) => setTimeout(r, ms));
 /**
  * Mock DB — จำลองฐานข้อมูลจริง: ข้อมูลที่เปลี่ยนได้ (ใบเสร็จ, ชั่วโมงคงเหลือ, ประวัติ)

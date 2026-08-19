@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Spinner, Table } from '../../components/ui';
 import { RefreshIcon } from '../../components/icons';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 export default function Requests() {
     const { toast } = useApp();

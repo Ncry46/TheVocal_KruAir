@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { api } from '../lib/api';
+import { api } from '../services/apiClient';
 const AppContext = createContext(null);
 const STORAGE_KEY = 'kruaer-session';
 function loadUser() {

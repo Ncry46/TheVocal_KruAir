@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { Logo } from '../Logo';
 import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon, WrenchIcon, } from '../icons';
 const NAV = {

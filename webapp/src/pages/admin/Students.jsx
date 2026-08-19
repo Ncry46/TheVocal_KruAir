@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Input, Spinner, Table } from '../../components/ui';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 export default function Students() {
     const [rows, setRows] = useState(null);
     const [q, setQ] = useState('');

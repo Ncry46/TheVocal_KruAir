@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Spinner, Table } from '../../components/ui';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 export default function History() {
     const [hist, setHist] = useState(null);
     useEffect(() => {

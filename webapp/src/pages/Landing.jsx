@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { PublicLayout } from '../components/layout/PublicLayout';
 import { Button, Field, Input, Spinner, Stat } from '../components/ui';
 import { BellIcon, BookIcon, CalendarIcon, CartIcon, CardIcon, ChartIcon, ChatIcon, ClockIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PhoneIcon, PinIcon, TargetIcon, UserIcon } from '../components/icons';
-import { api } from '../lib/api';
+import { api } from '../services/apiClient';
 import { useApp } from '../context/AppContext';
 const PKG_IMG = {
     beginner: '/img/pkg-desk.jpg',

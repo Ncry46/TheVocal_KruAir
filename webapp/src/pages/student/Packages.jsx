@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Field, Input, Modal, Spinner } from '../../components/ui';
 import { BankIcon, CardIcon, CheckIcon, CrownIcon, MusicNoteIcon, PinIcon } from '../../components/icons';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 const PKG_IMG = {
     beginner: '/img/pkg-desk.jpg',

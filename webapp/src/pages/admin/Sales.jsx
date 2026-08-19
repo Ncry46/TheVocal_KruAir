@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Kpi, Spinner, Table } from '../../components/ui';
 import { GraduationIcon, ReceiptIcon, TicketIcon, WalletIcon } from '../../components/icons';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 export default function Sales() {
     const [report, setReport] = useState(null);
     useEffect(() => {

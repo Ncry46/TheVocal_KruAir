@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Spinner } from '../../components/ui';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 const plus1 = (t) => String(Number(t.split(':')[0]) + 1).padStart(2, '0') + ':00';
 const THAI_DAYS = ['อา', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Modal, Spinner, Table } from '../../components/ui';
 import { LogoMark } from '../../components/Logo';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 export default function Receipts() {
     const { toast } = useApp();

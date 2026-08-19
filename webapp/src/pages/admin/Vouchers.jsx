@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Field, Input, Modal, Spinner, Table } from '../../components/ui';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 export default function Vouchers() {
     const { toast } = useApp();

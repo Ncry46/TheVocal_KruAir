@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button, Card, Field, Kpi, Modal, Progress, Skeleton, Table } from '../../components/ui';
 import { BellIcon, CalendarIcon, CartIcon, ChatIcon, ClockIcon, MusicNoteIcon } from '../../components/icons';
-import { api } from '../../lib/api';
+import { api } from '../../services/apiClient';
 import { useApp } from '../../context/AppContext';
 const plus1 = (t) => String(Number(t.split(':')[0]) + 1).padStart(2, '0') + ':00';
 export default function Home() {
