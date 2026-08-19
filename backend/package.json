@@ -1,0 +1,21 @@
+{
+  "name": "kruaer-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "setup": "sqlcmd -S localhost -E -i ../sql/schema.sql && node src/seed.js",
+    "seed": "node src/seed.js",
+    "dev": "node src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mssql": "^11.0.1",
+    "msnodesqlv8": "^4.5.0"
+  }
+}
