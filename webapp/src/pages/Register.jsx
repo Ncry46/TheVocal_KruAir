@@ -5,7 +5,7 @@ import { LogoMark } from '../components/Logo';
 import { useApp } from '../context/AppContext';
 const GENRES = ['Pop', 'Ballad', 'Rock', 'R&B', 'Hip-Hop', 'ลูกทุ่ง', 'Jazz', 'อื่น ๆ'];
 export default function Register() {
-    const { register, toast } = useApp();
+    const { language, register, setLanguage, t, toast } = useApp();
     const navigate = useNavigate();
     const [name, setName] = useState('');
     const [nickname, setNickname] = useState('');
@@ -36,7 +36,7 @@ export default function Register() {
             navigate('/app');
         }
         catch (err) {
-            toast(err instanceof Error ? err.message : 'สมัครสมาชิกไม่สำเร็จ');
+            toast(err instanceof Error ? err.message : t('auth.registerFailed'));
         }
         finally {
             setBusy(false);
@@ -44,33 +44,38 @@ export default function Register() {
     };
     return (<div className="authwrap">
       <form className="authcard" onSubmit={submit}>
+        <div className="auth-prefs">
+          <button className="pref-btn" type="button" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}>
+            {language === 'th' ? 'EN' : 'TH'}
+          </button>
+        </div>
         <LogoMark size={64}/>
-        <h2>สมัครสมาชิก</h2>
-        <div className="sub">กรอกข้อมูลเพื่อให้ครูแอร์ออกแบบคอร์สให้ตรงกับคุณที่สุด</div>
+        <h2>{t('auth.registerTitle')}</h2>
+        <div className="sub">{t('auth.registerSub')}</div>
 
-        <Field label="ชื่อจริง" required>
+        <Field label={t('auth.name')} required>
           <Input placeholder="เช่น สมชาย ใจดี" value={name} onChange={(e) => setName(e.target.value)}/>
         </Field>
-        <Field label="ชื่อเล่น" required>
+        <Field label={t('auth.nickname')} required>
           <Input placeholder="เช่น มิ้นท์" value={nickname} onChange={(e) => setNickname(e.target.value)}/>
         </Field>
 
         <div className="two-col">
-          <Field label="อีเมล" required>
-            <Input type="email" placeholder="เช่น mint@email.com" value={email} onChange={(e) => setEmail(e.target.value)}/>
+          <Field label={t('auth.email')} required>
+            <Input type="email" placeholder={t('auth.idPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)}/>
           </Field>
-          <Field label="รหัสผ่าน (อย่างน้อย 6 ตัว)" required>
+          <Field label={t('auth.passwordMin')} required>
             <Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)}/>
           </Field>
         </div>
 
         <div className="two-col">
-          <Field label="อายุ" required>
+          <Field label={t('auth.age')} required>
             <Input type="number" placeholder="เช่น 22" value={age} onChange={(e) => setAge(e.target.value)}/>
           </Field>
-          <Field label="ระดับการศึกษา" required>
+          <Field label={t('auth.education')} required>
             <select className="input" value={education} onChange={(e) => setEducation(e.target.value)}>
-              <option value="">เลือก</option>
+              <option value="">{t('auth.select')}</option>
               <option>ม.ต้น</option>
               <option>ม.ปลาย</option>
               <option>ปวช. / ปวส.</option>
@@ -80,7 +85,7 @@ export default function Register() {
           </Field>
         </div>
 
-        <Field label="แนวเพลงที่ชอบ (เลือกได้หลายแนว)" required>
+        <Field label={t('auth.genres')} required>
           <div className="genre-row">
             {GENRES.map((g) => (<span key={g} className={`chk ${genres.includes(g) ? 'on' : ''}`} onClick={() => toggleGenre(g)}>
                 {g}
@@ -88,26 +93,26 @@ export default function Register() {
           </div>
         </Field>
 
-        <Field label="เหตุผลที่อยากเรียนร้องเพลง" required>
+        <Field label={t('auth.reason')} required>
           <textarea className="input" rows={2} placeholder="เช่น อยากออดิชันวงดนตรี / พัฒนาน้ำเสียง…" value={reason} onChange={(e) => setReason(e.target.value)}/>
         </Field>
 
         <div className="consent">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)}/>
-          <span>ข้าพเจ้ายินยอมให้จัดเก็บข้อมูลส่วนบุคคลเพื่อการติดต่อและให้บริการ ตามนโยบาย PDPA</span>
+          <span>{t('auth.consent')}</span>
         </div>
 
         <Button pink style={{ width: '100%' }} disabled={busy}>
-          {busy ? 'กำลังสมัคร…' : 'สมัครสมาชิก'}
+          {busy ? t('auth.signingUp') : t('common.register')}
         </Button>
 
-        <div className="divider">หรือ</div>
+        <div className="divider">{t('auth.or')}</div>
         <Button line style={{ width: '100%' }} onClick={() => toast('เปิด LIFF สมัครผ่าน LINE (ฟีเจอร์เสริม) — ข้อมูลจะถูกกรอกอัตโนมัติ')}>
-          สมัครด้วย LINE (LIFF)
+          {t('auth.lineRegister')}
         </Button>
 
         <div className="authlink">
-          มีบัญชีแล้ว? <Link to="/login">เข้าสู่ระบบ</Link>
+          {t('auth.hasAccount')} <Link to="/login">{t('common.login')}</Link>
         </div>
       </form>
     </div>);

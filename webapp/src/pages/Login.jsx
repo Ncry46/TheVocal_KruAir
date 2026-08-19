@@ -4,7 +4,7 @@ import { Button, Field, Input } from '../components/ui';
 import { LogoMark } from '../components/Logo';
 import { useApp } from '../context/AppContext';
 export default function Login() {
-    const { login, toast } = useApp();
+    const { language, login, setLanguage, t, toast } = useApp();
     const navigate = useNavigate();
     const [id, setId] = useState('');
     const [password, setPassword] = useState('');
@@ -17,7 +17,7 @@ export default function Login() {
             navigate(s.role === 'teacher' ? '/teacher' : s.role === 'admin' ? '/admin' : '/app');
         }
         catch (err) {
-            toast(err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ');
+            toast(err instanceof Error ? err.message : t('auth.loginFailed'));
         }
         finally {
             setBusy(false);
@@ -25,34 +25,39 @@ export default function Login() {
     };
     return (<div className="authwrap">
       <form className="authcard" onSubmit={submit}>
+        <div className="auth-prefs">
+          <button className="pref-btn" type="button" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}>
+            {language === 'th' ? 'EN' : 'TH'}
+          </button>
+        </div>
         <LogoMark size={64}/>
-        <h2>ยินดีต้อนรับกลับค่า</h2>
-        <div className="sub">เข้าสู่ระบบเพื่อจัดการแพ็กเกจและการจองเรียนของคุณ</div>
+        <h2>{t('auth.welcome')}</h2>
+        <div className="sub">{t('auth.welcomeSub')}</div>
 
-        <Field label="อีเมล หรือ เบอร์โทรศัพท์" required>
-          <Input placeholder="เช่น mint@email.com" value={id} onChange={(e) => setId(e.target.value)}/>
+        <Field label={t('auth.idLabel')} required>
+          <Input placeholder={t('auth.idPlaceholder')} value={id} onChange={(e) => setId(e.target.value)}/>
         </Field>
-        <Field label="รหัสผ่าน" required>
+        <Field label={t('auth.password')} required>
           <Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)}/>
         </Field>
 
         <Button pink style={{ width: '100%' }} disabled={busy}>
-          {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
+          {busy ? t('auth.signingIn') : t('common.login')}
         </Button>
 
-        <div className="divider">หรือ</div>
+        <div className="divider">{t('auth.or')}</div>
         <Button line style={{ width: '100%' }} onClick={() => toast('เปิด LIFF LINE Login (ฟีเจอร์เสริม) — ผูกบัญชีกับ LINE')}>
-          เข้าสู่ระบบด้วย LINE (LIFF)
+          {t('auth.lineLogin')}
         </Button>
 
         <div className="authlink">
-          ยังไม่มีบัญชี? <Link to="/register">สมัครสมาชิกฟรี</Link>
+          {t('auth.noAccount')} <Link to="/register">{t('common.register')}</Link>
         </div>
 
         <div className="demohint">
-          <b>เดโม่:</b> นักเรียน <code>mint@email.com</code> / <code>mint123</code><br />
-          ครูแอร์ <code>kruaer@email.com</code> / <code>kruaer123</code><br />
-          แอดมิน <code>admin@kruaer.com</code> / <code>admin123</code>
+          <b>{t('auth.demo')}</b> {t('roles.student')} <code>mint@email.com</code> / <code>mint123</code><br />
+          {t('roles.teacher')} <code>kruaer@email.com</code> / <code>kruaer123</code><br />
+          {t('roles.admin')} <code>admin@kruaer.com</code> / <code>admin123</code>
         </div>
       </form>
     </div>);

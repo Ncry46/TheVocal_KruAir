@@ -19,7 +19,8 @@ const Vouchers = lazy(() => import('./pages/admin/Vouchers'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
 
 function RouteFallback() {
-    return <div className="route-loading">กำลังโหลด...</div>;
+    const { t } = useApp();
+    return <div className="route-loading">{t('common.loading')}</div>;
 }
 
 function RequireAuth({ roles }) {

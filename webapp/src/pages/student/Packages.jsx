@@ -9,12 +9,59 @@ const PKG_IMG = {
     master: '/img/pkg-studio.jpg',
 };
 export default function Packages() {
-    const { toast } = useApp();
+    const { language, toast } = useApp();
     const [pkgs, setPkgs] = useState(null);
     const [open, setOpen] = useState(false);
     const [buy, setBuy] = useState({ pkg: 'pro', voucher: '', discount: 0, method: '' });
     const [code, setCode] = useState('');
     const [busy, setBusy] = useState(false);
+    const copy = language === 'en'
+        ? {
+            hour: 'hours',
+            selectPackage: 'Choose package',
+            termsTitle: 'Terms for every package:',
+            terms: 'Hours are counted only after attendance · packages expire 6 months after purchase · non-transferable and non-refundable · valid only for Kru Air courses',
+            modalTitle: 'Buy package',
+            choosePackage: 'Choose package',
+            voucher: 'Discount voucher (optional)',
+            voucherPlaceholder: 'Enter code e.g. SAVE1000',
+            applyCode: 'Apply',
+            valid: 'Applied',
+            packageLabel: 'Package',
+            voucherLabel: 'Voucher',
+            total: 'Total',
+            payment: 'Payment method',
+            creditCard: 'Credit card',
+            kbank: 'KBank',
+            shortTerms: 'Hours counted after attendance · 6-month validity · no transfer/refund',
+            voucherOk: 'Code applied!',
+            voucherError: 'Invalid voucher',
+            paid: 'Payment completed',
+            paymentError: 'Payment failed',
+        }
+        : {
+            hour: 'ชั่วโมง',
+            selectPackage: 'เลือกแพ็กเกจ',
+            termsTitle: 'เงื่อนไขทุกแพ็กเกจ:',
+            terms: 'นับชั่วโมงเมื่อเข้ารับจริง 1 ชม./ครั้ง · แพ็กเกจมีอายุ 6 เดือน นับจากวันที่ซื้อ · ไม่สามารถโอนหรือคืนเงินได้ · ใช้ได้เฉพาะคอร์สของครูแอร์เท่านั้น',
+            modalTitle: 'ซื้อแพ็กเกจ',
+            choosePackage: 'เลือกแพ็กเกจ',
+            voucher: 'วอเชอร์ส่วนลด (ถ้ามี)',
+            voucherPlaceholder: 'ใส่รหัส เช่น SAVE1000',
+            applyCode: 'ใช้โค้ด',
+            valid: 'ใช้ได้',
+            packageLabel: 'แพ็กเกจ',
+            voucherLabel: 'วอเชอร์',
+            total: 'ยอดรวม',
+            payment: 'ช่องทางชำระเงิน',
+            creditCard: 'บัตรเครดิต',
+            kbank: 'KBank',
+            shortTerms: 'นับชั่วโมงเมื่อเรียนจริง · อายุ 6 เดือน · ไม่โอน/คืนเงิน',
+            voucherOk: 'ใช้ได้ค่า!',
+            voucherError: 'วอเชอร์ไม่ถูกต้อง',
+            paid: 'ชำระแล้ว',
+            paymentError: 'ชำระเงินไม่สำเร็จ',
+        };
     useEffect(() => {
         api.getPackages().then(setPkgs).catch(() => setPkgs([]));
     }, []);
@@ -32,11 +79,11 @@ export default function Packages() {
         try {
             const discount = await api.validateVoucher(code.trim(), pkg.price);
             setBuy((b) => ({ ...b, voucher: code.trim().toUpperCase(), discount }));
-            toast(`ใช้ได้ค่า! ลด ฿${discount.toLocaleString()}`, 'ok');
+            toast(`${copy.voucherOk} ${language === 'en' ? 'Discount' : 'ลด'} ฿${discount.toLocaleString()}`, 'ok');
         }
         catch (err) {
             setBuy((b) => ({ ...b, voucher: '', discount: 0 }));
-            toast(err instanceof Error ? err.message : 'วอเชอร์ไม่ถูกต้อง');
+            toast(err instanceof Error ? err.message : copy.voucherError);
         }
         finally {
             setBusy(false);
@@ -47,10 +94,10 @@ export default function Packages() {
         try {
             await api.purchase(buy.pkg, buy.voucher, method);
             setOpen(false);
-            toast(`ชำระผ่าน ${method} แล้ว · เพิ่มชั่วโมงเข้าบัญชี + ใบเสร็จ PDF`, 'ok');
+            toast(`${copy.paid}: ${method} · ${language === 'en' ? 'hours added + receipt PDF' : 'เพิ่มชั่วโมงเข้าบัญชี + ใบเสร็จ PDF'}`, 'ok');
         }
         catch (err) {
-            toast(err instanceof Error ? err.message : 'ชำระเงินไม่สำเร็จ');
+            toast(err instanceof Error ? err.message : copy.paymentError);
         }
         finally {
             setBusy(false);
@@ -73,12 +120,12 @@ export default function Packages() {
             <div className="body">
               <div className="nm">{p.name}</div>
               <div className="hrs">
-                {p.hours} <small>ชั่วโมง</small>
+                {p.hours} <small>{copy.hour}</small>
               </div>
               <div className="price">฿{p.price.toLocaleString()}</div>
               <div className="per">{p.note}</div>
               <Button pink onClick={() => openBuy(p.id)}>
-                เลือกแพ็กเกจ
+                {copy.selectPackage}
               </Button>
             </div>
           </div>))}
@@ -86,14 +133,13 @@ export default function Packages() {
 
       <div className="termbox">
         <b>
-          <PinIcon width={14} height={14}/> เงื่อนไขทุกแพ็กเกจ:
+          <PinIcon width={14} height={14}/> {copy.termsTitle}
         </b>{' '}
-        นับชั่วโมงเมื่อเข้ารับจริง 1 ชม./ครั้ง · แพ็กเกจมีอายุ <b>6 เดือน</b> นับจากวันที่ซื้อ ·
-        ไม่สามารถโอนหรือคืนเงินได้ · ใช้ได้เฉพาะคอร์สของครูแอร์เท่านั้น
+        {copy.terms}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="ซื้อแพ็กเกจ">
-        <Field label="เลือกแพ็กเกจ">
+      <Modal open={open} onClose={() => setOpen(false)} title={copy.modalTitle}>
+        <Field label={copy.choosePackage}>
           {pkgs.map((p) => (<div key={p.id} className={`opt ${buy.pkg === p.id ? 'on' : ''}`} onClick={() => setBuy((b) => ({ ...b, pkg: p.id, discount: 0, voucher: '' }))}>
               <div className="ic">
                 <MusicNoteIcon width={19} height={19}/>
@@ -106,15 +152,15 @@ export default function Packages() {
             </div>))}
         </Field>
 
-        <Field label="วอเชอร์ส่วนลด (ถ้ามี)">
+        <Field label={copy.voucher}>
           <div className="voucher-row">
-            <Input placeholder="ใส่รหัส เช่น SAVE1000" value={code} onChange={(e) => setCode(e.target.value)}/>
+            <Input placeholder={copy.voucherPlaceholder} value={code} onChange={(e) => setCode(e.target.value)}/>
             <Button ghost onClick={applyVoucher} disabled={busy}>
-              ใช้โค้ด
+              {copy.applyCode}
             </Button>
           </div>
           {buy.voucher && (<div className="badge green" style={{ marginTop: 8 }}>
-              <CheckIcon width={13} height={13}/> ใช้ได้ · ลด ฿{buy.discount.toLocaleString()}
+              <CheckIcon width={13} height={13}/> {copy.valid} · {language === 'en' ? 'Discount' : 'ลด'} ฿{buy.discount.toLocaleString()}
             </div>)}
         </Field>
 
@@ -124,28 +170,28 @@ export default function Packages() {
             <b>฿{(pkg?.price ?? 0).toLocaleString()}</b>
           </div>
           {buy.discount > 0 && (<div className="sumrow">
-              <span className="muted">วอเชอร์ {buy.voucher}</span>
+              <span className="muted">{copy.voucherLabel} {buy.voucher}</span>
               <span className="disc">−฿{buy.discount.toLocaleString()}</span>
             </div>)}
           <div className="sumrow total">
-            <span>ยอดรวม</span>
+            <span>{copy.total}</span>
             <span className="accent">฿{total.toLocaleString()}</span>
           </div>
         </div>
 
-        <Field label="ช่องทางชำระเงิน">
+        <Field label={copy.payment}>
           <div className="pay-methods">
             <Button ghost onClick={() => pay('บัตรเครดิต / เดบิต (3-D Secure)')} disabled={busy}>
-              <CardIcon width={17} height={17}/> บัตรเครดิต
+              <CardIcon width={17} height={17}/> {copy.creditCard}
             </Button>
             <Button ghost onClick={() => pay('KBank (K+) · สแกน QR ยืนยันในแอป')} disabled={busy}>
-              <BankIcon width={17} height={17}/> KBank
+              <BankIcon width={17} height={17}/> {copy.kbank}
             </Button>
           </div>
         </Field>
 
         <div className="termbox" style={{ marginTop: 8 }}>
-          <PinIcon width={13} height={13}/> นับชั่วโมงเมื่อเรียนจริง · อายุ 6 เดือน · ไม่โอน/คืนเงิน
+          <PinIcon width={13} height={13}/> {copy.shortTerms}
         </div>
       </Modal>
     </>);
