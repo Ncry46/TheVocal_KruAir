@@ -15,6 +15,7 @@ const Schedule = lazy(() => import('./pages/admin/Schedule'));
 const Requests = lazy(() => import('./pages/admin/Requests'));
 const Students = lazy(() => import('./pages/admin/Students'));
 const Sales = lazy(() => import('./pages/admin/Sales'));
+const Users = lazy(() => import('./pages/admin/Users'));
 const Vouchers = lazy(() => import('./pages/admin/Vouchers'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
 
@@ -53,15 +54,18 @@ export default function App() {
               <Route index element={<Schedule />}/>
               <Route path="requests" element={<Requests />}/>
               <Route path="students" element={<Students />}/>
+              <Route path="profile" element={<Profile />}/>
             </Route>
           </Route>
 
           <Route element={<RequireAuth roles={['admin']}/>}>
             <Route path="/admin" element={<AppLayout mode="admin"/>}>
               <Route index element={<Sales />}/>
+              <Route path="users" element={<Users />}/>
               <Route path="students" element={<Students />}/>
               <Route path="vouchers" element={<Vouchers />}/>
               <Route path="settings" element={<Settings />}/>
+              <Route path="profile" element={<Profile />}/>
             </Route>
           </Route>
         </Route>

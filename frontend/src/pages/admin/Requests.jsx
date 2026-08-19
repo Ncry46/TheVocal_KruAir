@@ -4,19 +4,20 @@ import { RefreshIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 export default function Requests() {
-    const { toast } = useApp();
+    const { language, toast } = useApp();
     const [requests, setRequests] = useState(null);
     useEffect(() => {
         api.getMoveRequests().then(setRequests);
-    }, []);
+    }, [language]);
     const decide = async (r, approve) => {
         await api.decideMove(r.id, approve);
-        setRequests((prev) => prev?.map((x) => (x.id === r.id ? { ...x, status: approve ? 'อนุมัติแล้ว' : 'ปฏิเสธ' } : x)) ?? null);
+        setRequests((prev) => prev?.map((x) => (x.id === r.id ? { ...x, status: approve ? (language === 'en' ? 'Approved' : 'อนุมัติแล้ว') : (language === 'en' ? 'Rejected' : 'ปฏิเสธ'), statusKey: approve ? 'approved' : 'rejected' } : x)) ?? null);
         toast(approve ? `อนุมัติเลื่อนนัดของ ${r.student} แล้ว · ส่งแจ้งเตือนให้นักเรียน (เว็บ + LINE)` : `ปฏิเสธคำขอของ ${r.student} · แจ้งนักเรียนแล้ว`, 'ok');
     };
     if (!requests)
         return <Spinner />;
-    const pending = requests.filter((r) => r.status === 'รออนุมัติ').length;
+    const isPending = (r) => r.statusKey === 'pending' || r.status === 'รออนุมัติ' || r.status === 'Pending';
+    const pending = requests.filter(isPending).length;
     return (<>
       <div className="alertbar">
         <RefreshIcon width={16} height={16}/> <b>{pending} คำขอเลื่อนนัด</b> รอการตรวจสอบ — ระบบแจ้งเตือนนักเรียนอัตโนมัติเมื่ออนุมัติ/ปฏิเสธ
@@ -28,8 +29,8 @@ export default function Requests() {
             r.from,
             <b key="to" className="accent">{r.to}</b>,
             r.at,
-            r.status === 'รออนุมัติ' ? (<Badge key="st" tone="pink">รออนุมัติ</Badge>) : r.status === 'อนุมัติแล้ว' ? (<Badge key="st" tone="green">อนุมัติแล้ว</Badge>) : (<Badge key="st" tone="red">ปฏิเสธ</Badge>),
-            r.status === 'รออนุมัติ' ? (<div key="a" style={{ display: 'flex', gap: 6 }}>
+            isPending(r) ? (<Badge key="st" tone="pink">{r.status}</Badge>) : r.statusKey === 'approved' || r.status === 'อนุมัติแล้ว' || r.status === 'Approved' ? (<Badge key="st" tone="green">{r.status}</Badge>) : (<Badge key="st" tone="red">{r.status}</Badge>),
+            isPending(r) ? (<div key="a" style={{ display: 'flex', gap: 6 }}>
                 <Button green size="sm" onClick={() => decide(r, true)}>อนุมัติ</Button>
                 <Button danger size="sm" onClick={() => decide(r, false)}>ปฏิเสธ</Button>
               </div>) : (<Badge key="a" tone="blue">แจ้งนักเรียนแล้ว</Badge>),

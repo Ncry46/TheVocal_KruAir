@@ -28,6 +28,12 @@ async function request(path, options = {}) {
         'Content-Type': 'application/json',
         ...(options.headers ?? {}),
     };
+    try {
+        headers['X-Lang'] = localStorage.getItem('kruaer-language') === 'en' ? 'en' : 'th';
+    }
+    catch {
+        headers['X-Lang'] = 'th';
+    }
     const token = getToken();
     if (token) {
         headers.Authorization = `Bearer ${token}`;
@@ -53,6 +59,13 @@ export const api = {
     },
     logout() {
         setToken(null);
+    },
+    setLanguage(language) {
+        const next = language === 'en' ? 'en' : 'th';
+        return request('/me/language', { method: 'PUT', body: JSON.stringify({ language: next }) });
+    },
+    getMe() {
+        return request('/me');
     },
     getPackages() {
         return request('/packages');
@@ -115,10 +128,31 @@ export const api = {
     getVouchers() {
         return request('/admin/vouchers');
     },
-    createVoucher(code) {
-        return request('/admin/vouchers', { method: 'POST', body: JSON.stringify({ code }) });
+    createVoucher(input) {
+        return request('/admin/vouchers', { method: 'POST', body: JSON.stringify(input) });
     },
-    getTeacherSchedule() {
+    setVoucherStatus(code, active) {
+        return request(`/admin/vouchers/${encodeURIComponent(code)}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ active }),
+        });
+    },
+    getUsers() {
+        return request('/admin/users');
+    },
+    createUser(input) {
+        return request('/admin/users', { method: 'POST', body: JSON.stringify(input) });
+    },
+    setUserStatus(id, status) {
+        return request(`/admin/users/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    },
+    getTeacherSchedule(year, month) {
+        if (year && month) {
+            return request(`/teacher/schedule?year=${year}&month=${month}`);
+        }
         return request('/teacher/schedule');
     },
     recordLesson(bookingId, outcome, note) {

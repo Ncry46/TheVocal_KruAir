@@ -4,12 +4,12 @@ import { LogoMark } from '@components/Logo';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 export default function Receipts() {
-    const { toast } = useApp();
+    const { language, toast } = useApp();
     const [receipts, setReceipts] = useState(null);
     const [selected, setSelected] = useState(null);
     useEffect(() => {
         api.getReceipts().then(setReceipts);
-    }, []);
+    }, [language]);
     if (!receipts)
         return <Spinner />;
     return (<>

@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +20,9 @@ function addDays(date, days) {
 async function insertUser(row) {
     const hash = await bcrypt.hash(row.password, 10);
     const result = await query(
-        `INSERT INTO dbo.users (public_id, role, email, phone, password_hash, name, nickname, age, education, genres, reason, line_linked, consent_pdpa_at)
+        `INSERT INTO dbo.users (public_id, role, email, phone, password_hash, name, nickname, age, education, genres, reason, line_linked, avatar, consent_pdpa_at)
          OUTPUT INSERTED.id
-         VALUES (@publicId, @role, @email, @phone, @hash, @name, @nickname, @age, @education, @genres, @reason, @lineLinked, SYSUTCDATETIME())`,
+         VALUES (@publicId, @role, @email, @phone, @hash, @name, @nickname, @age, @education, @genres, @reason, @lineLinked, @avatar, SYSUTCDATETIME())`,
         {
             publicId: row.publicId,
             role: row.role,
@@ -37,6 +36,7 @@ async function insertUser(row) {
             genres: JSON.stringify(row.genres),
             reason: row.reason,
             lineLinked: row.lineLinked ? 1 : 0,
+            avatar: row.avatar ?? null,
         },
     );
     return result.recordset[0].id;

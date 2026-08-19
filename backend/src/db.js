@@ -1,7 +1,5 @@
-import dotenv from 'dotenv';
+import './loadEnv.js';
 import sql from 'mssql/msnodesqlv8.js';
-
-dotenv.config();
 
 const driver = process.env.SQL_DRIVER || 'ODBC Driver 17 for SQL Server';
 const server = process.env.SQL_SERVER || 'localhost';

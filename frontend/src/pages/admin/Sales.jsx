@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { Badge, Card, Kpi, Spinner, Table } from '@components/ui';
 import { GraduationIcon, ReceiptIcon, TicketIcon, WalletIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
+import { useApp } from '@app/context/AppContext';
 export default function Sales() {
+    const { language } = useApp();
     const [report, setReport] = useState(null);
     useEffect(() => {
         api.getSalesReport().then(setReport);
-    }, []);
+    }, [language]);
     if (!report)
         return <Spinner />;
     const max = Math.max(...report.monthly.map((m) => m.value));

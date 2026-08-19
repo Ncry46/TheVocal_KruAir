@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Spinner, Table } from '@components/ui';
 import { api } from '@app/services/apiClient';
+import { useApp } from '@app/context/AppContext';
 export default function History() {
+    const { language, t } = useApp();
     const [hist, setHist] = useState(null);
     useEffect(() => {
         api.getHistory().then(setHist);
-    }, []);
+    }, [language]);
     if (!hist)
         return <Spinner />;
-    return (<Card title="ประวัติการเรียน" action={<Badge tone="green">เรียนแล้ว 12 คลาส · ใช้ไป 12 ชม.</Badge>}>
-      <Table heads={['วันที่', 'เวลา', 'บทเรียน', 'บันทึกครูแอร์', 'ชั่วโมง']} rows={hist.map((h) => [
+    return (<Card title={t('history.title')} action={<Badge tone="green">{t('history.badge')}</Badge>}>
+      <Table heads={[t('history.date'), t('history.time'), t('history.lesson'), t('history.note'), t('history.hours')]} rows={hist.map((h) => [
             <b key="d">{h.date}</b>,
             h.time,
             h.lesson,
             h.note,
-            <Badge key="h" tone="blue">{h.usedHours} ชม.</Badge>,
+            <Badge key="h" tone="blue">{h.usedHours} {t('history.hoursUnit')}</Badge>,
         ])}/>
     </Card>);
 }
