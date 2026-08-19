@@ -3,7 +3,7 @@
 > **เวอร์ชัน:** 1.0 (สำหรับทีม Developer / Designer นำไปพัฒนา)  
 > **ขอบเขต:** Web Application (Responsive) + LINE Official Account (Messaging API / LIFF / LINE Login) + Payment Gateway (KBank)  
 > **เอกสารอ้างอิง:** `design-spec.md` (ภาพรวม UX) · Prototype: `docs/web-app.html` (เว็บ) · `docs/prototype.html` (LINE)  
-> **ระบบต้นแบบ (Reference Implementation):** `webapp/` (React + TypeScript mock — flow ทำงานครบ, ข้อมูลจำลองใน localStorage)
+> **ระบบต้นแบบ (Reference Implementation):** `frontend/` (React + Vite) + `backend/` (Express + SQL Server)
 
 ---
 
@@ -97,7 +97,7 @@
 
 | ชั้น | เทคโนโลยี | เหตุผล |
 |---|---|---|
-| **Frontend** | React 18 + TypeScript + Vite + React Router | ต้นแบบ `webapp/` ใช้ชุดนี้แล้ว — Components/Flow พร้อมแปลงเป็นของจริง |
+| **Frontend** | React 18 + Vite + React Router | ต้นแบบ `frontend/` + UI ร่วมใน `components/` |
 | **UI** | CSS Modules/design tokens (ธีมชมพู-ขาว) · Kanit/Noto Serif Thai | ตรงกับธีมที่ครูแอร์อนุมัติ |
 | **Backend** | Node.js + NestJS (TypeScript, DI, Modules) | โครงสร้างแยก Module ชัดเจน ตรงกับฟีเจอร์ |
 | **API** | REST (JSON) + OpenAPI/Swagger · Validation (class-validator) | เอกสาร API อัตโนมัติ |

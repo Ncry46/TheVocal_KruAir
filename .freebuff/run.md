@@ -1,14 +1,29 @@
-# Kru Air Singing School — Dev Server Run Doc
+# Kru Air — Run locally (frontend + backend)
 
-## Reproduce Uncommitted Artifacts
-- Dependencies already installed in `webapp/node_modules/` — no action needed.
-- No `.env.local` required; the app runs with mock data in localStorage.
-
-## Run the Dev Server
-```bash
-cd webapp
-npx vite --port 5173 --host
+## 1. SQL Server (once)
+```bat
+cd backend
+npm install
+npm run setup
 ```
-- Framework: Vite 5 + React 18 + TypeScript
-- Default port: 5173
-- The dev server serves the SPA with hot reload and proper asset resolution.
+
+`setup` สร้าง database `TheVocal_KruAir` จาก `sql/schema.sql` และใส่ข้อมูลตั้งต้นจาก `data/`
+
+## 2. Backend
+```bat
+cd backend
+npm run dev
+```
+API: http://localhost:3001/api/health
+
+## 3. Frontend
+```bat
+cd frontend
+npm run dev
+```
+Web: http://localhost:5173
+
+Demo logins:
+- student `mint@email.com` / `mint123`
+- teacher `kruaer@email.com` / `kruaer123`
+- admin `admin@kruaer.com` / `admin123`
