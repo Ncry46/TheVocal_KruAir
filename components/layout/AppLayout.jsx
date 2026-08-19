@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@app/context/AppContext';
 import { api } from '@app/services/apiClient';
 import { Logo } from '../Logo';
+import { ThemeToggle } from '../ThemeToggle';
+import { avatarSrc, profilePath } from '@app/utils/avatar';
 import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon, WrenchIcon, } from '../icons';
 const NAV = {
     student: [
@@ -38,6 +40,7 @@ const NAV = {
             group: 'nav.adminGroup',
             items: [
                 { to: '/admin', icon: <ChartIcon width={18} height={18}/>, label: 'nav.sales', end: true },
+                { to: '/admin/users', icon: <UserIcon width={18} height={18}/>, label: 'nav.manageUsers' },
                 { to: '/admin/students', icon: <GraduationIcon width={18} height={18}/>, label: 'nav.manageStudents' },
                 { to: '/admin/vouchers', icon: <TicketIcon width={18} height={18}/>, label: 'nav.vouchers' },
             ],
@@ -58,13 +61,16 @@ const PAGE_TITLES = {
     '/teacher': { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' },
     '/teacher/requests': { title: 'nav.requests', sub: 'pages.requestsSub' },
     '/teacher/students': { title: 'nav.students', sub: 'pages.studentsSub' },
+    '/teacher/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
     '/admin': { title: 'nav.sales', sub: 'pages.salesSub' },
+    '/admin/users': { title: 'nav.manageUsers', sub: 'pages.usersSub' },
     '/admin/students': { title: 'nav.manageStudents', sub: 'pages.manageStudentsSub' },
     '/admin/vouchers': { title: 'nav.vouchers', sub: 'pages.vouchersSub' },
     '/admin/settings': { title: 'nav.settings', sub: 'pages.settingsSub' },
+    '/admin/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
 };
 export function AppLayout({ mode }) {
-    const { language, logout, setLanguage, t, theme, toggleTheme, user } = useApp();
+    const { language, logout, setLanguage, t, user } = useApp();
     const navigate = useNavigate();
     const location = useLocation();
     const [notifs, setNotifs] = useState(null);
@@ -78,13 +84,13 @@ export function AppLayout({ mode }) {
     const closeSidebar = useCallback(() => setSidebarOpen(false), []);
     useEffect(() => {
         api.getNotifications().then(setNotifs);
-    }, []);
+    }, [language]);
     const isStaff = mode === 'teacher' || mode === 'admin';
     useEffect(() => {
         if (!isStaff)
             return;
-        api.getMoveRequests().then((rs) => setReqCount(rs.filter((r) => r.status === 'รออนุมัติ').length));
-    }, [isStaff]);
+        api.getMoveRequests().then((rs) => setReqCount(rs.filter((r) => r.statusKey === 'pending' || r.status === 'รออนุมัติ' || r.status === 'Pending').length));
+    }, [isStaff, language]);
     const unread = notifs?.filter((n) => !n.read).length ?? 0;
     const toggleBell = async () => {
         if (!bellOpen && unread > 0) {
@@ -136,49 +142,48 @@ export function AppLayout({ mode }) {
           <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="เปิดเมนู">
             ☰
           </button>
-          <div>
+          <div className="topbar-title">
             <h2>{t(pageInfo.title)}</h2>
             <p className="crumb">{t(pageInfo.sub)}{mode === 'student' && location.pathname === '/app' ? ` · ${user?.nickname ?? ''}` : ''}</p>
           </div>
-          <div className="spacer"/>
-          <div className="pref-actions">
-            <button className="pref-btn" type="button" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}>
-              {language === 'th' ? 'EN' : 'TH'}
-            </button>
-            <button className="pref-btn" type="button" onClick={toggleTheme}>
-              {theme === 'dark' ? '☀' : '☾'}
-            </button>
-          </div>
-          <div className="bell-wrap">
-            <button className="bell" aria-label="การแจ้งเตือน" onClick={toggleBell}>
-              <BellIcon width={18} height={18}/>
-              {unread > 0 && <span className="badge-num">{unread}</span>}
-            </button>
-            {bellOpen && (<div className="bell-panel">
-                <div className="bell-head">
-                  <b>{t('common.notifications')}</b>
-                  <span>{unread > 0 ? `${unread} ${t('common.newMessages')}` : t('common.allRead')}</span>
-                </div>
-                {notifs && notifs.length > 0 ? (notifs.map((n) => (<div key={n.id} className={`bell-item ${n.read ? '' : 'new'}`}>
-                      <div className={`bell-ic ${n.tone}`}>
-                        {n.tone === 'green' ? (<CheckIcon width={15} height={15}/>) : n.tone === 'blue' ? (<CalendarIcon width={15} height={15}/>) : (<BellIcon width={15} height={15}/>)}
-                      </div>
-                      <div>
-                        <b>{n.title}</b>
-                        <p>{n.body}</p>
-                        <span className="time">{n.time}</span>
-                      </div>
-                    </div>))) : (<div className="bell-empty">{t('common.noNotifications')}</div>)}
-              </div>)}
-          </div>
-          <div className="user">
-            <div className="ava">
-              <img src={mode === 'student' ? '/img/av-1.jpg' : '/img/teacher-studio.jpg'} alt={user?.nickname ?? ''}/>
+          <div className="topbar-end">
+            <div className="pref-actions">
+              <button className="pref-btn" type="button" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}>
+                {language === 'th' ? 'EN' : 'TH'}
+              </button>
+              <ThemeToggle />
             </div>
-            <div>
-              <div className="nm">{user?.nickname ?? user?.name ?? ''}</div>
-              <div className="rl">{mode === 'student' ? t('roles.student') : mode === 'teacher' ? t('roles.teacher') : t('roles.admin')}</div>
+            <div className="bell-wrap">
+              <button className="bell" aria-label="การแจ้งเตือน" onClick={toggleBell}>
+                <BellIcon width={18} height={18}/>
+                {unread > 0 && <span className="badge-num">{unread}</span>}
+              </button>
+              {bellOpen && (<div className="bell-panel">
+                  <div className="bell-head">
+                    <b>{t('common.notifications')}</b>
+                    <span>{unread > 0 ? `${unread} ${t('common.newMessages')}` : t('common.allRead')}</span>
+                  </div>
+                  {notifs && notifs.length > 0 ? (notifs.map((n) => (<div key={n.id} className={`bell-item ${n.read ? '' : 'new'}`}>
+                        <div className={`bell-ic ${n.tone}`}>
+                          {n.tone === 'green' ? (<CheckIcon width={15} height={15}/>) : n.tone === 'blue' ? (<CalendarIcon width={15} height={15}/>) : (<BellIcon width={15} height={15}/>)}
+                        </div>
+                        <div>
+                          <b>{n.title}</b>
+                          <p>{n.body}</p>
+                          <span className="time">{n.time}</span>
+                        </div>
+                      </div>))) : (<div className="bell-empty">{t('common.noNotifications')}</div>)}
+                </div>)}
             </div>
+            <button type="button" className="user" title={t('nav.profile')} onClick={() => navigate(profilePath(user))}>
+              <div className="ava">
+                <img src={avatarSrc(user)} alt={user?.nickname ?? ''}/>
+              </div>
+              <div>
+                <div className="nm">{user?.nickname ?? user?.name ?? ''}</div>
+                <div className="rl">{mode === 'student' ? t('roles.student') : mode === 'teacher' ? t('roles.teacher') : t('roles.admin')}</div>
+              </div>
+            </button>
           </div>
         </header>
 

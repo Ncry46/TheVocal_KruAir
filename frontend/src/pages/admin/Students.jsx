@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, Input, Spinner, Table } from '@components/ui';
 import { api } from '@app/services/apiClient';
+import { useApp } from '@app/context/AppContext';
 export default function Students() {
+    const { language } = useApp();
     const [rows, setRows] = useState(null);
     const [q, setQ] = useState('');
     useEffect(() => {
         api.getStudents().then(setRows);
-    }, []);
+    }, [language]);
     if (!rows)
         return <Spinner />;
     const filtered = rows.filter((r) => r.name.includes(q) || r.pkg.includes(q));

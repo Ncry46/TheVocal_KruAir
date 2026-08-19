@@ -14,6 +14,8 @@ IF OBJECT_ID(N'dbo.notifications', N'U') IS NULL
         user_id INT NOT NULL,
         title NVARCHAR(150) NOT NULL,
         body NVARCHAR(MAX) NOT NULL,
+        title_en NVARCHAR(150) NULL,
+        body_en NVARCHAR(MAX) NULL,
         tone NVARCHAR(20) NOT NULL CONSTRAINT DF_notifications_tone DEFAULT N'blue',
         is_read BIT NOT NULL CONSTRAINT DF_notifications_read DEFAULT 0,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_notifications_created DEFAULT SYSUTCDATETIME()
@@ -29,6 +31,8 @@ IF OBJECT_ID(N'dbo.move_requests', N'U') IS NULL
         requested_slot_id INT NOT NULL,
         from_text NVARCHAR(80) NOT NULL,
         to_text NVARCHAR(80) NOT NULL,
+        from_text_en NVARCHAR(80) NULL,
+        to_text_en NVARCHAR(80) NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_move_requests_status DEFAULT N'pending',
         decided_by INT NULL,
         decided_at DATETIME2 NULL,
@@ -43,6 +47,8 @@ IF OBJECT_ID(N'dbo.class_logs', N'U') IS NULL
         user_id INT NOT NULL,
         lesson_title NVARCHAR(150) NOT NULL,
         note NVARCHAR(MAX) NULL,
+        lesson_title_en NVARCHAR(150) NULL,
+        note_en NVARCHAR(MAX) NULL,
         hours_deducted INT NOT NULL CONSTRAINT DF_class_logs_hours DEFAULT 1,
         outcome NVARCHAR(20) NOT NULL CONSTRAINT DF_class_logs_outcome DEFAULT N'done',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_class_logs_created DEFAULT SYSUTCDATETIME()
@@ -58,6 +64,7 @@ IF OBJECT_ID(N'dbo.bookings', N'U') IS NULL
         user_package_id INT NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_bookings_status DEFAULT N'pending',
         topic NVARCHAR(150) NULL,
+        topic_en NVARCHAR(150) NULL,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_created DEFAULT SYSUTCDATETIME(),
         confirmed_at DATETIME2 NULL
     );
@@ -138,6 +145,9 @@ IF OBJECT_ID(N'dbo.packages', N'U') IS NULL
         note NVARCHAR(300) NULL,
         tag NVARCHAR(50) NULL,
         tone NVARCHAR(20) NULL,
+        name_en NVARCHAR(80) NULL,
+        note_en NVARCHAR(300) NULL,
+        tag_en NVARCHAR(50) NULL,
         is_active BIT NOT NULL CONSTRAINT DF_packages_active DEFAULT 1
     );
 GO
@@ -157,10 +167,24 @@ IF OBJECT_ID(N'dbo.users', N'U') IS NULL
         genres NVARCHAR(MAX) NULL,
         reason NVARCHAR(MAX) NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT N'active',
+        language NVARCHAR(5) NOT NULL CONSTRAINT DF_users_language DEFAULT N'th',
+        avatar NVARCHAR(200) NULL,
         line_linked BIT NOT NULL CONSTRAINT DF_users_line DEFAULT 0,
         consent_pdpa_at DATETIME2 NULL,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_users_created DEFAULT SYSUTCDATETIME(),
         updated_at DATETIME2 NOT NULL CONSTRAINT DF_users_updated DEFAULT SYSUTCDATETIME()
+    );
+GO
+
+IF OBJECT_ID(N'dbo.enrollments', N'U') IS NULL
+    CREATE TABLE dbo.enrollments (
+        id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        public_id NVARCHAR(40) NOT NULL UNIQUE,
+        user_id INT NOT NULL,
+        package_id NVARCHAR(20) NOT NULL,
+        hours_granted INT NOT NULL,
+        status NVARCHAR(20) NOT NULL CONSTRAINT DF_enrollments_status DEFAULT N'active',
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_enrollments_created DEFAULT SYSUTCDATETIME()
     );
 GO
 
@@ -196,4 +220,45 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_move_slot')
     ALTER TABLE dbo.move_requests ADD CONSTRAINT FK_move_slot FOREIGN KEY (requested_slot_id) REFERENCES dbo.teacher_availability (id);
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_notifications_user')
     ALTER TABLE dbo.notifications ADD CONSTRAINT FK_notifications_user FOREIGN KEY (user_id) REFERENCES dbo.users (id);
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_enrollments_user')
+    ALTER TABLE dbo.enrollments ADD CONSTRAINT FK_enrollments_user FOREIGN KEY (user_id) REFERENCES dbo.users (id);
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_enrollments_package')
+    ALTER TABLE dbo.enrollments ADD CONSTRAINT FK_enrollments_package FOREIGN KEY (package_id) REFERENCES dbo.packages (id);
+GO
+
+IF COL_LENGTH(N'dbo.users', N'language') IS NULL
+    ALTER TABLE dbo.users ADD language NVARCHAR(5) NOT NULL CONSTRAINT DF_users_language DEFAULT N'th';
+GO
+IF COL_LENGTH(N'dbo.packages', N'name_en') IS NULL
+    ALTER TABLE dbo.packages ADD name_en NVARCHAR(80) NULL;
+GO
+IF COL_LENGTH(N'dbo.packages', N'note_en') IS NULL
+    ALTER TABLE dbo.packages ADD note_en NVARCHAR(300) NULL;
+GO
+IF COL_LENGTH(N'dbo.packages', N'tag_en') IS NULL
+    ALTER TABLE dbo.packages ADD tag_en NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.notifications', N'title_en') IS NULL
+    ALTER TABLE dbo.notifications ADD title_en NVARCHAR(150) NULL;
+GO
+IF COL_LENGTH(N'dbo.notifications', N'body_en') IS NULL
+    ALTER TABLE dbo.notifications ADD body_en NVARCHAR(MAX) NULL;
+GO
+IF COL_LENGTH(N'dbo.bookings', N'topic_en') IS NULL
+    ALTER TABLE dbo.bookings ADD topic_en NVARCHAR(150) NULL;
+GO
+IF COL_LENGTH(N'dbo.class_logs', N'lesson_title_en') IS NULL
+    ALTER TABLE dbo.class_logs ADD lesson_title_en NVARCHAR(150) NULL;
+GO
+IF COL_LENGTH(N'dbo.class_logs', N'note_en') IS NULL
+    ALTER TABLE dbo.class_logs ADD note_en NVARCHAR(MAX) NULL;
+GO
+IF COL_LENGTH(N'dbo.move_requests', N'from_text_en') IS NULL
+    ALTER TABLE dbo.move_requests ADD from_text_en NVARCHAR(80) NULL;
+GO
+IF COL_LENGTH(N'dbo.move_requests', N'to_text_en') IS NULL
+    ALTER TABLE dbo.move_requests ADD to_text_en NVARCHAR(80) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'avatar') IS NULL
+    ALTER TABLE dbo.users ADD avatar NVARCHAR(200) NULL;
 GO

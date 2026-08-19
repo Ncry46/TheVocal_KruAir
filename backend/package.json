@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "setup": "node src/setup.js && node src/seed.js",
+    "setup": "node src/setup.js && node src/seed.js && node src/seedI18n.js",
+    "i18n": "node src/setup.js && node src/seedI18n.js",
     "seed": "node src/seed.js",
     "dev": "node src/index.js",
     "start": "node src/index.js"

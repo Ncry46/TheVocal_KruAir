@@ -6,9 +6,11 @@ import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 const plus1 = (t) => String(Number(t.split(':')[0]) + 1).padStart(2, '0') + ':00';
 const THAI_DAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
-function chipFromIso(iso) {
+const EN_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function chipFromIso(iso, language = 'th') {
     const [year, month, day] = String(iso).split('-').map(Number);
-    return `${THAI_DAYS[new Date(year, month - 1, day).getDay()]} ${day}`;
+    const days = language === 'en' ? EN_DAYS : THAI_DAYS;
+    return `${days[new Date(year, month - 1, day).getDay()]} ${day}`;
 }
 export default function Home() {
     const { language, user, toast } = useApp();
@@ -28,7 +30,7 @@ export default function Home() {
         api.getHistory().then(setHist);
         api.getMyLessons().then(setLessons);
         api.getDays().then(setDays);
-    }, []);
+    }, [language]);
     useEffect(() => {
         if (!moveOpen)
             return;
@@ -36,7 +38,7 @@ export default function Home() {
         setMoveTime('');
         if (moveDay)
             api.getSlots(moveDay).then(setSlots);
-    }, [moveDay, moveOpen]);
+    }, [moveDay, moveOpen, language]);
     if (!status || !hist || !lessons)
         return <Skeleton />;
     const copy = language === 'en'
@@ -203,14 +205,14 @@ export default function Home() {
         <Field label={copy.chooseDay}>
           <div className="chip-row">
             {days.map((d) => (<button key={d} className={`dchip ${moveDay === d ? 'on' : ''}`} onClick={() => setMoveDay(d)}>
-                {chipFromIso(d)}
+                {chipFromIso(d, language)}
               </button>))}
           </div>
         </Field>
         {moveDay && (<Field label={copy.chooseTime}>
             {slots === null ? (<Skeleton />) : (<div className="slots-grid">
-                {slots.map((s) => (<button key={s.time} disabled={s.status === 'เต็ม'} className={`slot-btn ${moveTime === s.time ? 'on' : ''}`} onClick={() => setMoveTime(s.time)}>
-                    {s.time}–{plus1(s.time)} {language === 'en' ? '' : 'น.'}{s.status === 'เต็ม' ? ` (${copy.full})` : ''}
+                {slots.map((s) => (<button key={s.time} disabled={s.full} className={`slot-btn ${moveTime === s.time ? 'on' : ''}`} onClick={() => setMoveTime(s.time)}>
+                    {s.time}–{plus1(s.time)} {language === 'en' ? '' : 'น.'}{s.full ? ` (${copy.full})` : ''}
                   </button>))}
               </div>)}
           </Field>)}

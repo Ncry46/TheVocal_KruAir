@@ -2,19 +2,37 @@
   {
     "photo": "/img/av-1.jpg",
     "name": "น้องมิ้นท์",
-    "detail": "เรียน 12 ชม. · Pop / R&B",
-    "quote": "ครูแอร์อธิบายละเอียดมาก เสียงเราดีขึ้นชัดเจนภายใน 3 คลาส จองเวลาผ่านเว็บง่ายมาก"
+    "detail": {
+      "th": "เรียน 12 ชม. · Pop / R&B",
+      "en": "12 hrs · Pop / R&B"
+    },
+    "quote": {
+      "th": "ครูแอร์อธิบายละเอียดมาก เสียงเราดีขึ้นชัดเจนภายใน 3 คลาส จองเวลาผ่านเว็บง่ายมาก",
+      "en": "Kru Air explains everything clearly. My voice improved within 3 classes, and booking on the website is so easy."
+    }
   },
   {
     "photo": "/img/av-2.jpg",
     "name": "น้องต้นน้ำ",
-    "detail": "เรียน 15 ชม. · Rock",
-    "quote": "ระบบเตือนนัดก่อนเรียน 1 วันช่วยได้มาก กดยืนยันปุ่มเดียวจบ ขยับเวลาก็ทำผ่านเว็บได้"
+    "detail": {
+      "th": "เรียน 15 ชม. · Rock",
+      "en": "15 hrs · Rock"
+    },
+    "quote": {
+      "th": "ระบบเตือนนัดก่อนเรียน 1 วันช่วยได้มาก กดยืนยันปุ่มเดียวจบ ขยับเวลาก็ทำผ่านเว็บได้",
+      "en": "The 1-day reminder helps a lot. One tap to confirm, and I can reschedule on the website too."
+    }
   },
   {
     "photo": "/img/av-3.jpg",
     "name": "น้องเฟิร์น",
-    "detail": "เรียน 5 ชม. · Ballad",
-    "quote": "ชอบที่คอร์สออกแบบตามแนวเพลงที่เรากรอกตอนสมัคร จ่ายด้วย K+ สะดวก ได้ใบเสร็จส่งเข้า LINE ด้วย"
+    "detail": {
+      "th": "เรียน 5 ชม. · Ballad",
+      "en": "5 hrs · Ballad"
+    },
+    "quote": {
+      "th": "ชอบที่คอร์สออกแบบตามแนวเพลงที่เรากรอกตอนสมัคร จ่ายด้วย K+ สะดวก ได้ใบเสร็จส่งเข้า LINE ด้วย",
+      "en": "I love that the course follows the genres I chose when I signed up. Paying with K+ is easy, and the receipt comes in LINE."
+    }
   }
 ]

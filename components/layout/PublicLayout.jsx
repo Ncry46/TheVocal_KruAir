@@ -1,17 +1,40 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui';
 import { Logo } from '../Logo';
+import { ThemeToggle } from '../ThemeToggle';
 import { useApp } from '@app/context/AppContext';
-export function PublicLayout({ children }) {
+import { avatarSrc, homePath, profilePath } from '@app/utils/avatar';
+
+export function PublicLayout({ children, footer = true }) {
     const navigate = useNavigate();
-    const { language, setLanguage, t } = useApp();
-    const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    const location = useLocation();
+    const { language, setLanguage, t, user } = useApp();
+    const goHome = () => navigate('/');
+    const roleLabel = user?.role === 'teacher'
+        ? t('roles.teacher')
+        : user?.role === 'admin'
+            ? t('roles.admin')
+            : t('roles.student');
+    const go = (id) => {
+        if (location.pathname === '/') {
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
+        navigate(`/#${id}`);
+    };
+    const goPackages = () => {
+        if (user?.role === 'student') {
+            navigate('/app/packages');
+            return;
+        }
+        go('pkg');
+    };
     return (<>
       <header className="snav">
         <div className="wrap nav-row">
-          <Logo size={44} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}/>
+          <Logo size={44} onClick={goHome}/>
           <nav>
-            <a onClick={() => go('pkg')}>{t('nav.packages')}</a>
+            <a onClick={goPackages}>{t('nav.packages')}</a>
             <a onClick={() => go('how')}>{t('nav.how')}</a>
             <a onClick={() => go('why')}>{t('nav.why')}</a>
             <a onClick={() => go('rev')}>{t('nav.reviews')}</a>
@@ -21,19 +44,39 @@ export function PublicLayout({ children }) {
             <button className="pref-btn" type="button" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}>
               {language === 'th' ? 'EN' : 'TH'}
             </button>
-            <Button ghost size="sm" onClick={() => navigate('/login')}>
-              {t('common.login')}
-            </Button>
-            <Button pink size="sm" onClick={() => navigate('/register')}>
-              {t('common.register')}
-            </Button>
+            <ThemeToggle />
+            {user ? (
+              <>
+                <Button ghost size="sm" onClick={() => navigate(homePath(user))}>
+                  {user.role === 'admin' ? t('nav.adminGroup') : user.role === 'teacher' ? t('nav.schedule') : t('nav.studentHome')}
+                </Button>
+                <button type="button" className="user" title={t('nav.profile')} onClick={() => navigate(profilePath(user))}>
+                  <div className="ava">
+                    <img src={avatarSrc(user)} alt={user.nickname ?? user.name ?? ''}/>
+                  </div>
+                  <div>
+                    <div className="nm">{user.nickname ?? user.name ?? ''}</div>
+                    <div className="rl">{roleLabel}</div>
+                  </div>
+                </button>
+              </>
+            ) : (
+              <>
+                <Button ghost size="sm" onClick={() => navigate('/login')}>
+                  {t('common.login')}
+                </Button>
+                <Button pink size="sm" onClick={() => navigate('/register')}>
+                  {t('common.register')}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       {children}
 
-      <footer>
+      {footer && (<footer>
         <div className="wrap footer-grid">
           <div>
             <Logo light size={40} text="ครูแอร์ Singing School" style={{ marginBottom: 14 }}/>
@@ -43,7 +86,7 @@ export function PublicLayout({ children }) {
           </div>
           <div>
             <h5>{t('public.menu')}</h5>
-            <a onClick={() => go('pkg')}>{t('nav.packages')}</a>
+            <a onClick={goPackages}>{t('nav.packages')}</a>
             <a onClick={() => go('how')}>{t('nav.how')}</a>
             <a onClick={() => go('rev')}>{t('nav.reviews')}</a>
             <a onClick={() => go('contact')}>{t('nav.contact')}</a>
@@ -65,6 +108,6 @@ export function PublicLayout({ children }) {
             {t('public.copy')}
           </div>
         </div>
-      </footer>
+      </footer>)}
     </>);
 }

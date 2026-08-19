@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Card, Spinner } from '@components/ui';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
@@ -11,16 +12,14 @@ function getDaysInMonth(year, month) {
 function getFirstDayOfMonth(year, month) {
     return new Date(year, month, 1).getDay();
 }
-function formatThaiDay(d, m, y) {
-    const dayName = THAI_DAYS[new Date(y, m, d).getDay()];
-    return `${dayName} ${d} ${THAI_MONTHS[m]}`;
-}
 function toIsoDate(d, m, y) {
     return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 export default function Booking() {
-    const { toast } = useApp();
+    const { language, t, toast } = useApp();
+    const navigate = useNavigate();
     const [days, setDays] = useState([]);
+    const [pkg, setPkg] = useState(null);
     const today = new Date();
     const [calMonth, setCalMonth] = useState(today.getMonth());
     const [calYear, setCalYear] = useState(today.getFullYear());
@@ -29,9 +28,11 @@ export default function Booking() {
     const [selectedTime, setSelectedTime] = useState('');
     const [summary, setSummary] = useState(null);
     const [busy, setBusy] = useState(false);
+    const loadDays = () => api.getDays().then(setDays);
     useEffect(() => {
-        api.getDays().then(setDays);
-    }, []);
+        loadDays();
+        api.getPackageStatus().then(setPkg).catch(() => setPkg(null));
+    }, [language]);
     const selectedDayStr = selectedDay !== null ? toIsoDate(selectedDay, calMonth, calYear) : null;
     useEffect(() => {
         if (!selectedDayStr) {
@@ -42,21 +43,43 @@ export default function Booking() {
         setSelectedTime('');
         setSummary(null);
         api.getSlots(selectedDayStr).then(setSlots);
-    }, [selectedDayStr]);
+    }, [selectedDayStr, language]);
     useEffect(() => {
         if (!selectedDayStr || !selectedTime) {
             setSummary(null);
             return;
         }
         api.getBookingSummary(selectedDayStr, selectedTime).then(setSummary);
-    }, [selectedDayStr, selectedTime]);
+    }, [selectedDayStr, selectedTime, language]);
+    const months = language === 'en'
+        ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        : THAI_MONTHS;
+    const weekdays = language === 'en' ? ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] : THAI_DAYS;
+    const yearLabel = language === 'en' ? calYear : calYear + 543;
+    const formatDay = (d, m, y) => {
+        const dayName = weekdays[new Date(y, m, d).getDay()];
+        return `${dayName} ${d} ${months[m]}`;
+    };
+    const hoursLeft = summary?.leftHours ?? pkg?.left ?? 0;
+    const canBook = hoursLeft > 0;
     const confirm = async () => {
-        if (!selectedDayStr || !selectedTime)
+        if (!selectedDayStr || !selectedTime || busy) {
             return;
+        }
+        if (!canBook) {
+            toast(t('booking.noHours'));
+            return;
+        }
         setBusy(true);
         try {
             await api.createBooking(selectedDayStr, selectedTime);
-            toast('จองสำเร็จแล้ว! ระบบล็อกสล็อตไว้ให้แล้ว', 'ok');
+            toast(t('booking.success'), 'ok');
+            navigate('/app');
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('booking.failed'));
+            api.getSlots(selectedDayStr).then(setSlots);
+            loadDays();
         }
         finally {
             setBusy(false);
@@ -85,21 +108,23 @@ export default function Booking() {
             setCalMonth(calMonth + 1);
         }
     };
-    // Check if a date has available slots (match against days array)
-    const hasSlots = (d) => {
-        return days.includes(toIsoDate(d, calMonth, calYear));
-    };
+    const hasSlots = (d) => days.includes(toIsoDate(d, calMonth, calYear));
     return (<div className="booking-layout">
-      {/* Calendar Card */}
-      <Card title="📅 เลือกวันเรียน">
+      {pkg && (
+        <div className="alertbar" style={{ gridColumn: '1 / -1' }}>
+          <b>{pkg.name === '—' ? t('booking.noHours') : `${t('booking.hoursLeft')} ${pkg.left} ${t('booking.hoursUnit')}`}</b>
+          {pkg.name !== '—' && <span className="muted"> · {pkg.name}</span>}
+        </div>
+      )}
+      <Card title={`📅 ${t('booking.pickDay')}`}>
         <div className="cal-header">
           <button className="cal-nav" onClick={prevMonth}>‹</button>
-          <span className="cal-title">{THAI_MONTHS[calMonth]} {calYear + 543}</span>
+          <span className="cal-title">{months[calMonth]} {yearLabel}</span>
           <button className="cal-nav" onClick={nextMonth}>›</button>
         </div>
 
         <div className="cal-weekdays">
-          {THAI_DAYS.map((d) => <div key={d} className="cal-wd">{d}</div>)}
+          {weekdays.map((d) => <div key={d} className="cal-wd">{d}</div>)}
         </div>
 
         <div className="cal-grid">
@@ -118,53 +143,54 @@ export default function Booking() {
         </div>
 
         <div className="cal-legend">
-          <span><span className="cal-dot-legend available"/> มีเวลาว่าง</span>
-          <span><span className="cal-dot-legend today"/> วันนี้</span>
-          <span><span className="cal-dot-legend selected"/> เลือกแล้ว</span>
+          <span><span className="cal-dot-legend available"/> {t('booking.available')}</span>
+          <span><span className="cal-dot-legend today"/> {t('booking.today')}</span>
+          <span><span className="cal-dot-legend selected"/> {t('booking.selected')}</span>
         </div>
       </Card>
 
-      {/* Time Slots + Summary */}
       <div className="booking-right">
         {selectedDay === null ? (<Card>
             <div className="empty-state">
               <div style={{ fontSize: 48 }}>📆</div>
-              <p>เลือกวันจากปฏิทินด้านซ้ายก่อน</p>
+              <p>{t('booking.empty')}</p>
             </div>
-          </Card>) : (<Card title={`⏰ เลือกเวลา — ${formatThaiDay(selectedDay, calMonth, calYear)}`}>
-            {slots === null ? (<Spinner />) : (<div className="time-slots-grid">
-                {slots.map((s) => (<button key={s.time} disabled={s.status === 'เต็ม'} className={`time-slot ${selectedTime === s.time ? 'on' : ''} ${s.status === 'เต็ม' ? 'full' : ''}`} onClick={() => setSelectedTime(s.time)}>
+          </Card>) : (<Card title={`⏰ ${t('booking.pickTime')} — ${formatDay(selectedDay, calMonth, calYear)}`}>
+            {slots === null ? (<Spinner />) : slots.length === 0 ? (
+              <div className="empty">{t('booking.empty')}</div>
+            ) : (<div className="time-slots-grid">
+                {slots.map((s) => (<button key={s.time} disabled={s.full} className={`time-slot ${selectedTime === s.time ? 'on' : ''} ${s.full ? 'full' : ''}`} onClick={() => setSelectedTime(s.time)}>
                     <span className="ts-time">{s.time}</span>
                     <span className="ts-end">–{plus1(s.time)}</span>
-                    {s.status === 'เต็ม' && <span className="ts-full">เต็ม</span>}
+                    {s.full && <span className="ts-full">{t('booking.full')}</span>}
                   </button>))}
               </div>)}
           </Card>)}
 
-        {selectedTime && (<Card title="สรุปการจอง">
+        {selectedTime && (<Card title={t('booking.summary')}>
             <div className="sumrow">
-              <span className="muted">วัน-เวลา</span>
-              <b>{formatThaiDay(selectedDay, calMonth, calYear)} {selectedTime}–{plus1(selectedTime)} น.</b>
+              <span className="muted">{t('booking.datetime')}</span>
+              <b>{formatDay(selectedDay, calMonth, calYear)} {selectedTime}–{plus1(selectedTime)}</b>
             </div>
             <div className="sumrow">
-              <span className="muted">ครูผู้สอน</span>
-              <span>ครูแอร์ (เรียนสด 1:1)</span>
+              <span className="muted">{t('booking.teacher')}</span>
+              <span>{t('booking.teacherValue')}</span>
             </div>
             <div className="sumrow">
-              <span className="muted">การหักชั่วโมง</span>
-              <span>หักเมื่อเรียนจบจริง (1 ชม./ครั้ง)</span>
+              <span className="muted">{t('booking.deduct')}</span>
+              <span>{t('booking.deductValue')}</span>
             </div>
             <div className="sumrow total">
-              <span>ชั่วโมงคงเหลือ</span>
-              <span className="accent">{summary ? `${summary.leftHours} ชม.` : '…'}</span>
+              <span>{t('booking.hoursLeft')}</span>
+              <span className="accent">{summary ? `${summary.leftHours} ${t('booking.hoursUnit')}` : '…'}</span>
             </div>
-            <Button green style={{ width: '100%', marginTop: 16 }} onClick={confirm} disabled={busy}>
-              {busy ? 'กำลังจอง…' : '✅ ยืนยันการจอง'}
+            <Button green style={{ width: '100%', marginTop: 16 }} onClick={confirm} disabled={busy || !canBook}>
+              {busy ? t('booking.booking') : t('booking.confirm')}
             </Button>
           </Card>)}
 
         <div className="pagetip">
-          💡 ระบบจะล็อกสล็อตเมื่อจองสำเร็จ และส่งข้อความแจ้งเตือน + ปุ่มคอนเฟิร์มก่อนเรียน 1 วัน
+          {t('booking.tip')}
         </div>
       </div>
     </div>);

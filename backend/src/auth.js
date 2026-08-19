@@ -56,6 +56,8 @@ export function toProfile(row) {
         email: row.email,
         lineLinked: Boolean(row.line_linked),
         role: row.role,
+        language: row.language === 'en' ? 'en' : 'th',
+        avatar: row.avatar || null,
     };
 }
 

@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Field, Input } from '@components/ui';
 import { LogoMark } from '@components/Logo';
+import { PublicLayout } from '@components/layout/PublicLayout';
 import { useApp } from '../context/AppContext';
 const GENRES = ['Pop', 'Ballad', 'Rock', 'R&B', 'Hip-Hop', 'ลูกทุ่ง', 'Jazz', 'อื่น ๆ'];
 export default function Register() {
-    const { language, register, setLanguage, t, toast } = useApp();
+    const { register, t, toast } = useApp();
     const navigate = useNavigate();
     const [name, setName] = useState('');
     const [nickname, setNickname] = useState('');
@@ -33,7 +34,7 @@ export default function Register() {
                 email,
                 password,
             });
-            navigate('/app');
+            navigate('/app/booking');
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('auth.registerFailed'));
@@ -42,16 +43,13 @@ export default function Register() {
             setBusy(false);
         }
     };
-    return (<div className="authwrap">
-      <form className="authcard" onSubmit={submit}>
-        <div className="auth-prefs">
-          <button className="pref-btn" type="button" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}>
-            {language === 'th' ? 'EN' : 'TH'}
-          </button>
-        </div>
-        <LogoMark size={64}/>
-        <h2>{t('auth.registerTitle')}</h2>
-        <div className="sub">{t('auth.registerSub')}</div>
+    return (
+      <PublicLayout footer={false}>
+        <div className="authwrap">
+          <form className="authcard" onSubmit={submit}>
+            <LogoMark size={64}/>
+            <h2>{t('auth.registerTitle')}</h2>
+            <div className="sub">{t('auth.registerSub')}</div>
 
         <Field label={t('auth.name')} required>
           <Input placeholder="เช่น สมชาย ใจดี" value={name} onChange={(e) => setName(e.target.value)}/>
@@ -111,9 +109,11 @@ export default function Register() {
           {t('auth.lineRegister')}
         </Button>
 
-        <div className="authlink">
-          {t('auth.hasAccount')} <Link to="/login">{t('common.login')}</Link>
+            <div className="authlink">
+              {t('auth.hasAccount')} <Link to="/login">{t('common.login')}</Link>
+            </div>
+          </form>
         </div>
-      </form>
-    </div>);
+      </PublicLayout>
+    );
 }

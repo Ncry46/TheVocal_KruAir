@@ -5,19 +5,36 @@ import { Button, Field, Input, Spinner, Stat } from '@components/ui';
 import { BellIcon, BookIcon, CalendarIcon, CartIcon, CardIcon, ChartIcon, ChatIcon, ClockIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PhoneIcon, PinIcon, TargetIcon, UserIcon } from '@components/icons';
 import { api } from '../services/apiClient';
 import { useApp } from '../context/AppContext';
+import { homePath } from '@app/utils/avatar';
 import reviews from '@data/reviews.json';
 const PKG_IMG = {
     beginner: '/img/pkg-desk.jpg',
     pro: '/img/pkg-stage.jpg',
     master: '/img/pkg-studio.jpg',
 };
+function localized(value, language) {
+    if (value && typeof value === 'object') {
+        return value[language] ?? value.th ?? value.en ?? '';
+    }
+    return value ?? '';
+}
 export default function Landing() {
     const navigate = useNavigate();
-    const { toast } = useApp();
+    const { language, t, toast, user } = useApp();
     const [pkgs, setPkgs] = useState(null);
     useEffect(() => {
         api.getPackages().then(setPkgs).catch(() => setPkgs([]));
-    }, []);
+    }, [language]);
+    useEffect(() => {
+        const id = window.location.hash.replace('#', '');
+        if (!id) {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+        }, 80);
+        return () => window.clearTimeout(timer);
+    }, [pkgs]);
     /* scroll-reveal animation */
     useEffect(() => {
         const els = Array.from(document.querySelectorAll('.reveal'));
@@ -65,30 +82,29 @@ export default function Landing() {
             </svg>
             <i />
           </div>
-          <div className="tagline">เปิดรับสมัครนักเรียนใหม่ · คอร์สเรียนร้องเพลง 1:1</div>
+          <div className="tagline">{t('landing.tagline')}</div>
           <h1>
-            พัฒนาน้ำเสียงกับ <em>ครูแอร์</em>
+            {t('landing.heroBefore')} <em>ครูแอร์</em>
             <br />
-            เริ่มต้นได้วันนี้ ที่ไหนก็ได้
+            {t('landing.heroAfter')}
           </h1>
           <p>
-            เรียนร้องเพลงแบบตัวต่อตัว หลักสูตรออกแบบตามแนวเพลงและเป้าหมายของน้องแต่ละคน —
-            จองเวลาเรียนเองได้ผ่านเว็บไซต์ แจ้งเตือนก่อนเรียน 1 วัน พร้อมระบบชำระเงินปลอดภัย (บัตรเครดิต / KBank)
+            {t('landing.heroBody')}
           </p>
           <div className="cta">
-            <Button pink onClick={() => navigate('/register')}>
-              <MicIcon width={17} height={17}/> เริ่มเรียนเลย
+            <Button pink onClick={() => navigate(user?.role === 'student' ? '/app/booking' : user ? homePath(user) : '/register')}>
+              <MicIcon width={17} height={17}/> {user?.role === 'student' ? t('nav.booking') : t('landing.startNow')}
             </Button>
             <Button ghost onClick={() => document.getElementById('pkg')?.scrollIntoView({ behavior: 'smooth' })}>
-              ดูแพ็กเกจ
+              {t('landing.viewPackages')}
             </Button>
           </div>
           <div className="stats">
-            <Stat value="120+" label="นักเรียน"/>
+            <Stat value="120+" label={t('landing.students')}/>
             <i className="stats-line" aria-hidden="true"/>
-            <Stat value="2,400+" label="ชั่วโมงสอน"/>
+            <Stat value="2,400+" label={t('landing.hoursTaught')}/>
             <i className="stats-line" aria-hidden="true"/>
-            <Stat value="5.0 ★" label="คะแนนรีวิว"/>
+            <Stat value="5.0 ★" label={t('landing.reviewScore')}/>
           </div>
         </div>
       </section>
@@ -98,12 +114,12 @@ export default function Landing() {
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">PACKAGES</span>
-            <h2>แพ็กเกจเรียน</h2>
-            <p>เลือกแพ็กเกจตามเป้าหมาย — ซื้อแล้วสะสมชั่วโมงเรียนได้ตลอด 6 เดือน</p>
+            <h2>{t('landing.packagesTitle')}</h2>
+            <p>{t('landing.packagesSub')}</p>
           </div>
 
           {pkgs === null ? (<Spinner />) : (<div className="grid cols-3" style={{ marginBottom: 18 }}>
-              {pkgs.map((p, i) => (<div key={p.id} className={`pkg reveal d${i + 1} ${p.tag === 'ยอดนิยม' ? 'popular' : ''}`}>
+              {pkgs.map((p, i) => (<div key={p.id} className={`pkg reveal d${i + 1} ${p.id === 'pro' ? 'popular' : ''}`}>
                   {p.tag && (<div className="crown">
                       <CrownIcon width={13} height={13}/> {p.tag}
                     </div>)}
@@ -116,12 +132,12 @@ export default function Landing() {
                   <div className="body">
                     <div className="nm">{p.name}</div>
                     <div className="hrs">
-                      {p.hours} <small>ชั่วโมง</small>
+                      {p.hours} <small>{t('landing.hoursUnit')}</small>
                     </div>
                     <div className="price">฿{p.price.toLocaleString()}</div>
                     <div className="per">{p.note}</div>
-                    <Button pink onClick={() => navigate('/register')}>
-                      ซื้อแพ็กเกจนี้
+                    <Button pink onClick={() => navigate(user?.role === 'student' ? `/app/packages?pkg=${p.id}` : '/register')}>
+                      {t('landing.buyThis')}
                     </Button>
                   </div>
                 </div>))}
@@ -129,10 +145,9 @@ export default function Landing() {
 
           <div className="termbox reveal">
             <b>
-              <PinIcon width={14} height={14}/> เงื่อนไขทุกแพ็กเกจ:
+              <PinIcon width={14} height={14}/> {t('landing.termsTitle')}
             </b>{' '}
-            นับชั่วโมงเมื่อเข้ารับจริง 1 ชม./ครั้ง · แพ็กเกจมีอายุ <b>6 เดือน</b> นับจากวันที่ซื้อ ·
-            ไม่สามารถโอนหรือคืนเงินได้ · ใช้ได้เฉพาะคอร์สของครูแอร์เท่านั้น · ชำระผ่านบัตรเครดิต/เดบิต หรือโอนผ่าน <b>KBank</b>
+            {t('landing.termsBody')}
           </div>
         </div>
       </section>
@@ -142,17 +157,17 @@ export default function Landing() {
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">HOW IT WORKS</span>
-            <h2>เริ่มเรียนใน 4 ขั้นตอน</h2>
+            <h2>{t('landing.howTitle')}</h2>
           </div>
           <div className="grid cols-4">
             {[
-            ['1', 'สมัครสมาชิก', 'กรอกข้อมูล 6 ฟิลด์ผ่านเว็บ (หรือผูก LINE ได้)'],
-            ['2', 'ซื้อแพ็กเกจ', 'เลือกแพ็กเกจ + ใส่วอเชอร์ส่วนลด + ชำระผ่านบัตร/KBank'],
-            ['3', 'จองเวลาเรียน', 'เลือกวัน-เวลาที่ว่าง ระบบล็อกสล็อตให้ทันที'],
-            ['4', 'เรียนกับครูแอร์', 'เตือนนัดก่อน 1 วัน → ยืนยันมาเรียน → หักชั่วโมงหลังเรียนจบ'],
-        ].map(([n, t, d], i) => (<div className={`step reveal d${i + 1}`} key={i}>
+            ['1', t('landing.step1Title'), t('landing.step1Body')],
+            ['2', t('landing.step2Title'), t('landing.step2Body')],
+            ['3', t('landing.step3Title'), t('landing.step3Body')],
+            ['4', t('landing.step4Title'), t('landing.step4Body')],
+        ].map(([n, title, d], i) => (<div className={`step reveal d${i + 1}`} key={i}>
                 <div className="n">{n}</div>
-                <h4>{t}</h4>
+                <h4>{title}</h4>
                 <p>{d}</p>
               </div>))}
           </div>
@@ -164,20 +179,20 @@ export default function Landing() {
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">WHY US</span>
-            <h2>ทำไมต้องเรียนกับครูแอร์</h2>
+            <h2>{t('landing.whyTitle')}</h2>
           </div>
           <div className="grid cols-3">
             {[
-            [<GraduationIcon key="g"/>, 'ครูมากประสบการณ์', 'สอนร้องเพลงกว่า 10 ปี ทั้ง Pop, Ballad, R&B และลูกทุ่ง'],
-            [<TargetIcon key="t"/>, 'คอร์สตามแนวเพลงที่ชอบ', 'หลักสูตรออกแบบจากแนวเพลงและเป้าหมายของน้อง'],
-            [<CalendarIcon key="c"/>, 'จองง่าย ทั้งเว็บและ LINE', 'จองเวลาเรียนได้ตลอด 24 ชม. ดูสล็อตว่างแบบเรียลไทม์'],
-            [<CardIcon key="cc"/>, 'ชำระเงินปลอดภัย', 'บัตรเครดิต/เดบิต หรือโอนผ่านเกตเวย์ KBank ระบบเพิ่มชั่วโมงอัตโนมัติ'],
-            [<BellIcon key="b"/>, 'แจ้งเตือนก่อนเรียน 1 วัน', 'ยืนยันการมาเรียนผ่านปุ่มเดียว พร้อมระบบเลื่อน/ยกเลิกนัด'],
-            [<ChartIcon key="ch"/>, 'ติดตามชั่วโมงได้ตลอด', 'ดูชั่วโมงคงเหลือ ประวัติการเรียน และใบเสร็จได้ทันที'],
-        ].map(([ic, t, d], i) => (<div className={`card feat reveal d${i + 1}`} key={i}>
+            [<GraduationIcon key="g"/>, t('landing.why1Title'), t('landing.why1Body')],
+            [<TargetIcon key="t"/>, t('landing.why2Title'), t('landing.why2Body')],
+            [<CalendarIcon key="c"/>, t('landing.why3Title'), t('landing.why3Body')],
+            [<CardIcon key="cc"/>, t('landing.why4Title'), t('landing.why4Body')],
+            [<BellIcon key="b"/>, t('landing.why5Title'), t('landing.why5Body')],
+            [<ChartIcon key="ch"/>, t('landing.why6Title'), t('landing.why6Body')],
+        ].map(([ic, title, d], i) => (<div className={`card feat reveal d${i + 1}`} key={i}>
                 <div className="ic">{ic}</div>
                 <div>
-                  <h4>{t}</h4>
+                  <h4>{title}</h4>
                   <p>{d}</p>
                 </div>
               </div>))}
@@ -191,23 +206,22 @@ export default function Landing() {
           <div className="teacher-photo reveal d1">
             <img src="/img/teacher-studio.jpg" alt="สตูดิโอของครูแอร์" loading="lazy"/>
             <div className="teacher-tag">
-              <MicIcon width={15} height={15}/> ครูแอร์ · โค้ชเสียง &amp; นักร้อง
+              <MicIcon width={15} height={15}/> {t('landing.teacherTag')}
             </div>
           </div>
           <div className="teacher-info reveal d2">
             <span className="k">MEET YOUR TEACHER</span>
-            <h2>สวัสดีค่ะ น้อง ๆ ครูแอร์เองค่า</h2>
+            <h2>{t('landing.teacherTitle')}</h2>
             <p>
-              ครูแอร์เป็นนักร้องและโค้ชเสียงมากว่า 10 ปี สอนทั้ง Pop, Ballad, R&amp;B, Hip-Hop และลูกทุ่ง —
-              เน้นปรับพื้นฐานเสียงให้ถูกวิธี เรียนกันตัวต่อตัว เพื่อให้ทุกคนร้องเพลงได้อย่างมั่นใจและมีสไตล์เป็นของตัวเอง
+              {t('landing.teacherBody')}
             </p>
             <div className="tlist">
-              <div>หลักสูตรออกแบบตามแนวเพลงที่ชอบ</div>
-              <div>เรียนสด ตัวต่อตัว ผ่านวิดีโอคอล</div>
-              <div>ฟีดแบคเป็นไฟล์เสียง + แบบฝึกหัดหลังเรียน</div>
-              <div>เหมาะทั้งมือใหม่และนักร้องมืออาชีพ</div>
+              <div>{t('landing.teacher1')}</div>
+              <div>{t('landing.teacher2')}</div>
+              <div>{t('landing.teacher3')}</div>
+              <div>{t('landing.teacher4')}</div>
             </div>
-            <Button pink onClick={() => navigate('/register')}>เริ่มเรียนกับครูแอร์</Button>
+            <Button pink onClick={() => navigate('/register')}>{t('landing.startWithTeacher')}</Button>
           </div>
         </div>
       </section>
@@ -217,19 +231,19 @@ export default function Landing() {
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">REVIEWS</span>
-            <h2>รีวิวจากนักเรียน</h2>
+            <h2>{t('landing.reviewsTitle')}</h2>
           </div>
           <div className="grid cols-3">
             {reviews.map((review, i) => (<div className={`card rev reveal d${i + 1}`} key={review.name}>
                 <div className="stars">★★★★★</div>
-                <p>"{review.quote}"</p>
+                <p>"{localized(review.quote, language)}"</p>
                 <div className="who">
                   <div className="ava">
                     <img src={review.photo} alt={review.name} loading="lazy"/>
                   </div>
                   <div>
                     <b>{review.name}</b>
-                    <span>{review.detail}</span>
+                    <span>{localized(review.detail, language)}</span>
                   </div>
                 </div>
               </div>))}
@@ -242,21 +256,21 @@ export default function Landing() {
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">SYSTEM FEATURES</span>
-            <h2>ฟังก์ชันหลักของระบบ</h2>
-            <p>ครบวงจรตั้งแต่สมัครจนถึงการเรียนจบ</p>
+            <h2>{t('landing.featuresTitle')}</h2>
+            <p>{t('landing.featuresSub')}</p>
           </div>
           <div className="grid cols-3">
             {[
-            [<UserIcon key="u"/>, 'สมัครสมาชิก', 'สมัครผ่านเว็บหรือ LINE LIFF แก้ไข Profile ได้'],
-            [<CartIcon key="c"/>, 'เลือกแพ็กเกจ', 'แพ็กเกจ 10 / 20 / 30 ชม. พร้อมระบบวอเชอร์ส่วนลด'],
-            [<CardIcon key="cd"/>, 'ชำระเงินปลอดภัย', 'KBank Payment Gateway + บัตรเครดิต/เดบิต ผ่าน 3-D Secure'],
-            [<CalendarIcon key="ca"/>, 'จองเวลาเรียน', 'เลือกวัน-เวลาว่างจากปฏิทิน ระบบล็อกสล็อตให้ทันที'],
-            [<BellIcon key="b"/>, 'แจ้งเตือนอัตโนมัติ', 'เตือนนัดล่วงหน้า 1 วัน + ทวงถาม 6 ชม. ก่อนเข้าเรียน'],
-            [<BookIcon key="bk"/>, 'บันทึกผลการสอน', 'ครูแอร์บันทึก Class Log หักชั่วโมงอัตโนมัติ 1 ชม./ครั้ง'],
-        ].map(([ic, t, d], i) => (<div className={`card feat reveal d${i + 1}`} key={i}>
+            [<UserIcon key="u"/>, t('landing.feat1Title'), t('landing.feat1Body')],
+            [<CartIcon key="c"/>, t('landing.feat2Title'), t('landing.feat2Body')],
+            [<CardIcon key="cd"/>, t('landing.feat3Title'), t('landing.feat3Body')],
+            [<CalendarIcon key="ca"/>, t('landing.feat4Title'), t('landing.feat4Body')],
+            [<BellIcon key="b"/>, t('landing.feat5Title'), t('landing.feat5Body')],
+            [<BookIcon key="bk"/>, t('landing.feat6Title'), t('landing.feat6Body')],
+        ].map(([ic, title, d], i) => (<div className={`card feat reveal d${i + 1}`} key={i}>
                 <div className="ic">{ic}</div>
                 <div>
-                  <h4>{t}</h4>
+                  <h4>{title}</h4>
                   <p>{d}</p>
                 </div>
               </div>))}
@@ -272,13 +286,13 @@ export default function Landing() {
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">CONTACT</span>
-            <h2>ติดต่อครูแอร์</h2>
-            <p>พร้อมตอบทุกคำถาม · ให้คำปรึกษาฟรี · ทักมาได้เลยค่ะ</p>
+            <h2>{t('landing.contactTitle')}</h2>
+            <p>{t('landing.contactSub')}</p>
           </div>
 
           {/* Big CTA cards */}
           <div className="contact-cards reveal">
-            <div className="cc-item" onClick={() => toast('เปิด LINE ของคุณ')}>
+            <div className="cc-item" onClick={() => toast(t('landing.toastLine'))}>
               <div className="cc-icon green">
                 <ChatIcon width={28} height={28}/>
               </div>
@@ -294,19 +308,19 @@ export default function Landing() {
                 <PhoneIcon width={28} height={28}/>
               </div>
               <div className="cc-info">
-                <b>โทร / LINE Call</b>
+                <b>{t('landing.phone')}</b>
                 <span>09X-XXX-XXXX</span>
               </div>
               <div className="cc-arrow">→</div>
             </div>
 
-            <div className="cc-item" onClick={() => toast('เปิด Google Maps')}>
+            <div className="cc-item" onClick={() => toast(t('landing.toastMaps'))}>
               <div className="cc-icon wine">
                 <PinIcon width={28} height={28}/>
               </div>
               <div className="cc-info">
-                <b>สตูดิโอ</b>
-                <span>กรุงเทพฯ (ส่งที่อยู่ในแชต)</span>
+                <b>{t('landing.studio')}</b>
+                <span>{t('landing.studioAddr')}</span>
               </div>
               <div className="cc-arrow">→</div>
             </div>
@@ -316,8 +330,8 @@ export default function Landing() {
                 <ClockIcon width={28} height={28}/>
               </div>
               <div className="cc-info">
-                <b>เวลาทำการ</b>
-                <span>อ.–อา. 10:00–20:00 น.</span>
+                <b>{t('landing.hours')}</b>
+                <span>{t('landing.hoursValue')}</span>
               </div>
             </div>
           </div>
@@ -325,23 +339,23 @@ export default function Landing() {
           {/* Contact form */}
           <div className="contact-form-card reveal d2">
             <div className="cf-header">
-              <h3>ส่งข้อความถึงครูแอร์</h3>
-              <p>กรอกข้อมูลด้านล่าง ครูแอร์จะติดต่อกลับภายใน 24 ชม.</p>
+              <h3>{t('landing.formTitle')}</h3>
+              <p>{t('landing.formSub')}</p>
             </div>
             <div className="cf-form">
               <div className="two-col">
-                <Field label="ชื่อ">
-                  <Input placeholder="ชื่อเล่นของคุณ"/>
+                <Field label={t('landing.formName')}>
+                  <Input placeholder={t('landing.formNamePh')}/>
                 </Field>
-                <Field label="LINE ID / เบอร์โทร">
-                  <Input placeholder="สำหรับติดต่อกลับ"/>
+                <Field label={t('landing.formContact')}>
+                  <Input placeholder={t('landing.formContactPh')}/>
                 </Field>
               </div>
-              <Field label="ข้อความ">
-                <textarea className="input" rows={3} placeholder="สอบถามแพ็กเกจ ตารางเรียน หรืออื่นๆ…"/>
+              <Field label={t('landing.formMessage')}>
+                <textarea className="input" rows={3} placeholder={t('landing.formMessagePh')}/>
               </Field>
-              <Button pink style={{ width: '100%', padding: '14px 28px' }} onClick={() => toast('ส่งข้อความแล้ว — ครูแอร์จะติดต่อกลับภายใน 24 ชม.', 'ok')}>
-                <ChatIcon width={16} height={16}/> ส่งข้อความ
+              <Button pink style={{ width: '100%', padding: '14px 28px' }} onClick={() => toast(t('landing.toastSent'), 'ok')}>
+                <ChatIcon width={16} height={16}/> {t('landing.sendMessage')}
               </Button>
             </div>
           </div>
