@@ -7,7 +7,7 @@ npm install
 npm run setup
 ```
 
-`setup` สร้าง database `TheVocal_KruAir` จาก `sql/schema.sql` และใส่ข้อมูลตั้งต้นจาก `data/`
+`setup` สร้าง database `BD_AIR` จาก `sql/schema.sql` และใส่ข้อมูลตั้งต้นจาก `data/`
 
 ## 2. Backend
 ```bat

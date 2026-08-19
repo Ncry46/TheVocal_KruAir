@@ -204,7 +204,7 @@ async function seed() {
         { bookingId: pastBooking.recordset[0].id, userId: mintId },
     );
 
-    console.log('Seed completed for TheVocal_KruAir');
+    console.log('Seed completed for BD_AIR');
     await closePool();
 }
 

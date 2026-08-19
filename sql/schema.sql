@@ -1,10 +1,10 @@
-IF DB_ID(N'TheVocal_KruAir') IS NULL
+IF DB_ID(N'BD_AIR') IS NULL
 BEGIN
-    CREATE DATABASE TheVocal_KruAir;
+    CREATE DATABASE BD_AIR;
 END
 GO
 
-USE TheVocal_KruAir;
+USE BD_AIR;
 GO
 
 IF OBJECT_ID(N'dbo.notifications', N'U') IS NULL
