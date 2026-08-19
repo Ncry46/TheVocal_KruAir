@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ครูแอร์ Singing School — เว็บไซต์หลัก (LINE = ฟีเจอร์เสริม)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0c1e;--bg2:#0e1130;--panel:#161a3c;--panel2:#1b1f47;
+    --ink:#eef0ff;--muted:#9aa1c8;--line:rgba(255,255,255,.09);
+    --brand:#ff4d6d;--brand2:#ff7a8a;--violet:#7c3aed;--cyan:#22d3ee;
+    --green:#34d399;--gold:#fbbf24;--radius:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  ::selection{background:rgba(124,58,237,.4)}
+  body{
+    font-family:"Kanit","Sukhumvit Set","Noto Sans Thai","Tahoma",system-ui,sans-serif;color:var(--ink);
+    background:
+      radial-gradient(1100px 600px at 90% -5%, rgba(124,58,237,.14), transparent 55%),
+      radial-gradient(900px 500px at 0% 30%, rgba(255,77,109,.10), transparent 55%),
+      linear-gradient(180deg,var(--bg),var(--bg2));
+    background-attachment:fixed;min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 26px}
+  /* ============ Navbar แบบกระจก ============ */
+  .snav{position:sticky;top:0;z-index:40;background:rgba(10,12,30,.72);backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid rgba(255,255,255,.07)}
+  .snav .wrap{display:flex;align-items:center;gap:28px;height:66px}
+  .snav .brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .snav .logo{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;background:linear-gradient(135deg,var(--brand),var(--violet));box-shadow:0 6px 18px rgba(255,77,109,.4)}
+  .snav .brand b{font-size:15.5px;letter-spacing:.2px}
+  .snav .brand span{font-size:9.5px;color:var(--muted);display:block;letter-spacing:1px;line-height:1}
+  .snav nav{display:flex;gap:24px;flex:1}
+  .snav nav a{font-size:13.5px;color:#c3c8ea;text-decoration:none;font-weight:500;cursor:pointer;transition:.15s}
+  .snav nav a:hover{color:#fff}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;padding:10px 20px;border-radius:12px;transition:.18s}
+  .btn.pink{background:linear-gradient(135deg,var(--brand),var(--violet));color:#fff;box-shadow:0 8px 22px rgba(255,77,109,.35)}
+  .btn.pink:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 12px 28px rgba(255,77,109,.45)}
+  .btn.green{background:linear-gradient(135deg,#34d399,#059669);color:#fff;box-shadow:0 8px 22px rgba(52,211,153,.3)}
+  .btn.green:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .btn.line{background:linear-gradient(135deg,#00c853,#06c755);color:#fff;box-shadow:0 8px 22px rgba(6,199,85,.3)}
+  .btn.ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#d5d9f5}
+  .btn.ghost:hover{background:rgba(255,255,255,.12)}
+  .btn.sm{padding:7px 14px;font-size:12px;border-radius:10px}
+  /* ============ Hero ============ */
+  .hero{position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0;background:
+      radial-gradient(700px 420px at 78% 8%, rgba(124,58,237,.30), transparent 60%),
+      radial-gradient(560px 400px at 8% 30%, rgba(255,77,109,.18), transparent 60%),
+      radial-gradient(500px 380px at 92% 78%, rgba(34,211,238,.12), transparent 60%);
+      pointer-events:none}
+  .hero::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+      background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+      background-size:44px 44px;mask-image:radial-gradient(ellipse 80% 70% at 50% 0%,#000 30%,transparent 75%)}
+  .hero .wrap{position:relative;display:grid;grid-template-columns:1.15fr .85fr;gap:44px;padding-top:72px;padding-bottom:76px;align-items:center}
+  .hero .tagline{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#ffd0d9;font-size:12px;font-weight:600;padding:8px 15px;border-radius:999px;backdrop-filter:blur(6px)}
+  .hero .tagline::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  .hero h1{font-size:42px;line-height:1.18;font-weight:800;margin-top:18px;letter-spacing:-.5px}
+  .hero h1 em{font-style:normal;background:linear-gradient(92deg,#ff8fa3,var(--violet) 55%,var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero p{font-size:15px;color:#aeb4d8;margin-top:16px;line-height:1.75;max-width:540px}
+  .hero .cta{display:flex;gap:12px;margin-top:26px}
+  .hero .stats{display:flex;gap:40px;margin-top:36px}
+  .hero .stats .v{font-size:24px;font-weight:800;letter-spacing:-.3px}
+  .hero .stats .l{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .heroart{position:relative}
+  .heroart .panel{
+    background:linear-gradient(165deg,#1c2050,#141738 55%,#131535);border:1px solid rgba(255,255,255,.12);
+    border-radius:26px;padding:40px 28px;color:#fff;position:relative;text-align:center;
+    box-shadow:0 40px 90px rgba(0,0,0,.5), 0 0 60px rgba(124,58,237,.18) inset;
+    overflow:hidden;
+  }
+  .heroart .panel::before{content:"";position:absolute;inset:-30%;background:conic-gradient(from 180deg,transparent 0 60%,rgba(255,77,109,.16) 75%,transparent 90%);animation:spin 9s linear infinite;pointer-events:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .heroart .panel .big{font-size:60px;position:relative}
+  .heroart .panel h3{font-size:19px;margin-top:10px;position:relative}
+  .heroart .panel .sub{font-size:12px;opacity:.72;margin-top:8px;line-height:1.7;position:relative}
+  .heroart .panel .bar{position:relative;height:8px;border-radius:999px;background:rgba(255,255,255,.1);margin:18px auto 6px;max-width:220px;overflow:hidden}
+  .heroart .panel .bar i{display:block;height:100%;width:60%;border-radius:999px;background:linear-gradient(90deg,var(--brand),var(--violet));box-shadow:0 0 12px rgba(255,77,109,.6)}
+  .heroart .panel .lbl{position:relative;font-size:10.5px;color:#9fa6d0;display:flex;justify-content:space-between;max-width:220px;margin:0 auto}
+  .floatchip{position:absolute;background:rgba(22,26,60,.9);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px 14px;font-size:12px;font-weight:600;box-shadow:0 14px 34px rgba(0,0,0,.4);display:flex;align-items:center;gap:8px;animation:floaty 4.5s ease-in-out infinite;color:#e8ebff}
+  .floatchip.f1{top:4%;left:-7%}
+  .floatchip.f2{bottom:12%;right:-5%;animation-delay:1.5s}
+  .floatchip.f3{top:42%;right:-9%;animation-delay:2.4s}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  /* ============ Sections ============ */
+  .sec{padding:64px 0}
+  .sec .h{text-align:center;max-width:640px;margin:0 auto 38px}
+  .sec .h .k{display:inline-block;font-size:11px;font-weight:700;color:#ffd0d9;letter-spacing:2px;background:rgba(255,77,109,.12);border:1px solid rgba(255,77,109,.25);padding:4px 12px;border-radius:999px}
+  .sec .h h2{font-size:30px;font-weight:800;margin-top:12px;letter-spacing:-.4px}
+  .sec .h p{font-size:14px;color:var(--muted);margin-top:10px;line-height:1.7}
+  .grid{display:grid;gap:18px}
+  .cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}.cols-2{grid-template-columns:1.6fr 1fr}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border-radius:var(--radius);padding:20px;border:1px solid rgba(255,255,255,.08);box-shadow:0 18px 44px rgba(0,0,0,.28);transition:.2s}
+  .card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.14)}
+  /* แพ็กเกจ */
+  .pkg{position:relative;border-radius:22px;overflow:hidden;background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;transition:.22s;box-shadow:0 18px 44px rgba(0,0,0,.3)}
+  .pkg:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.16);box-shadow:0 26px 60px rgba(0,0,0,.42)}
+  .pkg .top{height:74px;display:flex;align-items:center;justify-content:center;font-size:30px;position:relative}
+  .pkg .top.pink{background:linear-gradient(135deg,rgba(255,77,109,.28),rgba(255,77,109,.08))}
+  .pkg .top.navy{background:linear-gradient(135deg,rgba(124,58,237,.30),rgba(124,58,237,.08));color:#d8c8ff}
+  .pkg .top.purple{background:linear-gradient(135deg,rgba(34,211,238,.20),rgba(34,211,238,.05));color:#a5ecff}
+  .pkg .top::after{content:"";position:absolute;bottom:0;left:14%;right:14%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent)}
+  .pkg .body{padding:20px 20px 22px;flex:1;display:flex;flex-direction:column}
+  .pkg .nm{font-weight:700;font-size:15px;color:#dfe3ff}
+  .pkg .hrs{font-size:28px;font-weight:800;margin-top:8px;letter-spacing:-.5px}
+  .pkg .hrs small{font-size:12.5px;color:var(--muted);font-weight:500}
+  .pkg .price{font-size:20px;font-weight:800;margin-top:6px;background:linear-gradient(90deg,#ff8fa3,var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .pkg .per{font-size:11.5px;color:var(--muted)}
+  .pkg .btn{margin-top:auto;padding-top:14px}
+  .pkg .body .btn{margin-top:18px}
+  .pkg .crown{position:absolute;top:12px;right:14px;background:linear-gradient(135deg,var(--gold),#f59e0b);color:#3b2a00;font-size:10px;font-weight:800;padding:5px 11px;border-radius:999px;box-shadow:0 4px 14px rgba(251,191,36,.5);z-index:2}
+  .pkg.popular{background:linear-gradient(#1a1d45,#1a1d45) padding-box,linear-gradient(135deg,var(--brand),var(--violet),var(--cyan)) border-box;border:1.5px solid transparent;box-shadow:0 22px 60px rgba(124,58,237,.28)}
+  .pkg.popular:hover{box-shadow:0 30px 70px rgba(124,58,237,.4)}
+  .termbox{background:rgba(251,191,36,.07);border:1px dashed rgba(251,191,36,.35);border-radius:14px;padding:15px 18px;font-size:12.5px;color:#f3d9a4;line-height:1.85}
+  .termbox b{color:var(--gold)}
+  .step{text-align:center;padding:28px 18px;background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid rgba(255,255,255,.08);border-radius:18px}
+  .step .n{width:52px;height:52px;margin:0 auto 14px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px;background:rgba(255,77,109,.14);border:1px solid rgba(255,77,109,.3);box-shadow:0 8px 20px rgba(255,77,109,.15)}
+  .step h4{font-size:14.5px}
+  .step p{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.65}
+  .step:nth-child(2) .n{background:rgba(124,58,237,.16);border-color:rgba(124,58,237,.4)}
+  .step:nth-child(3) .n{background:rgba(52,211,153,.13);border-color:rgba(52,211,153,.35)}
+  .step:nth-child(4) .n{background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.35)}
+  .feat{display:flex;gap:15px;align-items:flex-start;padding:20px}
+  .feat .ic{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.35);box-shadow:0 8px 18px rgba(124,58,237,.12)}
+  .feat:nth-child(2) .ic{background:rgba(255,77,109,.13);border-color:rgba(255,77,109,.35)}
+  .feat:nth-child(3) .ic{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.35)}
+  .feat:nth-child(4) .ic{background:rgba(34,211,238,.11);border-color:rgba(34,211,238,.35)}
+  .feat:nth-child(5) .ic{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.35)}
+  .feat:nth-child(6) .ic{background:rgba(255,77,109,.13);border-color:rgba(255,77,109,.35)}
+  .feat h4{font-size:14px}
+  .feat p{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.6}
+  .rev{text-align:left;padding:24px}
+  .rev .stars{color:var(--gold);font-size:14px;letter-spacing:2px;text-shadow:0 0 12px rgba(251,191,36,.5)}
+  .rev p{font-size:13px;line-height:1.75;margin-top:12px;color:#cdd2ee}
+  .rev .who{display:flex;align-items:center;gap:11px;margin-top:16px}
+  .rev .who .ava{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(135deg,rgba(255,77,109,.3),rgba(124,58,237,.3));border:1px solid rgba(255,255,255,.14)}
+  .rev .who b{font-size:12.5px;display:block}
+  .rev .who span{font-size:10.5px;color:var(--muted)}
+  .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .cinfo{display:flex;gap:13px;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.07);font-size:13px}
+  .cinfo .ic{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);flex-shrink:0}
+  .input{width:100%;border:1px solid rgba(255,255,255,.13);border-radius:12px;padding:11px 14px;font-size:13.5px;outline:none;font-family:inherit;transition:.15s;background:rgba(255,255,255,.05);color:var(--ink)}
+  .input::placeholder{color:#6f75a0}
+  .input:focus{border-color:var(--violet);box-shadow:0 0 0 3px rgba(124,58,237,.25);background:rgba(255,255,255,.07)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:700;margin-bottom:7px;color:#c6cbea}
+  footer{background:#07091a;border-top:1px solid rgba(255,255,255,.07);padding:44px 0 26px;margin-top:20px}
+  footer .wrap{display:grid;grid-template-columns:1.4fr 1fr 1fr 1.2fr;gap:30px}
+  footer h5{color:#fff;font-size:13.5px;margin-bottom:13px}
+  footer a,footer .it{display:block;font-size:12.5px;color:#8f96c2;text-decoration:none;margin-bottom:9px;cursor:pointer;transition:.15s}
+  footer a:hover{color:#fff}
+  footer .copy{border-top:1px solid rgba(255,255,255,.08);margin-top:30px;padding-top:18px;font-size:11.5px;color:#6d74a2;text-align:center}
+  /* ============ Auth ============ */
+  .authwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:30px 16px;background:
+    radial-gradient(800px 500px at 85% 0%, rgba(124,58,237,.20), transparent 55%),
+    radial-gradient(800px 500px at 0% 100%, rgba(255,77,109,.14), transparent 55%), linear-gradient(180deg,var(--bg),var(--bg2))}
+  .authcard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid rgba(255,255,255,.1);border-radius:24px;width:100%;max-width:470px;padding:36px 36px 32px;box-shadow:0 40px 90px rgba(0,0,0,.5)}
+  .authcard .logo{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:27px;background:linear-gradient(135deg,var(--brand),var(--violet));box-shadow:0 10px 26px rgba(255,77,109,.4);margin-bottom:16px}
+  .authcard h2{font-size:22px;font-weight:800;letter-spacing:-.3px}
+  .authcard .sub{font-size:13px;color:var(--muted);margin:5px 0 22px}
+  .divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px;margin:18px 0}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.09)}
+  .authlink{text-align:center;font-size:12.5px;color:var(--muted);margin-top:18px}
+  .authlink b{color:#ffa0b0;cursor:pointer;font-weight:600}
+  .consent{display:flex;gap:9px;align-items:flex-start;font-size:12px;color:#a6abc9;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:12px;margin-bottom:8px;line-height:1.55}
+  .consent input{margin-top:2px;width:17px;height:17px;accent-color:var(--green);flex-shrink:0}
+  .chk{display:inline-block;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:8px 16px;font-size:13px;cursor:pointer;margin:0 7px 9px 0;user-select:none;background:rgba(255,255,255,.04);color:#c6cbea;transition:.15s;font-weight:500}
+  .chk:hover{border-color:rgba(255,77,109,.5);color:#ffd0d9}
+  .chk.on{border-color:transparent;background:linear-gradient(135deg,rgba(255,77,109,.85),rgba(124,58,237,.85));color:#fff;font-weight:700;box-shadow:0 6px 16px rgba(255,77,109,.3)}
+  /* ============ Portal (App) ============ */
+  .app{display:flex;min-height:100vh}
+  .side{width:252px;background:#0c0e28;border-right:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0}
+  .brand{padding:22px 20px 14px}
+  .mode-switch{margin:4px 16px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  .mode-switch button{border:none;background:none;font-family:inherit;font-size:11.5px;font-weight:600;color:var(--muted);padding:8px 4px;border-radius:9px;cursor:pointer;transition:.15s}
+  .mode-switch button.on{background:rgba(255,255,255,.1);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+  .side nav{flex:1;padding:6px 14px;overflow-y:auto}
+  .side nav .grp{font-size:10px;color:#6f76a4;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;padding:16px 10px 8px}
+  .side nav button{display:flex;align-items:center;gap:11px;width:100%;border:none;background:none;font-family:inherit;cursor:pointer;padding:10px 12px;border-radius:11px;font-size:13.5px;font-weight:500;color:#b9bfe0;margin-bottom:3px;transition:.15s;text-align:left}
+  .side nav button .ic{font-size:16px;width:22px;text-align:center}
+  .side nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+  .side nav button.on{background:linear-gradient(135deg,rgba(255,77,109,.9),rgba(124,58,237,.9));color:#fff;font-weight:600;box-shadow:0 8px 20px rgba(124,58,237,.35)}
+  .side .foot{padding:14px 18px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:var(--muted)}
+  .side .foot .logout{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:#aab0d4;margin-top:9px;transition:.15s}
+  .side .foot .logout:hover{color:#ff9fb0}
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{background:rgba(10,12,30,.78);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 28px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+  .topbar h2{font-size:17px;font-weight:700}
+  .topbar .crumb{font-size:11px;color:var(--muted);margin-top:1px}
+  .topbar .spacer{flex:1}
+  .bell{position:relative;width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;transition:.15s}
+  .bell:hover{background:rgba(255,255,255,.12)}
+  .bell .badge{position:absolute;top:-4px;right:-4px;background:linear-gradient(135deg,var(--brand),var(--violet));color:#fff;font-size:9.5px;font-weight:700;min-width:17px;height:17px;border-radius:999px;display:flex;align-items:center;justify-content:center;border:2px solid #0c0e28}
+  .user{display:flex;align-items:center;gap:10px;padding:5px 13px 5px 5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:999px;cursor:pointer;transition:.15s}
+  .user:hover{background:rgba(255,255,255,.11)}
+  .user .ava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;background:linear-gradient(135deg,rgba(255,77,109,.4),rgba(124,58,237,.4))}
+  .user .nm{font-size:12px;font-weight:600;line-height:1.1}
+  .user .rl{font-size:10px;color:var(--muted)}
+  .content{padding:26px 28px 40px;max-width:1180px;width:100%;margin:0 auto}
+  .line-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(34,211,238,.08));border:1px solid rgba(52,211,153,.3);border-radius:14px;padding:13px 16px;font-size:12.5px;color:#9be8c8;margin-bottom:18px}
+  .kpi{display:flex;align-items:center;gap:14px;padding:18px}
+  .kpi .ic{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+  .kpi .v{font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-.3px}
+  .kpi .l{font-size:11.5px;color:var(--muted)}
+  .kpi.pink .ic{background:rgba(255,77,109,.13);border-color:rgba(255,77,109,.35)}
+  .kpi.blue .ic{background:rgba(34,211,238,.11);border-color:rgba(34,211,238,.35)}
+  .kpi.green .ic{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.35)}
+  .kpi.violet .ic{background:rgba(124,58,237,.15);border-color:rgba(124,58,237,.4)}
+  .kpi.gold .ic{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.35)}
+  .kpi .sub{font-size:10.5px;color:var(--muted);margin-top:3px}
+  .card .h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .card .h h3{font-size:15px;font-weight:700}
+  .card .h .link{font-size:12px;color:#ff9fb0;cursor:pointer;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:#7c83b0;padding:10px 10px;border-bottom:1px solid rgba(255,255,255,.08);font-weight:700}
+  td{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle;color:#dfe3ff}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,.03)}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:999px}
+  .badge.green{background:rgba(52,211,153,.13);color:#6ee7b7;border:1px solid rgba(52,211,153,.3)}
+  .badge.amber{background:rgba(251,191,36,.12);color:#fcd34d;border:1px solid rgba(251,191,36,.3)}
+  .badge.pink{background:rgba(255,77,109,.13);color:#ff9fb0;border:1px solid rgba(255,77,109,.3)}
+  .badge.gray{background:rgba(255,255,255,.07);color:#a7add2;border:1px solid rgba(255,255,255,.1)}
+  .badge.blue{background:rgba(34,211,238,.11);color:#7de3f5;border:1px solid rgba(34,211,238,.3)}
+  .badge.red{background:rgba(244,63,94,.13);color:#fda4af;border:1px solid rgba(244,63,94,.35)}
+  .btn.danger{background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.45);color:#ff9fb0}
+  .btn.danger:hover{background:rgba(255,77,109,.2)}
+  .prog{height:9px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-top:8px}
+  .prog i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand),var(--violet));box-shadow:0 0 12px rgba(255,77,109,.5)}
+  .bar-chart{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:8px}
+  .bar-chart .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .bar-chart .bar i{width:100%;max-width:34px;border-radius:8px 8px 3px 3px;background:linear-gradient(180deg,var(--violet),var(--brand));display:block;box-shadow:0 0 14px rgba(124,58,237,.35);transition:.3s}
+  .bar-chart .bar:hover i{filter:brightness(1.2)}
+  .bar-chart .bar span{font-size:9.5px;color:var(--muted)}
+  .bar-chart .bar b{font-size:9.5px;color:#c6cbea}
+  .alertbar{display:flex;align-items:center;gap:10px;background:rgba(255,77,109,.09);border:1px solid rgba(255,77,109,.3);border-radius:14px;padding:12px 16px;font-size:13px;color:#ffc2cd;margin-bottom:16px}
+  .alertbar b{color:#ff9fb0}
+  .chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .dchip{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);border-radius:12px;padding:10px 15px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:500;color:#c6cbea;transition:.15s;text-align:center}
+  .dchip:hover{border-color:rgba(255,77,109,.5);color:#ffd0d9}
+  .dchip.on{border-color:transparent;background:linear-gradient(135deg,rgba(255,77,109,.85),rgba(124,58,237,.85));color:#fff;font-weight:700;box-shadow:0 6px 16px rgba(255,77,109,.3)}
+  .slot{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+  .slot button{border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.04);border-radius:12px;padding:12px 8px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;color:#d5d9f5;transition:.15s}
+  .slot button:hover:not(:disabled){border-color:rgba(52,211,153,.6);color:#7de3b0;background:rgba(52,211,153,.08)}
+  .slot button.on{border-color:transparent;background:linear-gradient(135deg,#34d399,#059669);color:#fff;box-shadow:0 6px 16px rgba(52,211,153,.35)}
+  .slot button:disabled{opacity:.35;cursor:default;background:rgba(255,255,255,.03);text-decoration:line-through}
+  .sumrow{display:flex;justify-content:space-between;font-size:13px;padding:5px 0}
+  .sumrow.total{font-weight:800;font-size:15px;border-top:1px dashed rgba(255,255,255,.15);margin-top:8px;padding-top:10px}
+  .sumrow .disc{color:#ff9fb0}
+  .sumpanel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:13px 15px}
+  .pagetip{font-size:12px;color:var(--muted);margin-top:8px}
+  .backdrop{position:fixed;inset:0;background:rgba(5,6,18,.6);backdrop-filter:blur(6px);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}
+  .backdrop.open{display:flex}
+  .modal{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid rgba(255,255,255,.1);border-radius:22px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 40px 100px rgba(0,0,0,.55);animation:up .2s ease}
+  @keyframes up{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+  .modal .mh{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .modal .mh b{font-size:15.5px}
+  .modal .mh .x{border:none;background:rgba(255,255,255,.08);width:30px;height:30px;border-radius:10px;cursor:pointer;font-size:15px;color:var(--muted);font-family:inherit}
+  .modal .mh .x:hover{background:rgba(255,255,255,.15)}
+  .modal .mb{padding:20px 22px 24px}
+  .opt{border:1px solid rgba(255,255,255,.12);border-radius:15px;padding:13px 15px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:.15s}
+  .opt:hover{border-color:rgba(255,77,109,.45)}
+  .opt.on{border-color:rgba(255,77,109,.55);background:rgba(255,77,109,.08);box-shadow:0 0 0 1px rgba(255,77,109,.2)}
+  .opt .ic{font-size:20px;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,.07)}
+  .opt .nm{font-weight:700;font-size:13.5px}
+  .opt .ds{font-size:11px;color:var(--muted)}
+  .opt .pr{margin-left:auto;font-weight:800;font-size:14.5px;color:#ff9fb0;white-space:nowrap}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(20,22,50,.95);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);color:#fff;padding:13px 22px;border-radius:999px;font-size:13.5px;font-weight:600;z-index:90;opacity:0;pointer-events:none;transition:.3s;box-shadow:0 16px 44px rgba(0,0,0,.5);display:flex;align-items:center;gap:9px}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{background:linear-gradient(135deg,rgba(52,211,153,.95),rgba(5,150,105,.95))}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:999px}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24)}
+  @media (max-width:920px){
+    .side{display:none}
+    .hero .wrap{grid-template-columns:1fr;padding-top:44px}
+    .hero h1{font-size:30px}
+    .heroart{max-width:400px;margin:0 auto}
+    .cols-3,.cols-4,.cols-2,.contact-grid{grid-template-columns:1fr}
+    .snav nav{display:none}
+    footer .wrap{grid-template-columns:1fr 1fr}
+    .content{padding:18px 14px 30px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== เว็บไซต์ (Public) ==================== -->
+<div id="site">
+  <div class="snav">
+    <div class="wrap">
+      <div class="brand" onclick="goSite()">
+        <div class="logo">🎤</div>
+        <div><b>ครูแอร์</b><span>SINGING SCHOOL</span></div>
+      </div>
+      <nav>
+        <a onclick="scrollToSec('#pkg')">แพ็กเกจ</a>
+        <a onclick="scrollToSec('#how')">วิธีเรียน</a>
+        <a onclick="scrollToSec('#why')">ทำไมต้องเรา</a>
+        <a onclick="scrollToSec('#rev')">รีวิว</a>
+        <a onclick="scrollToSec('#contact')">ติดต่อ</a>
+      </nav>
+      <button class="btn ghost sm" onclick="go('login')">เข้าสู่ระบบ</button>
+      <button class="btn pink sm" onclick="go('register')">สมัครสมาชิก</button>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <div class="tagline">🎶 เปิดรับสมัครนักเรียนใหม่ คอร์สเรียนร้องเพลง 1:1</div>
+        <h1>พัฒนาน้ำเสียงกับ <em>ครูแอร์</em><br>เริ่มต้นได้วันนี้ ที่ไหนก็ได้</h1>
+        <p>เรียนร้องเพลงแบบตัวต่อตัว หลักสูตรออกแบบตามแนวเพลงและเป้าหมายของน้องแต่ละคน — จองเวลาเรียนเองได้ผ่านเว็บไซต์ แจ้งเตือนก่อนเรียน 1 วัน พร้อมระบบชำระเงินปลอดภัย (บัตรเครดิต / KBank)</p>
+        <div class="cta">
+          <button class="btn pink" onclick="go('register')">🎤 เริ่มเรียนเลย</button>
+          <button class="btn ghost" onclick="scrollToSec('#pkg')">ดูแพ็กเกจ</button>
+        </div>
+        <div class="stats">
+          <div><div class="v">120+</div><div class="l">นักเรียน</div></div>
+          <div><div class="v">2,400+</div><div class="l">ชั่วโมงสอน</div></div>
+          <div><div class="v">5.0 ★</div><div class="l">คะแนนรีวิว</div></div>
+        </div>
+      </div>
+      <div class="heroart">
+        <div class="panel">
+          <div class="big">🎤</div>
+          <h3>ครูแอร์ Singing School</h3>
+          <div class="sub">Pop · Ballad · Rock · R&amp;B · Hip-Hop · ลูกทุ่ง<br>คอร์สออกแบบตามแนวเพลงที่คุณชอบ</div>
+          <div class="bar"><i></i></div>
+          <div class="lbl"><span>แพ็กเกจ Pro</span><span>เหลือ 19 / 20 ชม.</span></div>
+        </div>
+        <div class="floatchip f1">📅 จองเวลาเรียนได้ 24 ชม.</div>
+        <div class="floatchip f2">🔔 เตือนนัดก่อนเรียน 1 วัน</div>
+        <div class="floatchip f3">💳 ชำระผ่านบัตร / KBank</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="pkg">
+    <div class="wrap">
+      <div class="h"><div class="k">PACKAGES</div><h2>แพ็กเกจเรียน</h2><p>เลือกแพ็กเกจตามเป้าหมาย — ซื้อแล้วสะสมชั่วโมงเรียนได้ตลอด 6 เดือน</p></div>
+      <div class="grid cols-3" style="margin-bottom:18px">
+        <div class="pkg">
+          <div class="top pink">🎵</div>
+          <div class="body">
+            <div class="nm">Package 10 ชั่วโมง</div>
+            <div class="hrs">10 <small>ชั่วโมง</small></div>
+            <div class="price">฿22,000</div>
+            <div class="per">เฉลี่ย 2,200 บาท/ชม. · เหมาะกับผู้เริ่มต้น</div>
+            <button class="btn pink" onclick="go('register')">ซื้อแพ็กเกจนี้</button>
+          </div>
+        </div>
+        <div class="pkg popular">
+          <div class="crown">👑 ยอดนิยม</div>
+          <div class="top navy">🎶</div>
+          <div class="body">
+            <div class="nm">Package 20 ชั่วโมง</div>
+            <div class="hrs">20 <small>ชั่วโมง</small></div>
+            <div class="price">฿40,000</div>
+            <div class="per">เฉลี่ย 2,000 บาท/ชม. · คุ้มค่าสำหรับสายจริงจัง</div>
+            <button class="btn pink" onclick="go('register')">ซื้อแพ็กเกจนี้</button>
+          </div>
+        </div>
+        <div class="pkg">
+          <div class="top purple">🎤</div>
+          <div class="body">
+            <div class="nm">Package 30 ชั่วโมง</div>
+            <div class="hrs">30 <small>ชั่วโมง</small></div>
+            <div class="price">฿56,000</div>
+            <div class="per">เฉลี่ย 1,867 บาท/ชม. · คุ้มสุด</div>
+            <button class="btn pink" onclick="go('register')">ซื้อแพ็กเกจนี้</button>
+          </div>
+        </div>
+      </div>
+      <div class="termbox"><b>📌 เงื่อนไขทุกแพ็กเกจ:</b> นับชั่วโมงเมื่อเข้ารับจริง 1 ชม./ครั้ง · แพ็กเกจมีอายุ <b>6 เดือน</b> นับจากวันที่ซื้อ · ไม่สามารถโอนหรือคืนเงินได้ · ใช้ได้เฉพาะคอร์สของครูแอร์เท่านั้น · ชำระผ่านบัตรเครดิต/เดบิต หรือโอนผ่าน <b>KBank</b></div>
+    </div>
+  </section>
+
+  <section class="sec" id="how" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+    <div class="wrap">
+      <div class="h"><div class="k">HOW IT WORKS</div><h2>เริ่มเรียนใน 4 ขั้นตอน</h2></div>
+      <div class="grid cols-4">
+        <div class="step"><div class="n">1️⃣</div><h4>สมัครสมาชิก</h4><p>กรอกข้อมูล 6 ฟิลด์ผ่านเว็บ (หรือผูก LINE ได้)</p></div>
+        <div class="step"><div class="n">2️⃣</div><h4>ซื้อแพ็กเกจ</h4><p>เลือกแพ็กเกจ + ใส่วอเชอร์ส่วนลด + ชำระผ่านบัตร/KBank</p></div>
+        <div class="step"><div class="n">3️⃣</div><h4>จองเวลาเรียน</h4><p>เลือกวัน-เวลาที่ว่าง ระบบล็อกสล็อตให้ทันที</p></div>
+        <div class="step"><div class="n">4️⃣</div><h4>เรียนกับครูแอร์</h4><p>เตือนนัดก่อน 1 วัน → ยืนยันมาเรียน → หักชั่วโมงหลังเรียนจบ</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="why">
+    <div class="wrap">
+      <div class="h"><div class="k">WHY US</div><h2>ทำไมต้องเรียนกับครูแอร์</h2></div>
+      <div class="grid cols-3">
+        <div class="card feat"><div class="ic">🎓</div><div><h4>ครูมากประสบการณ์</h4><p>สอนร้องเพลงกว่า 10 ปี ทั้ง Pop, Ballad, R&B และลูกทุ่ง</p></div></div>
+        <div class="card feat"><div class="ic">🎯</div><div><h4>คอร์สตามแนวเพลงที่ชอบ</h4><p>หลักสูตรออกแบบจากแนวเพลงและเป้าหมายของน้อง</p></div></div>
+        <div class="card feat"><div class="ic">📅</div><div><h4>จองง่าย ทั้งเว็บและ LINE</h4><p>จองเวลาเรียนได้ตลอด 24 ชม. ดูสล็อตว่างแบบเรียลไทม์</p></div></div>
+        <div class="card feat"><div class="ic">💳</div><div><h4>ชำระเงินปลอดภัย</h4><p>บัตรเครดิต/เดบิต หรือโอนผ่านเกตเวย์ KBank ระบบเพิ่มชั่วโมงอัตโนมัติ</p></div></div>
+        <div class="card feat"><div class="ic">🔔</div><div><h4>แจ้งเตือนก่อนเรียน 1 วัน</h4><p>ยืนยันการมาเรียนผ่านปุ่มเดียว พร้อมระบบเลื่อน/ยกเลิกนัด</p></div></div>
+        <div class="card feat"><div class="ic">📊</div><div><h4>ติดตามชั่วโมงได้ตลอด</h4><p>ดูชั่วโมงคงเหลือ ประวัติการเรียน และใบเสร็จได้ทันที</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="rev" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+    <div class="wrap">
+      <div class="h"><div class="k">REVIEWS</div><h2>รีวิวจากนักเรียน</h2></div>
+      <div class="grid cols-3">
+        <div class="card rev"><div class="stars">★★★★★</div><p>"ครูแอร์อธิบายละเอียดมาก เสียงเราดีขึ้นชัดเจนภายใน 3 คลาส จองเวลาผ่านเว็บง่ายมาก ดีใจที่เลือกเรียนที่นี่"</p><div class="who"><div class="ava">👩‍🎤</div><div><b>น้องมิ้นท์</b><span>เรียน 12 ชม. · Pop / R&amp;B</span></div></div></div>
+        <div class="card rev"><div class="stars">★★★★★</div><p>"ระบบเตือนนัดก่อนเรียน 1 วันช่วยได้มาก กดยืนยันปุ่มเดียวจบ ขยับเวลาก็ทำผ่านเว็บได้ ไม่ยุ่งยากเลย"</p><div class="who"><div class="ava">👨‍🎤</div><div><b>น้องต้นน้ำ</b><span>เรียน 15 ชม. · Rock</span></div></div></div>
+        <div class="card rev"><div class="stars">★★★★★</div><p>"ชอบที่คอร์สออกแบบตามแนวเพลงที่เรากรอกตอนสมัคร จ่ายด้วย K+ สะดวก ได้ใบเสร็จส่งเข้า LINE ด้วย"</p><div class="who"><div class="ava">👩</div><div><b>น้องเฟิร์น</b><span>เรียน 5 ชม. · Ballad</span></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="contact">
+    <div class="wrap">
+      <div class="h"><div class="k">CONTACT</div><h2>ติดต่อครูแอร์</h2></div>
+      <div class="contact-grid">
+        <div class="card">
+          <div class="cinfo"><div class="ic">📍</div><div><b>สตูดิโอ</b><br><span style="font-size:12px;color:var(--muted)">กรุงเทพฯ (ส่งที่อยู่จริงในแชต)</span></div></div>
+          <div class="cinfo"><div class="ic">💬</div><div><b>LINE Official</b><br><span style="font-size:12px;color:var(--muted)">@kruaersinging (ฟีเจอร์เสริม: แจ้งเตือน + เมนูลัด)</span></div></div>
+          <div class="cinfo"><div class="ic">📱</div><div><b>โทร / LINE</b><br><span style="font-size:12px;color:var(--muted)">09X-XXX-XXXX</span></div></div>
+          <div class="cinfo"><div class="ic">🕐</div><div><b>เวลาทำการ</b><br><span style="font-size:12px;color:var(--muted)">อังคาร–อาทิตย์ 10:00–20:00 น.</span></div></div>
+        </div>
+        <div class="card">
+          <div class="field"><label>ชื่อ</label><input class="input" placeholder="ชื่อเล่นของคุณ"></div>
+          <div class="field"><label>LINE ID / เบอร์โทร</label><input class="input" placeholder="สำหรับติดต่อกลับ"></div>
+          <div class="field"><label>ข้อความ</label><textarea class="input" rows="3" placeholder="สอบถามแพ็กเกจ หรือตารางเรียน…" style="resize:vertical"></textarea></div>
+          <button class="btn pink" style="width:100%" onclick="toast('ส่งข้อความแล้ว — ครูแอร์จะติดต่อกลับภายใน 24 ชม.','ok')">ส่งข้อความ</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><div class="logo" style="width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand-deep));display:flex;align-items:center;justify-content:center;font-size:18px">🎤</div><b style="color:#fff">ครูแอร์ Singing School</b></div>
+        <p style="font-size:12px;line-height:1.7">โรงเรียนสอนร้องเพลงแบบตัวต่อตัว หลักสูตรตามแนวเพลงที่ชอบ พร้อมระบบจองเวลาเรียนออนไลน์และชำระเงินปลอดภัย</p>
+      </div>
+      <div><h5>เมนู</h5><a onclick="scrollToSec('#pkg')">แพ็กเกจ</a><a onclick="scrollToSec('#how')">วิธีเรียน</a><a onclick="scrollToSec('#rev')">รีวิว</a><a onclick="scrollToSec('#contact')">ติดต่อ</a></div>
+      <div><h5>บัญชี</h5><a onclick="go('login')">เข้าสู่ระบบ</a><a onclick="go('register')">สมัครสมาชิก</a><a onclick="go('login')">เข้าสู่ระบบด้วย LINE</a></div>
+      <div><h5>ระบบ</h5><a onclick="toast('ฟีเจอร์เสริม: แจ้งเตือนและเมนูลัดผ่าน LINE OA')">LINE Official</a><a onclick="toast('นโยบายความเป็นส่วนตัว (PDPA)')">นโยบาย PDPA</a><a onclick="toast('เงื่อนไขแพ็กเกจ: อายุ 6 เดือน ไม่โอน/คืนเงิน')">เงื่อนไขการใช้บริการ</a></div>
+    </div>
+    <div class="wrap"><div class="copy">© 2026 ครูแอร์ Singing School · Prototype UI (Web App เป็นระบบหลัก · LINE OA เป็นฟีเจอร์เสริม)</div></div>
+  </footer>
+</div>
+
+<!-- ==================== เข้าสู่ระบบ / สมัคร ==================== -->
+<div id="auth" style="display:none">
+  <div class="authwrap">
+    <div class="authcard">
+      <div class="logo">🎤</div>
+      <div id="authTitle"><h2>ยินดีต้อนรับกลับค่า 👋</h2><div class="sub">เข้าสู่ระบบเพื่อจัดการแพ็กเกจและการจองเรียนของคุณ</div></div>
+      <div id="authBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Portal (App) ==================== -->
+<div id="app" style="display:none">
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="logo" style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,var(--brand),var(--brand-deep));display:flex;align-items:center;justify-content:center;font-size:21px">🎤</div>
+          <div style="line-height:1.15"><b style="font-size:15px">ครูแอร์</b><br><span style="font-size:10px;color:var(--muted);letter-spacing:.4px">SINGING SCHOOL</span></div>
+        </div>
+      </div>
+      <div class="mode-switch">
+        <button id="ms-stu" class="on" onclick="setMode('student')">👩‍🎓 นักเรียน</button>
+        <button id="ms-adm" onclick="setMode('admin')">🛠️ แอดมิน</button>
+      </div>
+      <nav id="sideNav"></nav>
+      <div class="foot">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)"></span> ระบบออนไลน์ · v0.1</div>
+        <div class="logout" onclick="logout()">⎋ ออกจากระบบ</div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div><h2 id="pageTitle">หน้าแรก</h2><div class="crumb" id="pageCrumb">Student Portal · น้องมิ้นท์</div></div>
+        <div class="spacer"></div>
+        <div class="bell">🔔<span class="badge" id="bellBadge">0</span></div>
+        <div class="user">
+          <div class="ava" id="userAva">👩‍🎤</div>
+          <div><div class="nm" id="userName">มิ้นท์</div><div class="rl" id="userRole">นักเรียน</div></div>
+        </div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop"><div class="modal" id="modalBox"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ====================== ข้อมูลจำลอง ====================== */
+const P = {name:'🎶 Pro', hours:20, price:40000, used:1, left:19, exp:'18 ก.พ. 2027'};
+const STU = {name:'สมชาย ใจดี', nick:'มิ้นท์', age:22, edu:'ปริญญาตรี', genres:['Pop','R&B'], reason:'อยากพัฒนาน้ำเสียงเพื่อออดิชันวงดนตรี'};
+const HISTORY = [
+  {d:'จ. 19 ส.ค.', t:'17:00–18:00', lesson:'เทคนิคการหายใจ + สเกลพื้นฐาน', note:'เสียงดีขึ้นมาก ฝึก C3–C5', used:1},
+  {d:'จ. 12 ส.ค.', t:'19:00–20:00', lesson:'อารมณ์เพลง + Ballad', note:'เน้น phrasing', used:1},
+  {d:'จ. 5 ส.ค.', t:'17:00–18:00', lesson:'เปิดเสียง + เทคนิค falsetto', note:'—', used:1}
+];
+const RECEIPTS = [
+  {d:'18 ส.ค. 2026', pkg:'🎶 Pro 20 ชม.', v:'WELCOME10 (-3,000)', amt:'37,000', m:'บัตรเครดิต', st:'สำเร็จ'},
+  {d:'10 ก.ค. 2026', pkg:'🎵 Beginner 10 ชม.', v:'—', amt:'22,000', m:'KBank (K+)', st:'สำเร็จ'}
+];
+const DAYS = ['จ. 19','อ. 20','พ. 21','พฤ. 22','ศ. 23','ส. 24','อา. 25'];
+const SLOTS = {10:'ว่าง',11:'ว่าง',13:'ว่าง',15:'เต็ม',17:'ว่าง',19:'ว่าง'};
+const ADMIN_SLOTS = [
+  {t:'10:00', stu:'น้องเฟิร์น', st:'ยืนยันแล้ว', lesson:'Pop + สเกล'},
+  {t:'11:00', stu:'น้องมิน', st:'รอคอนเฟิร์ม', lesson:'Ballad'},
+  {t:'13:00', stu:'—', st:'ว่าง', lesson:''},
+  {t:'15:00', stu:'น้องต้นน้ำ', st:'ยืนยันแล้ว', lesson:'Rock'},
+  {t:'17:00', stu:'น้องมิ้นท์', st:'ยืนยันแล้ว', lesson:'เทคนิคการหายใจ'},
+  {t:'19:00', stu:'—', st:'ว่าง', lesson:''}
+];
+const MOVES = [
+  {old:'จ. 19 ส.ค. 17:00', nw:'อ. 20 ส.ค. 17:00', stu:'น้องมิ้นท์', at:'18 ส.ค. 14:02'},
+  {old:'พ. 21 ส.ค. 13:00', nw:'พฤ. 22 ส.ค. 19:00', stu:'น้องเฟิร์น', at:'18 ส.ค. 09:41'}
+];
+const STU_TABLE = [
+  {n:'มิ้นท์ สมชาย', a:'22 · ป.ตรี', pkg:'Pro 20', left:19, done:12, st:'active'},
+  {n:'เฟิร์น วงศ์', a:'19 · ม.ปลาย', pkg:'Pro 20', left:15, done:5, st:'active'},
+  {n:'มิน ใจดี', a:'25 · ป.โท', pkg:'Beginner 10', left:8, done:2, st:'active'},
+  {n:'ต้นน้ำ สุดา', a:'17 · ม.ปลาย', pkg:'Master 30', left:30, done:0, st:'new'},
+  {n:'พรีม พิมพ์', a:'28 · ป.ตรี', pkg:'—', left:0, done:20, st:'expired'}
+];
+const VOUCHERS = [
+  {code:'WELCOME10', type:'% 10% (สูงสุด 3,000)', exp:'31 ธ.ค. 2026', used:'3 / 100', st:'active'},
+  {code:'SAVE1000', type:'บาท 1,000', exp:'30 พ.ย. 2026', used:'12 / 50', st:'active'},
+  {code:'BIRTHDAY500', type:'บาท 500', exp:'—', used:'0 / —', st:'draft'}
+];
+const SALES = [
+  {d:'18 ส.ค. 2026', stu:'มิ้นท์', pkg:'Pro 20', v:'WELCOME10', amt:37000, m:'บัตร'},
+  {d:'17 ส.ค. 2026', stu:'เฟิร์น', pkg:'Pro 20', v:'SAVE1000', amt:39000, m:'KBank'},
+  {d:'15 ส.ค. 2026', stu:'ใหม่', pkg:'Beginner 10', v:'—', amt:22000, m:'KBank'},
+  {d:'12 ส.ค. 2026', stu:'มิน', pkg:'Beginner 10', v:'—', amt:22000, m:'บัตร'},
+  {d:'10 ส.ค. 2026', stu:'ต้นน้ำ', pkg:'Master 30', v:'SAVE1000', amt:55000, m:'KBank'},
+  {d:'9 ส.ค. 2026', stu:'พลอย', pkg:'Beginner 10', v:'—', amt:22000, m:'บัตร'}
+];
+const MONTHS = [11,15,14,20,25,22,30,35,32,40,38,42];
+const MONTH_NAMES = ['ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.','ม.ค.'];
+
+/* ====================== การนำทางหลัก ====================== */
+function go(view){
+  document.getElementById('site').style.display = view==='site' ? '' : 'none';
+  document.getElementById('auth').style.display = view==='login'||view==='register' ? '' : 'none';
+  document.getElementById('app').style.display = view==='app' ? '' : 'none';
+  if(view==='login') authLogin();
+  if(view==='register') authRegister();
+  if(view==='app'){ setMode('student'); }
+  window.scrollTo({top:0});
+}
+function goSite(){ go('site'); }
+function logout(){ toast('ออกจากระบบแล้ว — กลับสู่หน้าเว็บไซต์'); go('site'); }
+function scrollToSec(sel){ document.querySelector(sel).scrollIntoView({behavior:'smooth'}); }
+function loginDemo(){ go('app'); toast('เข้าสู่ระบบสำเร็จ ยินดีต้อนรับกลับค่า','ok'); }
+
+/* ====================== หน้าเข้าสู่ระบบ / สมัคร ====================== */
+function authLogin(){
+  document.getElementById('authTitle').innerHTML = '<h2>ยินดีต้อนรับกลับค่า 👋</h2><div class="sub">เข้าสู่ระบบเพื่อจัดการแพ็กเกจและการจองเรียนของคุณ</div>';
+  document.getElementById('authBody').innerHTML = `
+    <div class="field"><label>อีเมล หรือ เบอร์โทรศัพท์</label><input class="input" id="lg-id" placeholder="เช่น mint@email.com"></div>
+    <div class="field"><label>รหัสผ่าน</label><input class="input" type="password" placeholder="••••••••"></div>
+    <button class="btn pink" style="width:100%" onclick="loginDemo()">เข้าสู่ระบบ</button>
+    <div class="divider">หรือ</div>
+    <button class="btn line" style="width:100%" onclick="lineLogin()">เข้าสู่ระบบด้วย LINE (LIFF)</button>
+    <div class="authlink">ยังไม่มีบัญชี? <b onclick="go('register')">สมัครสมาชิกฟรี</b></div>`;
+}
+function authRegister(){
+  document.getElementById('authTitle').innerHTML = '<h2>สมัครสมาชิก 🎉</h2><div class="sub">กรอกข้อมูลเพื่อให้ครูแอร์ออกแบบคอร์สให้ตรงกับคุณที่สุด</div>';
+  document.getElementById('authBody').innerHTML = `
+    <div class="field"><label>ชื่อจริง <span style="color:var(--brand-deep)">*</span></label><input class="input" id="rg-name" placeholder="เช่น สมชาย ใจดี"></div>
+    <div class="field"><label>ชื่อเล่น <span style="color:var(--brand-deep)">*</span></label><input class="input" id="rg-nick" placeholder="เช่น มิ้นท์"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label>อายุ <span style="color:var(--brand-deep)">*</span></label><input class="input" id="rg-age" placeholder="เช่น 22"></div>
+      <div class="field"><label>ระดับการศึกษา <span style="color:var(--brand-deep)">*</span></label>
+        <select class="input" id="rg-edu"><option value="">เลือก</option><option>ม.ต้น</option><option>ม.ปลาย</option><option>ปวช. / ปวส.</option><option>ปริญญาตรี</option><option>ปริญญาโทขึ้นไป</option></select>
+      </div>
+    </div>
+    <div class="field"><label>แนวเพลงที่ชอบ (เลือกได้หลายแนว) <span style="color:var(--brand-deep)">*</span></label>
+      <div id="rg-genres">
+        ${['Pop','Ballad','Rock','R&B','Hip-Hop','ลูกทุ่ง','Jazz','อื่น ๆ'].map(g=>`<span class="chk" onclick="this.classList.toggle('on')">${g}</span>`).join('')}
+      </div>
+    </div>
+    <div class="field"><label>เหตุผลที่อยากเรียนร้องเพลง <span style="color:var(--brand-deep)">*</span></label><textarea class="input" id="rg-reason" rows="2" placeholder="เช่น อยากออดิชันวงดนตรี / พัฒนาน้ำเสียง…" style="resize:vertical"></textarea></div>
+    <div class="consent"><input type="checkbox" id="rg-pdpa"><span>ข้าพเจ้ายินยอมให้จัดเก็บข้อมูลส่วนบุคคลเพื่อการติดต่อและให้บริการ ตามนโยบาย PDPA</span></div>
+    <button class="btn pink" style="width:100%" onclick="doRegister()">สมัครสมาชิก</button>
+    <div class="divider">หรือ</div>
+    <button class="btn line" style="width:100%" onclick="lineRegister()">สมัครด้วย LINE (LIFF)</button>
+    <div class="authlink">มีบัญชีแล้ว? <b onclick="go('login')">เข้าสู่ระบบ</b></div>`;
+}
+function lineLogin(){ toast('เปิด LIFF LINE Login (ฟีเจอร์เสริม) — ผูกบัญชีกับ LINE'); setTimeout(loginDemo, 900); }
+function lineRegister(){ toast('เปิด LIFF สมัครผ่าน LINE (ฟีเจอร์เสริม) — ข้อมูลจะถูกกรอกอัตโนมัติ'); setTimeout(()=>{ go('app'); toast('สมัครสมาชิกสำเร็จ ยินดีต้อนรับค่า 🎉','ok'); }, 900); }
+function doRegister(){
+  const name=document.getElementById('rg-name').value.trim(), nick=document.getElementById('rg-nick').value.trim(),
+        age=document.getElementById('rg-age').value.trim(), edu=document.getElementById('rg-edu').value,
+        reason=document.getElementById('rg-reason').value.trim(), pdpa=document.getElementById('rg-pdpa').checked;
+  const genres=[...document.querySelectorAll('#rg-genres .chk.on')].map(x=>x.textContent);
+  if(!name||!nick||!age||!edu||!reason||genres.length===0||!pdpa){ toast('กรุณากรอกข้อมูลให้ครบทุกช่องนะคะ 🙏'); return; }
+  go('app'); toast('สมัครสมาชิกสำเร็จ ยินดีต้อนรับน้อง'+nick+' 🎉','ok');
+}
+
+/* ====================== โหมด + นำทาง portal ====================== */
+const NAV = {
+  student: [
+    {g:'เมนูหลัก'},
+    {id:'home', ic:'🏠', l:'หน้าแรก'},
+    {id:'packages', ic:'🛒', l:'ซื้อแพ็กเกจ'},
+    {id:'booking', ic:'📅', l:'จองเวลาเรียน'},
+    {id:'history', ic:'📖', l:'ประวัติการเรียน'},
+    {g:'บัญชีของฉัน'},
+    {id:'receipts', ic:'🧾', l:'ใบเสร็จ / การซื้อ'},
+    {id:'profile', ic:'👤', l:'โปรไฟล์'}
+  ],
+  admin: [
+    {g:'การจัดการ'},
+    {id:'schedule', ic:'🗓️', l:'ตารางสอน'},
+    {id:'requests', ic:'🔁', l:'คำขอเลื่อนนัด', badge:2},
+    {id:'students', ic:'🧑‍🎓', l:'นักเรียน'},
+    {g:'ธุรกิจ'},
+    {id:'sales', ic:'📊', l:'ยอดขาย / รายงาน'},
+    {id:'vouchers', ic:'🎟️', l:'วอเชอร์'},
+    {g:'ระบบ'},
+    {id:'settings', ic:'⚙️', l:'ตั้งค่า'}
+  ]
+};
+const TITLES = {
+  home:['หน้าแรก','Student Portal · น้องมิ้นท์'], packages:['ซื้อแพ็กเกจ','เลือกแพ็กเกจ + วอเชอร์ + ชำระเงิน'],
+  booking:['จองเวลาเรียน','เลือกวันและเวลาที่ต้องการ'], history:['ประวัติการเรียน','คลาสทั้งหมดที่เรียนแล้ว'],
+  receipts:['ใบเสร็จ / การซื้อ','ประวัติการสั่งซื้อแพ็กเกจ'], profile:['โปรไฟล์','ข้อมูลสมาชิกของน้อง'],
+  schedule:['ตารางสอน','วันอังคารที่ 20 ส.ค. 2026 · ครูแอร์'], requests:['คำขอเลื่อนนัด','รายการที่รอแอดมินตรวจสอบ'],
+  students:['นักเรียน','รายชื่อนักเรียนทั้งหมด'], sales:['ยอดขาย / รายงาน','ภาพรวมธุรกิจรายเดือน'],
+  vouchers:['วอเชอร์','จัดการโค้ดส่วนลด'], settings:['ตั้งค่า','แพ็กเกจ · สล็อต · ข้อความอัตโนมัติ']
+};
+let mode = 'student', cur = 'home';
+function setMode(m){
+  mode = m;
+  document.getElementById('ms-stu').classList.toggle('on', m==='student');
+  document.getElementById('ms-adm').classList.toggle('on', m==='admin');
+  document.getElementById('bellBadge').textContent = m==='admin' ? '2' : '0';
+  document.getElementById('bellBadge').style.display = m==='admin' ? 'flex' : 'none';
+  document.getElementById('userAva').textContent = m==='admin' ? '🎤' : '👩‍🎤';
+  document.getElementById('userName').textContent = m==='admin' ? 'ครูแอร์' : 'มิ้นท์';
+  document.getElementById('userRole').textContent = m==='admin' ? 'แอดมิน' : 'นักเรียน';
+  showPage(m==='admin' ? 'schedule' : 'home');
+}
+function showPage(id){
+  cur = id;
+  document.getElementById('pageTitle').textContent = TITLES[id][0];
+  document.getElementById('pageCrumb').textContent = TITLES[id][1];
+  const nav = NAV[mode];
+  document.getElementById('sideNav').innerHTML = nav.map(n=>{
+    if(n.g) return `<div class="grp">${n.g}</div>`;
+    return `<button class="${n.id===cur?'on':''}" onclick="showPage('${n.id}')"><span class="ic">${n.ic}</span>${n.l}${n.badge?`<span style="margin-left:auto;background:#fff;color:var(--brand-deep);font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px">${n.badge}</span>`:''}</button>`;
+  }).join('');
+  document.getElementById('content').innerHTML = PAGES[id]();
+  window.scrollTo({top:0});
+}
+
+/* ====================== Student pages ====================== */
+const PAGES = {
+  home(){
+    return `
+    <div class="line-banner">💬 <div><b>LINE เชื่อมต่อแล้ว (ฟีเจอร์เสริม)</b> — ระบบแจ้งเตือนนัด 1 วัน, ใบเสร็จ และเมนูลัดส่งให้ผ่าน LINE OA <span style="opacity:.8">(ปิดได้ในตั้งค่า)</span></div></div>
+    <div class="grid" style="margin-bottom:18px">
+      <div class="card" style="background:linear-gradient(135deg,#26263f,#3b2f63);color:#fff;border:none">
+        <div style="font-size:15px;font-weight:700">สวัสดีค่า น้อง${STU.nick} 👋</div>
+        <div style="font-size:12px;opacity:.85;margin-top:4px">ชั่วโมงคงเหลือ <b style="color:#ffd76e">${P.left} ชม.</b> · นัดถัดไป: <b>อ. 20 ส.ค. 17:00 น.</b> (ยืนยันแล้ว ✅)</div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn green" onclick="showPage('booking')">📅 จองเวลาเรียน</button>
+          <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="showPage('packages')">🛒 ซื้อแพ็กเกจ</button>
+        </div>
+      </div>
+    </div>
+    <div class="grid cols-3" style="margin-bottom:18px">
+      ${kpi('green','⏳','19','ชั่วโมงคงเหลือ','Pro 20 ชม. · หมดอายุ 18 ก.พ. 2027')}
+      ${kpi('pink','🎵','12','เรียนแล้ว','ทั้งหมด 12 คลาส')}
+      ${kpi('blue','🔔','1','นัดถัดไป','อ. 20 ส.ค. 17:00 น.')}
+    </div>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="h"><h3>📖 ประวัติล่าสุด</h3><span class="link" onclick="showPage('history')">ดูทั้งหมด →</span></div>
+        ${tbl(['วันที่','คลาส','บันทึกครู'], HISTORY.slice(0,3).map(h=>[`<b>${h.d} ${h.t}</b>`,'<b>'+h.lesson+'</b>',h.note==='—'?'<span style="color:var(--muted)">—</span>':h.note]))}
+      </div>
+      <div class="card">
+        <div class="h"><h3>💰 แพ็กเกจของฉัน</h3><span class="link" onclick="showPage('packages')">ซื้อเพิ่ม →</span></div>
+        <div style="font-size:13.5px;font-weight:700">${P.name} · 20 ชั่วโมง</div>
+        <div class="prog"><i style="width:${(P.used/P.hours*100).toFixed(0)}%"></i></div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:6px"><span>ใช้แล้ว ${P.used} ชม.</span><span>คงเหลือ <b style="color:var(--brand-deep)">${P.left} ชม.</b></span></div>
+        <div class="pagetip">⏳ หักชั่วโมงเมื่อเรียนจริง 1 ชม./ครั้ง · แพ็กเกจหมดอายุ 6 เดือน</div>
+      </div>
+    </div>`;
+  },
+  packages(){
+    return `
+    <div class="grid cols-3" style="margin-bottom:16px">
+      <div class="pkg">
+        <div class="top pink">🎵</div>
+        <div class="body">
+          <div class="nm">Package 10 ชั่วโมง</div>
+          <div class="hrs">10 <small>ชั่วโมง</small></div>
+          <div class="price">฿22,000</div>
+          <div class="per">เฉลี่ย 2,200 บาท/ชม.</div>
+          <button class="btn pink" onclick="openBuy('beginner')">เลือกแพ็กเกจ</button>
+        </div>
+      </div>
+      <div class="pkg popular">
+        <div class="crown">👑 ยอดนิยม</div>
+        <div class="top navy">🎶</div>
+        <div class="body">
+          <div class="nm">Package 20 ชั่วโมง</div>
+          <div class="hrs">20 <small>ชั่วโมง</small></div>
+          <div class="price">฿40,000</div>
+          <div class="per">เฉลี่ย 2,000 บาท/ชม.</div>
+          <button class="btn pink" onclick="openBuy('pro')">เลือกแพ็กเกจ</button>
+        </div>
+      </div>
+      <div class="pkg">
+        <div class="top purple">🎤</div>
+        <div class="body">
+          <div class="nm">Package 30 ชั่วโมง</div>
+          <div class="hrs">30 <small>ชั่วโมง</small></div>
+          <div class="price">฿56,000</div>
+          <div class="per">เฉลี่ย 1,867 บาท/ชม. · คุ้มสุด</div>
+          <button class="btn pink" onclick="openBuy('master')">เลือกแพ็กเกจ</button>
+        </div>
+      </div>
+    </div>
+    <div class="termbox">
+      <b>📌 เงื่อนไขทุกแพ็กเกจ:</b> นับชั่วโมงเมื่อเข้ารับจริง 1 ชม./ครั้ง · แพ็กเกจมีอายุ <b>6 เดือน</b> นับจากวันที่ซื้อ ·
+      ไม่สามารถโอนหรือคืนเงินได้ · ใช้ได้เฉพาะคอร์สของครูแอร์เท่านั้น
+    </div>`;
+  },
+  booking(){
+    return `
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="h"><h3>📅 เลือกวัน</h3></div>
+        <div class="chip-row" id="dayRow">
+          ${DAYS.map((d,i)=>`<button class="dchip ${i===1?'on':''}" onclick="pickDay(this,${i})">${d}</button>`).join('')}
+        </div>
+        <div class="h" style="margin-top:6px"><h3>🕐 สล็อตเวลา (60 นาที)</h3></div>
+        <div class="slot" id="slotGrid">
+          ${Object.entries(SLOTS).map(([t,st])=>`<button ${st==='เต็ม'?'disabled':''}>${t}:00–${+t+1}:00 น.${st==='เต็ม'?' (เต็ม)':''}</button>`).join('')}
+        </div>
+        <div class="pagetip">💡 ระบบจะล็อกสล็อตเมื่อจองสำเร็จ และส่งข้อความแจ้งเตือน + ปุ่มคอนเฟิร์มก่อนเรียน 1 วัน</div>
+      </div>
+      <div class="card">
+        <div class="h"><h3>🎤 สรุปการจอง</h3></div>
+        <div class="sumrow"><span style="color:var(--muted)">วัน-เวลา</span><b>อังคาร 20 ส.ค. 17:00–18:00 น.</b></div>
+        <div class="sumrow"><span style="color:var(--muted)">ครูผู้สอน</span><span>ครูแอร์ 🎤 (เรียนสด 1:1)</span></div>
+        <div class="sumrow"><span style="color:var(--muted)">การหักชั่วโมง</span><span>หักเมื่อเรียนจบจริง (1 ชม./ครั้ง)</span></div>
+        <div class="sumrow total"><span>ชั่วโมงคงเหลือ</span><span style="color:var(--brand-deep)">${P.left} ชม.</span></div>
+        <button class="btn green" style="width:100%;margin-top:16px" onclick="toast('✅ จองสำเร็จแล้ว! ระบบล็อกสล็อตไว้ให้แล้ว','ok')">ยืนยันการจอง</button>
+      </div>
+    </div>`;
+  },
+  history(){
+    return `
+    <div class="card">
+      <div class="h"><h3>📖 ประวัติการเรียน</h3><span class="badge green">เรียนแล้ว 12 คลาส · ใช้ไป 12 ชม.</span></div>
+      ${tbl(['วันที่','เวลา','บทเรียน','บันทึกครูแอร์','ชั่วโมง'], HISTORY.map(h=>[`<b>${h.d}</b>`,h.t,h.lesson,h.note,`<span class="badge blue">${h.used} ชม.</span>`]))}
+    </div>`;
+  },
+  receipts(){
+    return `
+    <div class="card">
+      <div class="h"><h3>🧾 ประวัติการซื้อ / ใบเสร็จ</h3><span class="badge green">ทั้งหมด 2 รายการ</span></div>
+      ${tbl(['วันที่ซื้อ','แพ็กเกจ','วอเชอร์','ยอดชำระ','ช่องทาง','สถานะ',''], RECEIPTS.map((r,i)=>[
+        r.d, `<b>${r.pkg}</b>`, r.v==='—'?'<span style="color:var(--muted)">—</span>':r.v, `<b>฿${(+r.amt).toLocaleString()}</b>`, r.m,
+        `<span class="badge green">${r.st}</span>`, `<button class="btn ghost sm" onclick="openReceipt(${i})">ดูใบเสร็จ</button>`
+      ]))}
+    </div>`;
+  },
+  profile(){
+    return `
+    <div class="grid cols-2">
+      <div class="card" style="text-align:center;padding:28px">
+        <div style="width:74px;height:74px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:34px;background:linear-gradient(135deg,#ffe3ea,#ffc9d6);box-shadow:0 8px 20px rgba(255,77,109,.3)">👩‍🎤</div>
+        <div style="font-size:17px;font-weight:800">น้อง${STU.nick}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${STU.name}</div>
+        <div style="margin-top:12px"><span class="badge green">อีเมล: mint@email.com</span> <span class="badge blue">สมัคร ก.ค. 2026</span></div>
+        <button class="btn pink" style="margin-top:18px" onclick="toast('เปิดฟอร์มแก้ไขข้อมูล','ok')">✏️ แก้ไขข้อมูล</button>
+      </div>
+      <div class="card">
+        <div class="h"><h3>ข้อมูลสมาชิก</h3></div>
+        ${rows(['ชื่อจริง',STU.name],['ชื่อเล่น',STU.nick],['อายุ',STU.age+' ปี'],['ระดับการศึกษา',STU.edu],['แนวเพลงที่ชอบ',STU.genres.join(', ')],['เหตุผลที่อยากเรียน',STU.reason],['เชื่อมต่อ LINE','✔ ผูกแล้ว (ฟีเจอร์เสริม)'])}
+        <div class="termbox" style="margin-top:14px">🔒 ข้อมูลส่วนบุคคลเข้ารหัสและคุ้มครองตาม <b>PDPA</b> — ขอสิทธิ์แก้ไข/ลบข้อมูลได้ที่ครูแอร์</div>
+      </div>
+    </div>`;
+  },
+  /* ====================== Admin pages ====================== */
+  schedule(){
+    return `
+    <div class="alertbar">🔔 <b>1 นัดยังไม่คอนเฟิร์ม</b> (น้องมิน 11:00) — ระบบทวงถามอัตโนมัติแล้ว และเตือนนัดเรียน 1 วันก่อนหน้าคลาส</div>
+    <div class="card">
+      <div class="h">
+        <h3>🗓️ ตารางสอน · วันอังคาร 20 ส.ค.</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost sm" onclick="toast('ย้อนกลับวันก่อนหน้า (จำลอง)')">‹</button>
+          <button class="btn ghost sm" onclick="toast('ไปวันถัดไป (จำลอง)')">›</button>
+        </div>
+      </div>
+      ${tbl(['เวลา','นักเรียน','บทเรียน','สถานะ','การดำเนินการ'], ADMIN_SLOTS.map((s,i)=>[
+        `<b>${s.t}–${plus1(s.t)}</b>`, s.stu==='—'?'<span style="color:var(--muted)">— ว่าง —</span>':`<b>${s.stu}</b>`,
+        s.lesson||'<span style="color:var(--muted)">—</span>',
+        s.st==='ยืนยันแล้ว'?'<span class="badge green">✅ ยืนยันแล้ว</span>':s.st==='รอคอนเฟิร์ม'?'<span class="badge amber">⏳ รอคอนเฟิร์ม</span>':'<span class="badge gray">ว่าง</span>',
+        s.st==='ว่าง'?`<button class="btn ghost sm" onclick="toast('ปิดสล็อต (จำลอง)')">ปิดสล็อต</button>`
+          : s.st==='ยืนยันแล้ว' ? `<button class="btn green sm" onclick="recordLesson(this)">✅ บันทึกการสอน</button> <button class="btn danger sm" onclick="toast('บันทึก no-show: หัก 1 ชม. ตามนโยบาย')">No-show</button>`
+          : `<button class="btn ghost sm" onclick="toast('ทวงถามอีกครั้ง (จำลอง)')">ทวงถาม</button>`
+      ]))}
+      <div class="pagetip">📝 หลังเรียนจบ กด "บันทึกการสอน" → ระบบหักชั่วโมง 1 ชม. และบันทึกเข้าประวัติการเรียนอัตโนมัติ</div>
+    </div>`;
+  },
+  requests(){
+    return `
+    <div class="alertbar">🔁 <b>${MOVES.length} คำขอเลื่อนนัด</b> รอการตรวจสอบ — ระบบแจ้งเตือนนักเรียนอัตโนมัติเมื่ออนุมัติ/ปฏิเสธ</div>
+    <div class="card">
+      <div class="h"><h3>คำขอเลื่อนนัด</h3></div>
+      ${tbl(['นักเรียน','นัดเดิม','ขอนัดใหม่','ขอเมื่อ','สถานะ','การดำเนินการ'], MOVES.map(m=>[
+        `<b>${m.stu}</b>`, m.old, `<b style="color:var(--green-dark)">${m.nw}</b>`, m.at,
+        `<span class="badge pink">รออนุมัติ</span>`,
+        `<button class="btn green sm" onclick="approveMove(this)">✅ อนุมัติ</button> <button class="btn danger sm" onclick="rejectMove(this)">ปฏิเสธ</button>`
+      ]))}
+    </div>`;
+  },
+  students(){
+    return `
+    <div class="card">
+      <div class="h">
+        <h3>🧑‍🎓 นักเรียนทั้งหมด</h3>
+        <input class="input" id="stuSearch" style="width:230px" placeholder="🔍 ค้นหาชื่อ…" oninput="searchStu(this.value)">
+      </div>
+      <div id="stuTbl">
+      ${tbl(['นักเรียน','อายุ · การศึกษา','แพ็กเกจ','ชั่วโมงคงเหลือ','เรียนแล้ว','สถานะ'], STU_TABLE.map(s=>[
+        `<b>${s.n}</b>`, s.a, s.pkg==='—'?'<span style="color:var(--muted)">—</span>':s.pkg,
+        s.left>0?`<b style="color:var(--brand-deep)">${s.left} ชม.</b>`:'<span style="color:var(--muted)">0</span>', s.done+' คลาส',
+        s.st==='active'?'<span class="badge green">ใช้งาน</span>':s.st==='new'?'<span class="badge blue">ใหม่</span>':'<span class="badge gray">แพ็กเกจหมดอายุ</span>'
+      ]))}
+      </div>
+    </div>`;
+  },
+  sales(){
+    const max = Math.max(...MONTHS);
+    return `
+    <div class="grid cols-4" style="margin-bottom:18px">
+      ${kpi('pink','💰','฿152,000','รายได้เดือน ส.ค.','+18% vs เดือนก่อน')}
+      ${kpi('blue','🧾','6','ออเดอร์เดือนนี้','เฉลี่ย ฿25,333/ออเดอร์')}
+      ${kpi('gold','🎟️','3','วอเชอร์ที่ใช้','ส่วนลดรวม ฿5,000')}
+      ${kpi('green','✨','4','นักเรียนใหม่','เดือนนี้')}
+    </div>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="h"><h3>📊 รายได้รายเดือน (บาท)</h3><span class="badge green">12 เดือน</span></div>
+        <div class="bar-chart">
+          ${MONTHS.map((v,i)=>`<div class="bar"><b>${v}k</b><i style="height:${(v/max*100).toFixed(0)}%"></i><span>${MONTH_NAMES[i]}</span></div>`).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="h"><h3>🧾 รายการขายล่าสุด</h3></div>
+        ${tbl(['วันที่','นักเรียน','แพ็กเกจ','วอเชอร์','ยอด','ช่องทาง'], SALES.map(s=>[
+          s.d, `<b>${s.stu}</b>`, s.pkg, s.v==='—'?'<span style="color:var(--muted)">—</span>':s.v, `<b>฿${s.amt.toLocaleString()}</b>`, s.m
+        ]))}
+      </div>
+    </div>`;
+  },
+  vouchers(){
+    return `
+    <div class="card">
+      <div class="h"><h3>🎟️ วอเชอร์ทั้งหมด</h3><button class="btn pink sm" onclick="openVoucher()">＋ สร้างวอเชอร์</button></div>
+      ${tbl(['โค้ด','ประเภท','ใช้ได้ถึง','ใช้แล้ว / ทั้งหมด','สถานะ',''], VOUCHERS.map(v=>[
+        `<b style="font-family:monospace">${v.code}</b>`, v.type, v.exp,
+        `<b>${v.used}</b>`,
+        v.st==='active'?'<span class="badge green">ใช้งาน</span>':'<span class="badge gray">ฉบับร่าง</span>',
+        v.st==='active'?`<button class="btn danger sm" onclick="toast('ปิดวอเชอร์ ${v.code} แล้ว','ok')">ปิด</button>`:`<button class="btn ghost sm" onclick="toast('เปิดใช้งาน (จำลอง)','ok')">เปิด</button>`
+      ]))}
+    </div>`;
+  },
+  settings(){
+    return `
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="h"><h3>🎁 แพ็กเกจ</h3></div>
+        ${rows(['Beginner 10 ชม.','฿22,000 · ใช้งาน'],['Pro 20 ชม. (ยอดนิยม)','฿40,000 · ใช้งาน'],['Master 30 ชม.','฿56,000 · ใช้งาน'])}
+        <div class="pagetip">อายุแพ็กเกจ: <b>6 เดือน</b> · หักชั่วโมงเมื่อเรียนจริง</div>
+      </div>
+      <div class="card">
+        <div class="h"><h3>🕐 สล็อตสอน</h3></div>
+        ${rows(['ความยาวสล็อต','60 นาที'],['เวลาทำการ','อังคาร–อาทิตย์ 10:00–20:00 น.'],['แจ้งเตือนนักเรียน','24 ชม. + ทวงถาม 6 ชม. ก่อน'],['ช่องทางแจ้งเตือน','ในเว็บ (🔔) + LINE Push (เสริม)'])}
+      </div>
+      <div class="card">
+        <div class="h"><h3>💬 การแจ้งเตือน</h3></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f7">
+          <div><div style="font-size:13px;font-weight:600">เตือนนัด 1 วัน</div><div style="font-size:11px;color:var(--muted)">ในเว็บ + LINE (ถ้าผูกบัญชี)</div></div>
+          <span class="badge green">เปิด</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f7">
+          <div><div style="font-size:13px;font-weight:600">แจ้งเตือนแพ็กเกจใกล้หมดอายุ</div><div style="font-size:11px;color:var(--muted)">30 / 7 / 1 วันก่อนหมดอายุ</div></div>
+          <span class="badge green">เปิด</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0">
+          <div><div style="font-size:13px;font-weight:600">LINE OA (ฟีเจอร์เสริม)</div><div style="font-size:11px;color:var(--muted)">Push เตือนนัด + เมนูลัดลิงก์กลับเว็บ</div></div>
+          <span class="badge amber">เชื่อมต่อแล้ว</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="h"><h3>🔒 ความปลอดภัย</h3></div>
+        ${rows(['เข้ารหัสข้อมูล','Encryption at rest + TLS'],['สิทธิ์การเข้าถึง','RBAC (student/teacher/admin)'],['สำรองข้อมูล','อัตโนมัติทุกวัน'],['PDPA','เก็บ consent + สิทธิ์ลบข้อมูล'])}
+      </div>
+    </div>`;
+  }
+};
+
+/* ====================== helpers ====================== */
+const plus1 = (t)=> String(+t.split(':')[0]+1).padStart(2,'0')+':00';
+const kpi = (c,ic,v,l,sub)=>`<div class="card kpi ${c}"><div class="ic">${ic}</div><div><div class="v">${v}</div><div class="l">${l}</div><div class="sub">${sub}</div></div></div>`;
+const tbl = (heads, rows)=>`<table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+const rows = (...pairs)=>pairs.map(([k,v])=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid #f0f0f7;font-size:13px"><span style="color:var(--muted);flex-shrink:0">${k}</span><b style="text-align:right">${v}</b></div>`).join('') + '<div style="height:1px"></div>';
+
+let toastTimer;
+function toast(msg, type){
+  const t = document.getElementById('toast');
+  t.innerHTML = (type==='ok'?'✅ ':'💬 ')+msg;
+  t.className = 'toast show '+(type==='ok'?'ok':'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.className='toast', 2600);
+}
+
+/* ====================== interactions ====================== */
+let selDay = 1;
+function pickDay(el, i){
+  selDay = i;
+  document.querySelectorAll('#dayRow .dchip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  toast(`เลือกวัน ${DAYS[i]} แล้ว — เลือกสล็อตได้เลย`);
+}
+function recordLesson(btn){
+  const row = btn.closest('tr');
+  row.querySelectorAll('td')[4].innerHTML = '<span class="badge green">✅ เรียนแล้ว</span>';
+  row.querySelectorAll('td')[5].innerHTML = '<span class="badge gray">หัก 1 ชม. แล้ว</span>';
+  toast('บันทึกการสอนแล้ว · หัก 1 ชม. · เข้าประวัติการเรียน','ok');
+}
+function approveMove(btn){
+  const row = btn.closest('tr');
+  row.querySelectorAll('td')[4].innerHTML = '<span class="badge green">✅ อนุมัติแล้ว</span>';
+  row.querySelectorAll('td')[5].innerHTML = '<span class="badge blue">แจ้งนักเรียนแล้ว</span>';
+  toast('อนุมัติเลื่อนนัดแล้ว · ส่งแจ้งเตือนให้นักเรียน (เว็บ + LINE)','ok');
+}
+function rejectMove(btn){
+  const row = btn.closest('tr');
+  row.querySelectorAll('td')[4].innerHTML = '<span class="badge red">ปฏิเสธ</span>';
+  row.querySelectorAll('td')[5].innerHTML = '<span class="badge gray">แจ้งนักเรียนแล้ว</span>';
+  toast('ปฏิเสธคำขอ · แจ้งนักเรียนแล้ว');
+}
+function searchStu(q){
+  document.querySelectorAll('#stuTbl tbody tr').forEach(r=>{
+    r.style.display = r.innerText.includes(q) ? '' : 'none';
+  });
+}
+
+/* ====================== modals ====================== */
+const BUY = {beginner:{ic:'🎵',nm:'Package 10 ชั่วโมง',price:22000,per:'เฉลี่ย 2,200 บาท/ชม.'},
+             pro:{ic:'🎶',nm:'Package 20 ชั่วโมง',price:40000,per:'เฉลี่ย 2,000 บาท/ชม. · ยอดนิยม'},
+             master:{ic:'🎤',nm:'Package 30 ชั่วโมง',price:56000,per:'เฉลี่ย 1,867 บาท/ชม. · คุ้มสุด'}};
+let buySel = 'pro', vCode = '', vDisc = 0;
+
+function openBuy(k){
+  buySel = k; vCode=''; vDisc=0;
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="mh"><b>🛒 ซื้อแพ็กเกจ</b><button class="x" onclick="closeModal()">✕</button></div>
+    <div class="mb">
+      <div class="field"><label>เลือกแพ็กเกจ</label>
+        ${Object.entries(BUY).map(([key,o])=>`
+          <div class="opt ${key===buySel?'on':''}" onclick="pickPkg('${key}', this)">
+            <div class="ic">${o.ic}</div>
+            <div><div class="nm">${o.nm}</div><div class="ds">${o.per}</div></div>
+            <div class="pr">฿${o.price.toLocaleString()}</div>
+          </div>`).join('')}
+      </div>
+      <div class="field"><label>วอเชอร์ส่วนลด (ถ้ามี)</label>
+        <div style="display:flex;gap:8px">
+          <input class="input" id="vIn" placeholder="ใส่รหัส เช่น SAVE1000" oninput="vCode=this.value.toUpperCase()">
+          <button class="btn ghost" onclick="applyV()">ใช้โค้ด</button>
+        </div>
+        <div id="vMsg" style="font-size:12px;margin-top:6px"></div>
+      </div>
+      <div id="sumBox"></div>
+      <div class="field" style="margin-top:12px"><label>ช่องทางชำระเงิน</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn ghost" onclick="pay('💳 บัตรเครดิต / เดบิต (3-D Secure)')">💳 บัตรเครดิต</button>
+          <button class="btn ghost" onclick="pay('🏦 KBank (K+) · สแกน QR ยืนยันในแอป')">🏦 KBank</button>
+        </div>
+      </div>
+      <div class="termbox" style="margin-top:14px">📌 นับชั่วโมงเมื่อเรียนจริง · อายุ 6 เดือน · ไม่โอน/คืนเงิน</div>
+    </div>`;
+  updSum();
+  openModal();
+}
+function pickPkg(k, el){
+  buySel = k;
+  document.querySelectorAll('#modalBox .opt').forEach(o=>o.classList.remove('on'));
+  el.classList.add('on');
+  updSum();
+}
+function applyV(){
+  const m = document.getElementById('vMsg');
+  if(vCode==='SAVE1000'){ vDisc = 1000; m.innerHTML = '<span class="badge green">✅ ใช้ได้ · ลด 1,000 บาท</span>'; }
+  else if(vCode==='WELCOME10'){ vDisc = Math.min(3000, Math.round(BUY[buySel].price*0.1)); m.innerHTML = '<span class="badge green">✅ ใช้ได้ · ลด 10% (สูงสุด 3,000)</span>'; }
+  else { vDisc = 0; m.innerHTML = '<span class="badge red">โค้ดไม่ถูกต้องหรือหมดอายุ</span>'; }
+  updSum();
+}
+function updSum(){
+  const p = BUY[buySel], total = p.price - vDisc;
+  document.getElementById('sumBox').innerHTML = `
+    <div class="sumpanel">
+      <div class="sumrow"><span style="color:var(--muted)">${p.nm}</span><b>฿${p.price.toLocaleString()}</b></div>
+      ${vDisc?`<div class="sumrow"><span style="color:var(--muted)">วอเชอร์ ${vCode}</span><span class="disc">−฿${vDisc.toLocaleString()}</span></div>`:''}
+      <div class="sumrow total"><span>ยอดรวม</span><span style="color:var(--brand-deep)">฿${total.toLocaleString()}</span></div>
+    </div>`;
+}
+function pay(method){
+  closeModal();
+  toast('ชำระผ่าน '+method+' แล้ว · เพิ่มชั่วโมงเข้าบัญชี + ใบเสร็จ PDF','ok');
+}
+function openReceipt(i){
+  const r = RECEIPTS[i];
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="mh"><b>🧾 ใบเสร็จอิเล็กทรอนิกส์</b><button class="x" onclick="closeModal()">✕</button></div>
+    <div class="mb">
+      <div style="text-align:center;font-size:40px">🎤</div>
+      <div style="text-align:center;font-weight:800;font-size:16px;margin-top:6px">ครูแอร์ Singing School</div>
+      <div style="text-align:center;font-size:11.5px;color:var(--muted)">ใบเสร็จรับเงิน · เลขที่ INV-2026-${8801+i}</div>
+      <div style="border-top:1.5px dashed var(--line);margin:16px 0;padding-top:14px">
+        ${rows(['วันที่', r.d],['นักเรียน', STU.name+' ('+STU.nick+')'],['รายการ', r.pkg],['วอเชอร์', r.v],['ช่องทาง', r.m])}
+        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:15.5px;padding-top:10px"><span>ยอดชำระ</span><span style="color:var(--brand-deep)">฿${(+r.amt).toLocaleString()}</span></div>
+      </div>
+      <button class="btn pink" style="width:100%" onclick="toast('ดาวน์โหลด PDF แล้ว','ok')">⬇️ ดาวน์โหลด PDF</button>
+    </div>`;
+  openModal();
+}
+function openVoucher(){
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="mh"><b>🎟️ สร้างวอเชอร์</b><button class="x" onclick="closeModal()">✕</button></div>
+    <div class="mb">
+      <div class="field"><label>โค้ดวอเชอร์</label><input class="input" id="vc" placeholder="เช่น SUMMER500"></div>
+      <div class="field"><label>ประเภทส่วนลด</label>
+        <select class="input" id="vt"><option>ลดเป็นบาท</option><option>ลดเป็น % (กำหนดเพดานได้)</option></select>
+      </div>
+      <div class="field"><label>มูลค่า / เปอร์เซ็นต์</label><input class="input" id="vv" placeholder="เช่น 500 หรือ 10"></div>
+      <div class="field"><label>วันหมดอายุ</label><input class="input" id="ve" placeholder="เช่น 31 ธ.ค. 2026"></div>
+      <button class="btn pink" style="width:100%" onclick="toast('สร้างวอเชอร์แล้ว 🎉 ส่งต่อให้นักเรียนได้เลย','ok');closeModal()">สร้างวอเชอร์</button>
+    </div>`;
+  openModal();
+}
+function openModal(){ document.getElementById('backdrop').classList.add('open'); }
+function closeModal(){ document.getElementById('backdrop').classList.remove('open'); }
+
+/* init: เปิดหน้าเว็บไซต์ก่อนเสมอ */
+go('site');
+</script>
+</body>
+</html>

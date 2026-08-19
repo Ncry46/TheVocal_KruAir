@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ครูแอร์ Singing School</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Serif Thai', Georgia, serif; background: #faf6ef; color: #2e1220; overflow-x: hidden; }
+    
+    /* Nav */
+    .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; background: rgba(250,246,239,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(200,164,180,0.15); }
+    .nav-logo { display: flex; align-items: center; gap: 10px; }
+    .nav-logo .circle { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #a0105e, #fc007a); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 18px; }
+    .nav-logo .text { line-height: 1.1; }
+    .nav-logo .text b { font-size: 18px; color: #2e1220; }
+    .nav-logo .text small { font-size: 9px; letter-spacing: 3px; color: #fc007a; text-transform: uppercase; }
+    .nav-links { display: flex; gap: 28px; font-size: 14px; font-weight: 600; }
+    .nav-links a { color: #2e1220; text-decoration: none; transition: color 0.2s; }
+    .nav-links a:hover { color: #fc007a; }
+    .nav-actions { display: flex; gap: 12px; }
+    .btn-ghost { padding: 10px 20px; border-radius: 999px; border: 1.5px solid #d4b8c8; background: transparent; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-ghost:hover { border-color: #fc007a; color: #fc007a; }
+    .btn-fill { padding: 10px 24px; border-radius: 999px; border: none; background: linear-gradient(120deg, #a0105e, #fc007a); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 0 4px 16px rgba(252,0,122,0.3); transition: all 0.2s; }
+    .btn-fill:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(252,0,122,0.4); }
+
+    /* Hero */
+    .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 120px 20px 60px; position: relative; overflow: hidden; }
+    .hero::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 520px; height: 520px; border-radius: 50%; border: 1.5px solid rgba(252,0,122,0.12); pointer-events: none; }
+    .hero-tag { font-size: 13px; color: #fc007a; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px; }
+    .hero h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 900; line-height: 1.2; max-width: 700px; margin-bottom: 20px; }
+    .hero h1 em { font-style: normal; color: #fc007a; }
+    .hero p { font-size: 16px; color: #8a6878; max-width: 600px; line-height: 1.7; margin-bottom: 32px; }
+    .hero-btns { display: flex; gap: 16px; margin-bottom: 48px; }
+    .hero-stats { display: flex; gap: 48px; }
+    .hero-stats .stat { text-align: center; }
+    .hero-stats .stat .num { font-size: 28px; font-weight: 900; color: #a0105e; }
+    .hero-stats .stat .lbl { font-size: 13px; color: #8a6878; margin-top: 4px; }
+
+    /* Floating notes */
+    .note { position: absolute; font-size: 24px; opacity: 0.15; animation: float 6s ease-in-out infinite; pointer-events: none; }
+    .note:nth-child(1) { top: 15%; left: 12%; animation-delay: 0s; }
+    .note:nth-child(2) { top: 25%; right: 15%; animation-delay: 1s; font-size: 18px; }
+    .note:nth-child(3) { bottom: 30%; left: 18%; animation-delay: 2s; font-size: 20px; }
+    .note:nth-child(4) { top: 60%; right: 12%; animation-delay: 3s; }
+    @keyframes float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-12px) rotate(8deg); } }
+
+    /* Section */
+    .sec { padding: 80px 40px; max-width: 1100px; margin: 0 auto; }
+    .sec-tag { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #fc007a; text-transform: uppercase; margin-bottom: 8px; }
+    .sec-title { text-align: center; font-size: clamp(24px, 3vw, 36px); font-weight: 900; margin-bottom: 16px; }
+    .sec-desc { text-align: center; color: #8a6878; font-size: 15px; max-width: 560px; margin: 0 auto 48px; line-height: 1.7; }
+
+    /* Packages */
+    .pkgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .pkg { background: #fff; border-radius: 20px; padding: 32px 28px; border: 1.5px solid #f9e2ec; transition: all 0.3s; position: relative; }
+    .pkg:hover { transform: translateY(-6px); box-shadow: 0 24px 60px -16px rgba(200,16,100,0.18); }
+    .pkg.featured { border-color: #fc007a; }
+    .pkg .tag { position: absolute; top: -12px; right: 24px; background: var(--grad); color: #fff; font-size: 11px; font-weight: 700; padding: 5px 14px; border-radius: 999px; }
+    .pkg .label { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #fc007a; text-transform: uppercase; margin-bottom: 16px; }
+    .pkg .hours { font-size: 48px; font-weight: 900; color: #a0105e; line-height: 1; }
+    .pkg .hours span { font-size: 16px; font-weight: 600; color: #8a6878; }
+    .pkg .price { font-size: 28px; font-weight: 900; margin: 16px 0 8px; }
+    .pkg .note { font-size: 13px; color: #8a6878; margin-bottom: 20px; line-height: 1.5; }
+    .pkg .btn { width: 100%; padding: 12px; border-radius: 12px; border: 2px solid #f9e2ec; background: transparent; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .pkg .btn:hover { background: var(--grad); color: #fff; border-color: transparent; }
+    .pkg.featured .btn { background: var(--grad); color: #fff; border-color: transparent; }
+
+    /* Steps */
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .step { text-align: center; }
+    .step .num { width: 48px; height: 48px; border-radius: 50%; background: var(--grad); color: #fff; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+    .step h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .step p { font-size: 13px; color: #8a6878; line-height: 1.6; }
+
+    /* Footer */
+    footer { text-align: center; padding: 40px; font-size: 13px; color: #8a6878; border-top: 1px solid #f9e2ec; }
+
+    @media (max-width: 768px) {
+      .nav { padding: 12px 16px; }
+      .nav-links { display: none; }
+      .pkgs { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: repeat(2, 1fr); }
+      .hero-stats { gap: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-logo">
+      <div class="circle">K</div>
+      <div class="text"><b>ครูแอร์</b><br/><small>Singing School</small></div>
+    </div>
+    <div class="nav-links">
+      <a href="#packages">แพ็กเกจ</a>
+      <a href="#how">วิธีเรียน</a>
+      <a href="#reviews">รีวิว</a>
+      <a href="#contact">ติดต่อ</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-ghost">เข้าสู่ระบบ</button>
+      <button class="btn-fill">สมัครสมาชิก</button>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <span class="note">♪</span>
+    <span class="note">♫</span>
+    <span class="note">♪</span>
+    <span class="note">♫</span>
+    <div class="hero-tag">เปิดรับสมัครนักเรียนใหม่ · คอร์สเรียนร้องเพลง 1:1</div>
+    <h1>พัฒนาน้ำเสียงกับ <em>ครูแอร์</em><br/>เริ่มต้นได้วันนี้ ที่ไหนก็ได้</h1>
+    <p>เรียนร้องเพลงแบบตัวต่อตัว หลักสูตรออกแบบตามแนวเพลงและเป้าหมายของน้องแต่ละคน — จองเวลาเรียนเองได้ผ่านเว็บไซต์ แจ้งเตือนก่อนเรียน 1 วัน พร้อมระบบชำระเงินปลอดภัย (บัตรเครดิต / KBank)</p>
+    <div class="hero-btns">
+      <button class="btn-fill" style="padding: 14px 32px; font-size: 16px;">🎤 เริ่มเรียนเลย</button>
+      <button class="btn-ghost" style="padding: 14px 32px; font-size: 16px;">ดูแพ็กเกจ</button>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><div class="num">120+</div><div class="lbl">นักเรียน</div></div>
+      <div class="stat"><div class="num">2,400+</div><div class="lbl">ชั่วโมงสอน</div></div>
+      <div class="stat"><div class="num">5.0 ★</div><div class="lbl">คะแนนรีวิว</div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="packages">
+    <div class="sec-tag">PACKAGES</div>
+    <div class="sec-title">แพ็กเกจเรียน</div>
+    <div class="sec-desc">เลือกแพ็กเกจตามเป้าหมาย — ซื้อแล้วสะสมชั่วโมงเรียนได้ตลอด 6 เดือน</div>
+    <div class="pkgs">
+      <div class="pkg">
+        <div class="label">PACKAGE 10 ชั่วโมง</div>
+        <div class="hours">10 <span>ชม.</span></div>
+        <div class="price">฿22,000</div>
+        <div class="note">เฉลี่ย 2,200 บาท/ชม. · เหมาะกับผู้เริ่มต้น</div>
+        <button class="btn">ซื้อแพ็กเกจนี้</button>
+      </div>
+      <div class="pkg featured">
+        <div class="tag">ยอดนิยม</div>
+        <div class="label">PACKAGE 20 ชั่วโมง</div>
+        <div class="hours">20 <span>ชม.</span></div>
+        <div class="price">฿40,000</div>
+        <div class="note">เฉลี่ย 2,000 บาท/ชม. · คุ้มค่าสำหรับสายจริงจัง</div>
+        <button class="btn">ซื้อแพ็กเกจนี้</button>
+      </div>
+      <div class="pkg">
+        <div class="tag" style="background: linear-gradient(120deg, #6d0a40, #a0105e);">คุ้มสุด</div>
+        <div class="label">PACKAGE 30 ชั่วโมง</div>
+        <div class="hours">30 <span>ชม.</span></div>
+        <div class="price">฿56,000</div>
+        <div class="note">เฉลี่ย 1,867 บาท/ชม.</div>
+        <button class="btn">ซื้อแพ็กเกจนี้</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="how">
+    <div class="sec-tag">HOW IT WORKS</div>
+    <div class="sec-title">เริ่มเรียนใน 4 ขั้นตอน</div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>สมัครสมาชิก</h3><p>กรอกข้อมูล 6 ฟิลด์ผ่านเว็บ (หรือผูก LINE ได้)</p></div>
+      <div class="step"><div class="num">2</div><h3>ซื้อแพ็กเกจ</h3><p>เลือกแพ็กเกจ + ใส่วอเชอร์ส่วนลด + ชำระผ่านบัตร/KBank</p></div>
+      <div class="step"><div class="num">3</div><h3>จองเวลาเรียน</h3><p>เลือกวัน-เวลาที่ว่าง ระบบล็อกสล็อตให้ทันที</p></div>
+      <div class="step"><div class="num">4</div><h3>เรียนกับครูแอร์</h3><p>เตือนนัดก่อน 1 วัน → ยืนยันมาเรียน → หักชั่วโมงหลังเรียนจบ</p></div>
+    </div>
+  </section>
+
+  <footer>
+    © 2026 ครูแอร์ Singing School · เว็บแอปพลิเคชัน (React + TypeScript)
+  </footer>
+</body>
+</html>
