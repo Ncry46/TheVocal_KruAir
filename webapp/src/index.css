@@ -77,6 +77,14 @@ h3 { font-size: 17px; font-weight: 700; }
 .gold { color: var(--gold); }
 .spacer { flex: 1; }
 .right { margin-left: auto; }
+.route-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--wine);
+  font-weight: 700;
+  background: var(--bg);
+}
 
 .grid { display: grid; gap: 20px; }
 .cols-2 { grid-template-columns: repeat(2, 1fr); }
