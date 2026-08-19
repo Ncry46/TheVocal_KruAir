@@ -44,7 +44,7 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; width: 100%; overflow-x: hidden; }
 
 body {
   font-family: 'Kanit', 'Segoe UI', system-ui, sans-serif;
@@ -55,7 +55,10 @@ body {
     var(--bg);
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  width: 100%;
+  overflow-x: hidden;
 }
+#root { min-height: 100vh; width: 100%; }
 
 :root[data-theme='dark'] body {
   background:
@@ -135,6 +138,7 @@ h3 { font-size: 17px; font-weight: 700; }
 }
 
 .grid { display: grid; gap: 20px; }
+.grid > *, .card, .pkg, .step, .modal { min-width: 0; max-width: 100%; }
 .cols-2 { grid-template-columns: repeat(2, 1fr); }
 .cols-3 { grid-template-columns: repeat(3, 1fr); }
 .cols-4 { grid-template-columns: repeat(4, 1fr); }
@@ -458,7 +462,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .logout:hover { border-color: rgba(252, 0, 122, 0.55); color: var(--wine); background: rgba(252, 0, 122, 0.07); }
 
 .content { flex: 1; display: flex; flex-direction: column; min-width: 0; width: min(100%, 1280px); margin: 0 auto; padding: 28px 30px 60px; }
-.topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; padding: 14px 30px; background: rgba(255, 244, 249, 0.86); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; width: 100%; padding: 14px 30px; background: rgba(255, 244, 249, 0.86); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
 .topbar .pagehead { margin: 0; }
 .topbar h2 { font-size: 20px; }
 .topbar .crumb { font-size: 12.5px; color: var(--muted); }
@@ -644,6 +648,23 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   .topbar { padding: 14px 16px; }
   .content { padding: 16px; }
   .pref-actions { gap: 6px; }
+}
+
+@media (max-width: 720px) {
+  .nav-row { gap: 12px; }
+  .nav-row nav { display: none; }
+  .nav-actions { margin-left: auto; gap: 8px; }
+  .topbar { gap: 10px; flex-wrap: wrap; }
+  .topbar .spacer { display: none; }
+  .bell-panel { right: -70px; width: min(340px, calc(100vw - 32px)); }
+}
+
+@media (max-width: 520px) {
+  .wrap { padding: 0 16px; }
+  .authcard { padding: 42px 22px 28px; border-radius: 22px; }
+  .user > div:last-child { display: none; }
+  .pref-btn { min-width: 34px; height: 32px; }
+  .hero-actions, .pay-methods, .voucher-row { flex-direction: column; align-items: stretch; }
 }
 
 /* footer */
