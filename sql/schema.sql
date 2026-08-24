@@ -17,7 +17,7 @@ IF OBJECT_ID(N'dbo.notifications', N'U') IS NULL
         title_en NVARCHAR(150) NULL,
         body_en NVARCHAR(MAX) NULL,
         tone NVARCHAR(20) NOT NULL CONSTRAINT DF_notifications_tone DEFAULT N'blue',
-        is_read BIT NOT NULL CONSTRAINT DF_notifications_read DEFAULT 0,
+        is_read CHAR(1) NOT NULL CONSTRAINT DF_notifications_read DEFAULT N'N',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_notifications_created DEFAULT SYSUTCDATETIME()
     );
 GO
@@ -49,6 +49,7 @@ IF OBJECT_ID(N'dbo.class_logs', N'U') IS NULL
         note NVARCHAR(MAX) NULL,
         lesson_title_en NVARCHAR(150) NULL,
         note_en NVARCHAR(MAX) NULL,
+        feedback_audio_url NVARCHAR(500) NULL,
         hours_deducted INT NOT NULL CONSTRAINT DF_class_logs_hours DEFAULT 1,
         outcome NVARCHAR(20) NOT NULL CONSTRAINT DF_class_logs_outcome DEFAULT N'done',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_class_logs_created DEFAULT SYSUTCDATETIME()
@@ -60,13 +61,20 @@ IF OBJECT_ID(N'dbo.bookings', N'U') IS NULL
         id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
         public_id NVARCHAR(40) NOT NULL UNIQUE,
         user_id INT NOT NULL,
-        slot_id INT NOT NULL UNIQUE,
+        slot_id INT NOT NULL,
         user_package_id INT NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_bookings_status DEFAULT N'pending',
         topic NVARCHAR(150) NULL,
         topic_en NVARCHAR(150) NULL,
+        source NVARCHAR(20) NOT NULL CONSTRAINT DF_bookings_source DEFAULT N'web',
+        mode NVARCHAR(20) NOT NULL CONSTRAINT DF_bookings_mode DEFAULT N'studio',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_created DEFAULT SYSUTCDATETIME(),
-        confirmed_at DATETIME2 NULL
+        confirm_deadline DATETIME2 NULL,
+        confirmed_at DATETIME2 NULL,
+        cancelled_at DATETIME2 NULL,
+        cancel_reason NVARCHAR(200) NULL,
+        reminder_sent_at DATETIME2 NULL,
+        updated_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_updated DEFAULT SYSUTCDATETIME()
     );
 GO
 
@@ -102,9 +110,26 @@ IF OBJECT_ID(N'dbo.transactions', N'U') IS NULL
         net_amount DECIMAL(12, 2) NOT NULL,
         voucher_code NVARCHAR(30) NULL,
         method NVARCHAR(80) NOT NULL,
+        method_en NVARCHAR(80) NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_tx_status DEFAULT N'success',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_tx_created DEFAULT SYSUTCDATETIME(),
         paid_at DATETIME2 NULL
+    );
+GO
+
+IF OBJECT_ID(N'dbo.payments', N'U') IS NULL
+    CREATE TABLE dbo.payments (
+        id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        public_id NVARCHAR(40) NOT NULL UNIQUE,
+        transaction_id INT NOT NULL,
+        payment_ref NVARCHAR(80) NULL,
+        gateway NVARCHAR(40) NOT NULL,
+        method NVARCHAR(80) NOT NULL,
+        method_en NVARCHAR(80) NULL,
+        gateway_status NVARCHAR(20) NOT NULL CONSTRAINT DF_payments_status DEFAULT N'pending',
+        raw_webhook NVARCHAR(MAX) NULL,
+        paid_at DATETIME2 NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_payments_created DEFAULT SYSUTCDATETIME()
     );
 GO
 
@@ -118,7 +143,7 @@ IF OBJECT_ID(N'dbo.vouchers', N'U') IS NULL
         valid_to DATETIME2 NULL,
         max_uses INT NULL,
         used_count INT NOT NULL CONSTRAINT DF_vouchers_used DEFAULT 0,
-        is_active BIT NOT NULL CONSTRAINT DF_vouchers_active DEFAULT 1
+        is_active CHAR(1) NOT NULL CONSTRAINT DF_vouchers_active DEFAULT N'Y'
     );
 GO
 
@@ -148,31 +173,48 @@ IF OBJECT_ID(N'dbo.packages', N'U') IS NULL
         name_en NVARCHAR(80) NULL,
         note_en NVARCHAR(300) NULL,
         tag_en NVARCHAR(50) NULL,
-        is_active BIT NOT NULL CONSTRAINT DF_packages_active DEFAULT 1
+        is_active CHAR(1) NOT NULL CONSTRAINT DF_packages_active DEFAULT N'Y'
     );
 GO
 
 IF OBJECT_ID(N'dbo.users', N'U') IS NULL
     CREATE TABLE dbo.users (
         id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
-        public_id NVARCHAR(40) NOT NULL UNIQUE,
         role NVARCHAR(20) NOT NULL,
         email NVARCHAR(255) NOT NULL UNIQUE,
         phone NVARCHAR(20) NULL,
+        emergency_contact NVARCHAR(120) NULL,
         password_hash NVARCHAR(255) NOT NULL,
         name NVARCHAR(100) NOT NULL,
         nickname NVARCHAR(50) NOT NULL,
         age INT NULL,
         education NVARCHAR(100) NULL,
+        education_en NVARCHAR(100) NULL,
         genres NVARCHAR(MAX) NULL,
+        genres_en NVARCHAR(MAX) NULL,
         reason NVARCHAR(MAX) NULL,
-        status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT N'active',
+        reason_en NVARCHAR(MAX) NULL,
+        status CHAR(1) NOT NULL CONSTRAINT DF_users_status DEFAULT N'Y',
         language NVARCHAR(5) NOT NULL CONSTRAINT DF_users_language DEFAULT N'th',
         avatar NVARCHAR(200) NULL,
-        line_linked BIT NOT NULL CONSTRAINT DF_users_line DEFAULT 0,
+        line_linked CHAR(1) NOT NULL CONSTRAINT DF_users_line DEFAULT N'N',
         consent_pdpa_at DATETIME2 NULL,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_users_created DEFAULT SYSUTCDATETIME(),
         updated_at DATETIME2 NOT NULL CONSTRAINT DF_users_updated DEFAULT SYSUTCDATETIME()
+    );
+GO
+
+IF OBJECT_ID(N'dbo.line_links', N'U') IS NULL
+    CREATE TABLE dbo.line_links (
+        id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        user_id INT NOT NULL,
+        line_user_id NVARCHAR(64) NOT NULL,
+        display_name NVARCHAR(100) NULL,
+        picture_url NVARCHAR(500) NULL,
+        linked_at DATETIME2 NOT NULL CONSTRAINT DF_line_links_at DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UX_line_links_user UNIQUE (user_id),
+        CONSTRAINT UX_line_links_line UNIQUE (line_user_id),
+        CONSTRAINT FK_line_links_user FOREIGN KEY (user_id) REFERENCES dbo.users (id)
     );
 GO
 
@@ -184,6 +226,7 @@ IF OBJECT_ID(N'dbo.enrollments', N'U') IS NULL
         package_id NVARCHAR(20) NOT NULL,
         hours_granted INT NOT NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_enrollments_status DEFAULT N'active',
+        source NVARCHAR(20) NOT NULL CONSTRAINT DF_enrollments_source DEFAULT N'web',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_enrollments_created DEFAULT SYSUTCDATETIME()
     );
 GO
@@ -196,6 +239,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_transactions_use
     ALTER TABLE dbo.transactions ADD CONSTRAINT FK_transactions_user FOREIGN KEY (user_id) REFERENCES dbo.users (id);
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_transactions_package')
     ALTER TABLE dbo.transactions ADD CONSTRAINT FK_transactions_package FOREIGN KEY (package_id) REFERENCES dbo.packages (id);
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_payments_tx')
+    ALTER TABLE dbo.payments ADD CONSTRAINT FK_payments_tx FOREIGN KEY (transaction_id) REFERENCES dbo.transactions (id);
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_user_packages_tx')
+    ALTER TABLE dbo.user_packages ADD CONSTRAINT FK_user_packages_tx FOREIGN KEY (transaction_id) REFERENCES dbo.transactions (id);
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_voucher_usages_voucher')
     ALTER TABLE dbo.voucher_usages ADD CONSTRAINT FK_voucher_usages_voucher FOREIGN KEY (voucher_id) REFERENCES dbo.vouchers (id);
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_voucher_usages_tx')
@@ -224,6 +271,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_enrollments_user
     ALTER TABLE dbo.enrollments ADD CONSTRAINT FK_enrollments_user FOREIGN KEY (user_id) REFERENCES dbo.users (id);
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_enrollments_package')
     ALTER TABLE dbo.enrollments ADD CONSTRAINT FK_enrollments_package FOREIGN KEY (package_id) REFERENCES dbo.packages (id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_bookings_active_slot' AND object_id = OBJECT_ID(N'dbo.bookings'))
+    CREATE UNIQUE INDEX UX_bookings_active_slot ON dbo.bookings (slot_id)
+    WHERE status IN (N'pending', N'confirmed', N'moved');
 GO
 
 IF COL_LENGTH(N'dbo.users', N'language') IS NULL
@@ -261,4 +311,76 @@ IF COL_LENGTH(N'dbo.move_requests', N'to_text_en') IS NULL
 GO
 IF COL_LENGTH(N'dbo.users', N'avatar') IS NULL
     ALTER TABLE dbo.users ADD avatar NVARCHAR(200) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'emergency_contact') IS NULL
+    ALTER TABLE dbo.users ADD emergency_contact NVARCHAR(120) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'education_en') IS NULL
+    ALTER TABLE dbo.users ADD education_en NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'reason_en') IS NULL
+    ALTER TABLE dbo.users ADD reason_en NVARCHAR(MAX) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'genres_en') IS NULL
+    ALTER TABLE dbo.users ADD genres_en NVARCHAR(MAX) NULL;
+GO
+IF COL_LENGTH(N'dbo.transactions', N'method_en') IS NULL
+    ALTER TABLE dbo.transactions ADD method_en NVARCHAR(80) NULL;
+GO
+IF COL_LENGTH(N'dbo.payments', N'method_en') IS NULL
+    ALTER TABLE dbo.payments ADD method_en NVARCHAR(80) NULL;
+GO
+IF COL_LENGTH(N'dbo.enrollments', N'source') IS NULL
+    ALTER TABLE dbo.enrollments ADD source NVARCHAR(20) NOT NULL CONSTRAINT DF_enrollments_source DEFAULT N'web';
+GO
+IF COL_LENGTH(N'dbo.bookings', N'source') IS NULL
+    ALTER TABLE dbo.bookings ADD source NVARCHAR(20) NOT NULL CONSTRAINT DF_bookings_source DEFAULT N'web';
+GO
+IF COL_LENGTH(N'dbo.bookings', N'mode') IS NULL
+    ALTER TABLE dbo.bookings ADD mode NVARCHAR(20) NOT NULL CONSTRAINT DF_bookings_mode DEFAULT N'studio';
+GO
+IF COL_LENGTH(N'dbo.bookings', N'confirm_deadline') IS NULL
+    ALTER TABLE dbo.bookings ADD confirm_deadline DATETIME2 NULL;
+GO
+IF COL_LENGTH(N'dbo.bookings', N'cancelled_at') IS NULL
+    ALTER TABLE dbo.bookings ADD cancelled_at DATETIME2 NULL;
+GO
+IF COL_LENGTH(N'dbo.bookings', N'cancel_reason') IS NULL
+    ALTER TABLE dbo.bookings ADD cancel_reason NVARCHAR(200) NULL;
+GO
+IF COL_LENGTH(N'dbo.bookings', N'reminder_sent_at') IS NULL
+    ALTER TABLE dbo.bookings ADD reminder_sent_at DATETIME2 NULL;
+GO
+IF COL_LENGTH(N'dbo.bookings', N'updated_at') IS NULL
+    ALTER TABLE dbo.bookings ADD updated_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_updated DEFAULT SYSUTCDATETIME();
+GO
+IF COL_LENGTH(N'dbo.class_logs', N'feedback_audio_url') IS NULL
+    ALTER TABLE dbo.class_logs ADD feedback_audio_url NVARCHAR(500) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_payments_transaction' AND object_id = OBJECT_ID(N'dbo.payments'))
+    CREATE UNIQUE INDEX UX_payments_transaction ON dbo.payments (transaction_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_users_phone' AND object_id = OBJECT_ID(N'dbo.users'))
+    CREATE UNIQUE INDEX UX_users_phone ON dbo.users (phone) WHERE phone IS NOT NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'public_id') IS NOT NULL
+BEGIN
+    DECLARE @uq_users_public_id SYSNAME;
+    SELECT TOP 1 @uq_users_public_id = i.name
+    FROM sys.indexes i
+    INNER JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+    INNER JOIN sys.columns c ON c.object_id = i.object_id AND c.column_id = ic.column_id
+    WHERE i.object_id = OBJECT_ID(N'dbo.users')
+      AND c.name = N'public_id'
+      AND i.is_unique = 1
+      AND i.is_primary_key = 0;
+    IF @uq_users_public_id IS NOT NULL
+    BEGIN
+        IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = @uq_users_public_id)
+            EXEC(N'ALTER TABLE dbo.users DROP CONSTRAINT [' + @uq_users_public_id + N']');
+        ELSE
+            EXEC(N'DROP INDEX [' + @uq_users_public_id + N'] ON dbo.users');
+    END
+    ALTER TABLE dbo.users DROP COLUMN public_id;
+END
 GO

@@ -1,23 +1,65 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Field, Input } from '@components/ui';
 import { LogoMark } from '@components/Logo';
 import { PublicLayout } from '@components/layout/PublicLayout';
 import { useApp } from '../context/AppContext';
 import { homePath } from '@app/utils/avatar';
+import { beginLineLogin } from '../services/lineAuth';
 
 export default function Login() {
-    const { login, t, toast } = useApp();
+    const { login, completeLineSession, t, toast } = useApp();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [id, setId] = useState('');
     const [password, setPassword] = useState('');
     const [busy, setBusy] = useState(false);
+    const [lineBusy, setLineBusy] = useState(false);
+
+    useEffect(() => {
+        const token = searchParams.get('token');
+        const lineError = searchParams.get('lineError');
+        const next = searchParams.get('next');
+        if (!token && !lineError) {
+            return undefined;
+        }
+        navigate('/login', { replace: true });
+        if (lineError) {
+            const key = `auth.lineError.${lineError}`;
+            const message = t(key);
+            toast(message === key ? t('auth.lineFailed') : message);
+            return undefined;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const session = await completeLineSession(token, {
+                    silent: Boolean(next && next.includes('line=linked')),
+                });
+                if (!cancelled) {
+                    const target = next && next.startsWith('/') && !next.startsWith('//')
+                        ? next
+                        : homePath(session);
+                    navigate(target, { replace: true });
+                }
+            }
+            catch (err) {
+                if (!cancelled) {
+                    toast(err instanceof Error ? err.message : t('auth.loginFailed'));
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [completeLineSession, navigate, searchParams, t, toast]);
+
     const submit = async (e) => {
         e.preventDefault();
         setBusy(true);
         try {
-            const signedIn = await login({ id, password });
-            navigate(homePath(signedIn));
+            const session = await login({ id, password });
+            navigate(homePath(session));
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('auth.loginFailed'));
@@ -26,6 +68,19 @@ export default function Login() {
             setBusy(false);
         }
     };
+
+    const onLine = async (event) => {
+        event.preventDefault();
+        setLineBusy(true);
+        try {
+            await beginLineLogin('login');
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('auth.lineFailed'));
+            setLineBusy(false);
+        }
+    };
+
     return (
       <PublicLayout footer={false}>
         <div className="authwrap">
@@ -41,13 +96,13 @@ export default function Login() {
               <Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)}/>
             </Field>
 
-            <Button pink style={{ width: '100%' }} disabled={busy}>
+            <Button pink style={{ width: '100%' }} disabled={busy || lineBusy}>
               {busy ? t('auth.signingIn') : t('common.login')}
             </Button>
 
             <div className="divider">{t('auth.or')}</div>
-            <Button line style={{ width: '100%' }} onClick={() => toast('เปิด LIFF LINE Login (ฟีเจอร์เสริม) — ผูกบัญชีกับ LINE')}>
-              {t('auth.lineLogin')}
+            <Button line type="button" style={{ width: '100%' }} disabled={busy || lineBusy} onClick={onLine}>
+              {lineBusy ? t('auth.lineConnecting') : t('auth.lineLogin')}
             </Button>
 
             <div className="authlink">

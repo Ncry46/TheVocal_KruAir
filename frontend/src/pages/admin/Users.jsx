@@ -84,11 +84,11 @@ export default function Users() {
     };
 
     const toggleStatus = async (row) => {
-        const next = row.status === 'active' ? 'disabled' : 'active';
+        const next = row.status === 'Y' ? 'N' : 'Y';
         try {
             await api.setUserStatus(row.id, next);
             setRows((prev) => prev?.map((item) => (item.id === row.id ? { ...item, status: next } : item)) ?? null);
-            toast(next === 'active' ? t('users.enabledOk') : t('users.disabledOk'), 'ok');
+            toast(next === 'Y' ? t('users.enabledOk') : t('users.disabledOk'), 'ok');
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('users.updateFailed'));
@@ -121,8 +121,9 @@ export default function Users() {
             <div className="empty">{t('users.empty')}</div>
           ) : (
             <Table
-              heads={[t('users.person'), t('users.email'), t('users.role'), t('users.package'), t('users.created'), t('users.status'), '']}
+              heads={[t('users.userNo'), t('users.person'), t('users.email'), t('users.role'), t('users.package'), t('users.created'), t('users.status'), '']}
               rows={filtered.map((row) => [
+                <b key="id">{row.id}</b>,
                 <div key="p" className="user-cell">
                   <div className="ava">
                     <img src={avatarSrc(row)} alt=""/>
@@ -136,14 +137,14 @@ export default function Users() {
                 <Badge key="r" tone={roleTone(row.role)}>{roleLabel(row.role)}</Badge>,
                 row.role === 'student' ? row.pkg : '—',
                 row.createdAt,
-                row.status === 'active'
+                row.status === 'Y'
                     ? <Badge key="s" tone="green">{t('users.active')}</Badge>
                     : <Badge key="s" tone="gray">{t('users.disabled')}</Badge>,
                 row.id === me?.id ? (
                     <span key="a" className="muted">{t('users.you')}</span>
                 ) : (
-                    <Button key="a" size="sm" danger={row.status === 'active'} ghost={row.status !== 'active'} onClick={() => toggleStatus(row)}>
-                      {row.status === 'active' ? t('users.disable') : t('users.enable')}
+                    <Button key="a" size="sm" danger={row.status === 'Y'} ghost={row.status !== 'Y'} onClick={() => toggleStatus(row)}>
+                      {row.status === 'Y' ? t('users.disable') : t('users.enable')}
                     </Button>
                 ),
               ])}

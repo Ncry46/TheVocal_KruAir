@@ -128,20 +128,43 @@ export function AppProvider({ children }) {
         toast(language === 'en' ? `Welcome back, ${s.nickname}` : `ยินดีต้อนรับกลับค่า น้อง${s.nickname}`, 'ok');
         return s;
     }, [language, setSession, toast]);
+    const completeLineSession = useCallback(async (token, options = {}) => {
+        const s = await api.completeLineLogin(token);
+        setSession(s);
+        if (!options.silent) {
+            toast(language === 'en' ? `Welcome back, ${s.nickname}` : `ยินดีต้อนรับกลับค่า น้อง${s.nickname}`, 'ok');
+        }
+        return s;
+    }, [language, setSession, toast]);
     const register = useCallback(async (input) => {
         const s = await api.register(input);
         setSession(s);
         toast(language === 'en' ? `Enrolled. Let’s book a lesson, ${s.nickname}` : `สมัครเรียนสำเร็จแล้ว น้อง${s.nickname} — ไปจองเวลาได้เลย`, 'ok');
         return s;
     }, [language, setSession, toast]);
+    const updateProfile = useCallback(async (input) => {
+        const data = await api.updateMe(input);
+        const profile = data.user ?? data;
+        setUser((current) => {
+            const next = { ...(current ?? {}), ...profile };
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+            }
+            catch {
+                /* ignore quota/private-mode errors */
+            }
+            return next;
+        });
+        return profile;
+    }, []);
     const logout = useCallback(() => {
         api.logout();
         setSession(null);
         toast(language === 'en' ? 'Logged out — back to website' : 'ออกจากระบบแล้ว — กลับสู่หน้าเว็บไซต์');
     }, [language, setSession, toast]);
     const value = useMemo(
-        () => ({ user, login, register, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t }),
-        [user, login, register, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t],
+        () => ({ user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t }),
+        [user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t],
     );
     return (<AppContext.Provider value={value}>
       {children}

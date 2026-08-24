@@ -1,0 +1,29 @@
+Kru Air — ให้คูปรันแบบเดียวกับ pts-learning
+
+ชื่อ image:  thanvasu/web-kruair:latest
+Digest:      sha256:618fd9f7dc6719c31805293c74e7a60ba62984433cf4c7a2c687d8f8cc0d7056
+พอร์ต:       3000
+SQL:         tvsdb2.thanvasupos.com,28914 (ห้าม localhost)
+โดเมน:       https://kruair.thanvasupos.com
+
+ถ้าได้ไฟล์ thanvasu-web-kruair-latest.tar:
+  docker rm -f kruair
+  docker load -i thanvasu-web-kruair-latest.tar
+
+รัน:
+  docker run -d --name kruair --restart unless-stopped ^
+    -p 3000:3000 ^
+    -e NODE_ENV=production ^
+    -e SQL_CLIENT=tedious ^
+    -e PORT=3000 ^
+    -e SQL_SERVER=tvsdb2.thanvasupos.com,28914 ^
+    -e FRONTEND_ORIGIN=https://kruair.thanvasupos.com ^
+    -e LINE_CALLBACK_URL=https://kruair.thanvasupos.com/api/auth/line/callback ^
+    -v /opt/kruair/.env:/app/.env:ro ^
+    thanvasu/web-kruair:latest
+
+ตรวจสุขภาพ:
+  curl http://127.0.0.1:3000/api/health
+
+Reverse proxy ของบริษัทชี้ kruair.thanvasupos.com มาที่พอร์ต 3000
+LINE Callback: https://kruair.thanvasupos.com/api/auth/line/callback

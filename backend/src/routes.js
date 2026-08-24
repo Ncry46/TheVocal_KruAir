@@ -1,28 +1,95 @@
 import bcrypt from 'bcryptjs';
-import { asyncHandler, requireAuth, requireRole, signUser, toProfile } from './auth.js';
-import { chipLabel, formatDate, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, resolveLang, slotLabel, slotStatus } from './lang.js';
+import { asyncHandler, optionalAuth, requireAuth, requireRole, signUser, toProfile } from './auth.js';
+import {
+    createLineAuthorizeUrl,
+    frontendRedirectUrl,
+    isLineConfigured,
+    loadLineProfile,
+    resolveLineCallbackDecision,
+    signLinePending,
+    verifyLinePending,
+} from './lineLogin.js';
+import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, resolveLang, slotLabel, slotStatus } from './lang.js';
 import { defaultAvatar } from './avatar.js';
 import { parseIsoDate, plusOneHour, toIsoDate } from './dates.js';
+import { canStudentCancel, hoursUntilSlot, SLOT_TIMES } from './bookingPolicy.js';
+import { jobState } from './jobs.js';
 import {
     activePackage,
     addNotification,
     assertDayIso,
-    defaultTeacherId,
+    assertStudentPhone,
+    bulkCloseTeacherSlots,
+    cancelLessonBooking,
     createLessonBooking,
+    createPackagePurchase,
+    createTeacherSlot,
+    defaultTeacherId,
     discountForVoucher,
     enrollStudent,
     ensureTeacherAvailability,
     findSlot,
     findUserById,
+    findUserByLineUserId,
     findUserByLogin,
+    linkLineAccount,
+    isYes,
+    listTeacherMonthSlots,
     mapMoveRequest,
     mapNotification,
+    normalizePhone,
+    notifySlotTeacher,
     packageStatusFromRow,
     query,
+    setTeacherSlotStatus,
+    studentLabel,
+    toYn,
 } from './store.js';
 
 function publicId(prefix) {
     return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function homePathForRole(role) {
+    if (role === 'teacher') {
+        return '/teacher';
+    }
+    if (role === 'admin') {
+        return '/admin';
+    }
+    return '/app';
+}
+
+function profilePathForRole(role) {
+    if (role === 'teacher') {
+        return '/teacher/profile';
+    }
+    if (role === 'admin') {
+        return '/admin/profile';
+    }
+    return '/app/profile';
+}
+
+async function teacherScopeId(req) {
+    if (req.user.role === 'teacher') {
+        return req.user.id;
+    }
+    return defaultTeacherId();
+}
+
+async function loadLessonForUser(lessonPublicId, userId) {
+    const found = await query(
+        `SELECT b.*, CONVERT(varchar(10), s.slot_date, 23) AS slot_iso, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+         FROM dbo.bookings b
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         WHERE b.public_id = @id AND b.user_id = @userId`,
+        { id: lessonPublicId, userId },
+    );
+    const lesson = found.recordset[0];
+    if (!lesson) {
+        throw new Error('ไม่พบคลาสที่เลือก');
+    }
+    return lesson;
 }
 
 function mapAdminVoucher(row, lang) {
@@ -37,7 +104,7 @@ function mapAdminVoucher(row, lang) {
             : `${lang === 'en' ? 'THB' : 'บาท'} ${Number(row.value).toLocaleString()}`,
         expires: row.valid_to ? formatDate(new Date(row.valid_to), lang) : '—',
         used: `${row.used_count} / ${row.max_uses ?? '—'}`,
-        state: row.is_active ? 'active' : 'draft',
+        state: isYes(row.is_active) ? 'active' : 'draft',
     };
 }
 
@@ -52,7 +119,7 @@ export function registerRoutes(app) {
         if (!user || !(await bcrypt.compare(password, user.password_hash))) {
             throw new Error('อีเมล/เบอร์ หรือรหัสผ่านไม่ถูกต้อง');
         }
-        if (user.status && user.status !== 'active') {
+        if (!isYes(user.status)) {
             throw new Error('บัญชีนี้ถูกระงับ กรุณาติดต่อแอดมิน');
         }
         const language = resolveLang(req);
@@ -76,33 +143,60 @@ export function registerRoutes(app) {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             throw new Error('กรุณากรอกอีเมลให้ถูกต้อง');
         }
+        const phone = assertStudentPhone(input.phone);
+        const emergencyContact = String(input.emergencyContact ?? '').trim().slice(0, 120);
         if (String(input.password ?? '').length < 6) {
             throw new Error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
         }
-        const existing = await findUserByLogin(email);
-        if (existing) {
+        const existingEmail = await findUserByLogin(email);
+        if (existingEmail) {
             throw new Error('อีเมลนี้ลงทะเบียนแล้ว — เข้าสู่ระบบเลย');
+        }
+        const existingPhone = await findUserByLogin(phone);
+        if (existingPhone) {
+            throw new Error('เบอร์โทรนี้ลงทะเบียนแล้ว — เข้าสู่ระบบเลย');
+        }
+        let pending = null;
+        if (input.lineTicket) {
+            pending = verifyLinePending(input.lineTicket);
+            const taken = await findUserByLineUserId(pending.sub);
+            if (taken) {
+                throw new Error('บัญชี LINE นี้ถูกผูกแล้ว — เข้าสู่ระบบด้วย LINE ได้เลย');
+            }
         }
         const hash = await bcrypt.hash(String(input.password), 10);
         const language = resolveLang(req);
-        const avatar = defaultAvatar('student', email);
+        const avatar = pending?.picture || defaultAvatar('student', email);
+        const genreList = Array.isArray(input.genres) ? input.genres.map(String) : [];
         const enrolled = await enrollStudent({
-            publicId: publicId('stu-'),
             enrollmentId: publicId('enr-'),
             email,
+            phone,
+            emergencyContact: emergencyContact || null,
             hash,
             name: String(input.name),
             nickname: String(input.nickname),
             age: Number(input.age),
             education: String(input.education),
-            genres: JSON.stringify(input.genres),
+            educationEn: educationEn(String(input.education)),
+            genres: JSON.stringify(genreList),
+            genresEn: JSON.stringify(genresEn(genreList)),
             reason: String(input.reason),
+            reasonEn: language === 'en' ? String(input.reason) : null,
             language,
             avatar,
         });
+        let user = enrolled.user;
+        if (pending) {
+            user = await linkLineAccount(enrolled.user.id, {
+                lineUserId: pending.sub,
+                name: pending.name,
+                picture: pending.picture,
+            });
+        }
         res.json({
-            token: signUser(enrolled.user),
-            user: toProfile(enrolled.user),
+            token: signUser(user),
+            user: toProfile(user),
             saved: {
                 enrollmentId: enrolled.enrollmentId,
                 hoursGranted: enrolled.hoursGranted,
@@ -110,9 +204,90 @@ export function registerRoutes(app) {
         });
     }));
 
+    app.get('/api/auth/line/status', (_req, res) => {
+        res.json({ configured: isLineConfigured() });
+    });
+
+    app.post('/api/auth/line/start', optionalAuth, asyncHandler(async (req, res) => {
+        const intent = String(req.body?.intent || 'login');
+        if (intent === 'link' && !req.user) {
+            res.status(401).json({ error: 'กรุณาเข้าสู่ระบบก่อนเชื่อม LINE' });
+            return;
+        }
+        const url = createLineAuthorizeUrl({
+            intent,
+            userId: intent === 'link' ? req.user.id : null,
+            role: intent === 'link' ? req.user.role : null,
+        });
+        res.json({ url });
+    }));
+
+    app.get('/api/auth/line/pending', asyncHandler(async (req, res) => {
+        const pending = verifyLinePending(req.query.ticket);
+        res.json({
+            name: pending.name || null,
+            picture: pending.picture || null,
+            email: pending.email || null,
+        });
+    }));
+
+    app.get('/api/auth/line/callback', async (req, res) => {
+        const send = (path, params) => res.redirect(frontendRedirectUrl(path, params));
+        try {
+            if (req.query.error) {
+                send('/login', { lineError: req.query.error === 'access_denied' ? 'denied' : 'failed' });
+                return;
+            }
+            const code = String(req.query.code || '');
+            const state = String(req.query.state || '');
+            if (!code || !state) {
+                send('/login', { lineError: 'failed' });
+                return;
+            }
+            const { session, profile } = await loadLineProfile({ code, state });
+            const existingByLine = await findUserByLineUserId(profile.lineUserId);
+            const existingByEmail = profile.email ? await findUserByLogin(profile.email) : null;
+            const decision = resolveLineCallbackDecision({
+                session,
+                profile,
+                existingByLine,
+                existingByEmail,
+            });
+            if (decision.action === 'error') {
+                send('/login', { lineError: decision.code });
+                return;
+            }
+            if (decision.action === 'register') {
+                send('/register', { lineTicket: signLinePending(profile) });
+                return;
+            }
+            if (decision.action === 'link' || decision.action === 'link_and_login') {
+                await linkLineAccount(decision.userId, profile);
+            }
+            const user = await findUserById(decision.userId);
+            if (!user || !isYes(user.status)) {
+                send('/login', { lineError: 'inactive' });
+                return;
+            }
+            const language = resolveLang(req);
+            await query(`UPDATE dbo.users SET language = @language, updated_at = SYSUTCDATETIME() WHERE id = @id`, {
+                language,
+                id: user.id,
+            });
+            const next = decision.action === 'link'
+                ? `${profilePathForRole(user.role)}?line=linked`
+                : homePathForRole(user.role);
+            send('/login', { token: signUser(user), next });
+        }
+        catch (err) {
+            console.error('LINE callback failed:', err instanceof Error ? err.message : err);
+            send('/login', { lineError: 'failed' });
+        }
+    });
+
     app.get('/api/packages', asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
-        const result = await query(`SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone FROM dbo.packages WHERE is_active = 1 ORDER BY hours`);
+        const result = await query(`SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone FROM dbo.packages WHERE is_active = N'Y' ORDER BY hours`);
         res.json(result.recordset.map((row) => localizePackage(row, lang)));
     }));
 
@@ -129,6 +304,57 @@ export function registerRoutes(app) {
     app.get('/api/me', requireAuth, asyncHandler(async (req, res) => {
         const user = await findUserById(req.user.id);
         res.json(toProfile(user));
+    }));
+
+    app.patch('/api/me', requireAuth, asyncHandler(async (req, res) => {
+        const input = req.body ?? {};
+        const name = String(input.name ?? '').trim();
+        const nickname = String(input.nickname ?? '').trim();
+        if (!name || !nickname) {
+            throw new Error('กรุณากรอกชื่อและชื่อเล่น');
+        }
+        const ageRaw = input.age;
+        const age = ageRaw == null || ageRaw === '' ? null : Number(ageRaw);
+        if (age != null && (!Number.isInteger(age) || age < 5 || age > 90)) {
+            throw new Error('กรุณากรอกอายุให้ถูกต้อง');
+        }
+        const rawPhone = String(input.phone ?? '').trim();
+        const phone = rawPhone ? assertStudentPhone(rawPhone) : null;
+        if (phone) {
+            const existingPhone = await findUserByLogin(phone);
+            if (existingPhone && Number(existingPhone.id) !== Number(req.user.id)) {
+                throw new Error('เบอร์โทรนี้มีในระบบแล้ว');
+            }
+        }
+        const emergencyContact = String(input.emergencyContact ?? '').trim().slice(0, 120) || null;
+        const education = String(input.education ?? '').trim() || null;
+        const genreList = Array.isArray(input.genres) ? input.genres.map(String).filter(Boolean) : [];
+        const reason = String(input.reason ?? '').trim() || null;
+        const language = resolveLang(req);
+        await query(
+            `UPDATE dbo.users
+             SET name = @name, nickname = @nickname, age = @age, phone = @phone,
+                 emergency_contact = @emergencyContact, education = @education, education_en = @educationEn,
+                 genres = @genres, genres_en = @genresEn, reason = @reason, reason_en = @reasonEn,
+                 updated_at = SYSUTCDATETIME()
+             WHERE id = @id`,
+            {
+                id: req.user.id,
+                name,
+                nickname,
+                age,
+                phone,
+                emergencyContact,
+                education,
+                educationEn: education ? educationEn(education) : null,
+                genres: genreList.length ? JSON.stringify(genreList) : null,
+                genresEn: genreList.length ? JSON.stringify(genresEn(genreList)) : null,
+                reason,
+                reasonEn: language === 'en' ? reason : null,
+            },
+        );
+        const user = await findUserById(req.user.id);
+        res.json({ user: toProfile(user) });
     }));
 
     app.get('/api/days', requireAuth, asyncHandler(async (_req, res) => {
@@ -195,7 +421,19 @@ export function registerRoutes(app) {
             time,
             topic: lang === 'en' ? 'Course based on your favorite genres' : 'คอร์สตามแนวเพลงที่ชอบ',
             topicEn: 'Course based on your favorite genres',
+            source: 'web',
+            mode: req.body?.mode === 'online' ? 'online' : 'studio',
         });
+        const student = await findUserById(req.user.id);
+        const date = parseIsoDate(dayIso);
+        await notifySlotTeacher(
+            booking.slot_id,
+            'มีนัดเรียนใหม่',
+            `${studentLabel(student, 'th')} จอง ${chipLabel(date, 'th')} ${lessonTimeRange(time, 'th')} — รอคอนเฟิร์ม`,
+            'blue',
+            'New lesson booking',
+            `${studentLabel(student, 'en')} booked ${chipLabel(date, 'en')} ${lessonTimeRange(time, 'en')} — awaiting confirmation`,
+        );
         res.json({ id: booking.public_id, saved: true, status: booking.status });
     }));
 
@@ -213,6 +451,7 @@ export function registerRoutes(app) {
         );
         res.json(result.recordset.map((row) => {
             const date = parseIsoDate(row.slot_iso);
+            const hoursUntil = hoursUntilSlot(row.slot_iso, row.slot_hhmm);
             return {
                 id: row.public_id,
                 date: chipLabel(date, lang),
@@ -220,23 +459,17 @@ export function registerRoutes(app) {
                 teacher: lang === 'en' ? 'Kru Air (live 1:1)' : 'ครูแอร์ (เรียนสด 1:1)',
                 status: row.status,
                 topic: pick(row, 'topic', lang),
+                canCancel: canStudentCancel({ status: row.status, hoursUntil }),
             };
         }));
     }));
 
     app.post('/api/me/lessons/:id/confirm', requireAuth, asyncHandler(async (req, res) => {
-        const found = await query(
-            `SELECT b.*, CONVERT(varchar(10), s.slot_date, 23) AS slot_iso, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
-             FROM dbo.bookings b
-             JOIN dbo.teacher_availability s ON s.id = b.slot_id
-             WHERE b.public_id = @id AND b.user_id = @userId`,
-            { id: req.params.id, userId: req.user.id },
-        );
-        const lesson = found.recordset[0];
-        if (!lesson) {
-            throw new Error('ไม่พบคลาสที่เลือก');
+        const lesson = await loadLessonForUser(req.params.id, req.user.id);
+        if (lesson.status !== 'pending') {
+            throw new Error('นัดนี้ยืนยันแล้วหรือยกเลิกไปแล้ว');
         }
-        await query(`UPDATE dbo.bookings SET status = 'confirmed', confirmed_at = SYSUTCDATETIME() WHERE id = @id`, { id: lesson.id });
+        await query(`UPDATE dbo.bookings SET status = 'confirmed', confirmed_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME() WHERE id = @id AND status = N'pending'`, { id: lesson.id });
         const date = parseIsoDate(lesson.slot_iso);
         await addNotification(
             req.user.id,
@@ -245,6 +478,47 @@ export function registerRoutes(app) {
             'green',
             'Attendance confirmed',
             `Confirmed for ${chipLabel(date, 'en')} ${lessonTimeRange(lesson.slot_hhmm, 'en')} — see you soon.`,
+        );
+        const student = await findUserById(req.user.id);
+        await notifySlotTeacher(
+            lesson.slot_id,
+            'นักเรียนยืนยันนัดแล้ว',
+            `${studentLabel(student, 'th')} ยืนยัน ${chipLabel(date, 'th')} ${lessonTimeRange(lesson.slot_hhmm, 'th')}`,
+            'green',
+            'Student confirmed attendance',
+            `${studentLabel(student, 'en')} confirmed ${chipLabel(date, 'en')} ${lessonTimeRange(lesson.slot_hhmm, 'en')}`,
+        );
+        res.json({ ok: true });
+    }));
+
+    app.post('/api/me/lessons/:id/cancel', requireAuth, asyncHandler(async (req, res) => {
+        const lesson = await loadLessonForUser(req.params.id, req.user.id);
+        const hoursUntil = hoursUntilSlot(lesson.slot_iso, lesson.slot_hhmm);
+        if (!canStudentCancel({ status: lesson.status, hoursUntil })) {
+            throw new Error('ยกเลิกได้น้อยกว่า 24 ชม.ก่อนเรียน กรุณาติดต่อครูแอร์');
+        }
+        const booking = await cancelLessonBooking({
+            bookingRowId: lesson.id,
+            reason: 'student_cancel',
+            slotAfter: 'open',
+        });
+        const date = parseIsoDate(booking.slot_iso);
+        await addNotification(
+            req.user.id,
+            'ยกเลิกนัดเรียนแล้ว',
+            `ยกเลิกนัด ${chipLabel(date, 'th')} ${lessonTimeRange(booking.slot_hhmm, 'th')} แล้ว — ชั่วโมงยังไม่ถูกหัก จองใหม่ได้เลย`,
+            'blue',
+            'Lesson cancelled',
+            `Cancelled ${chipLabel(date, 'en')} ${lessonTimeRange(booking.slot_hhmm, 'en')} — hours were not deducted.`,
+        );
+        const student = await findUserById(req.user.id);
+        await notifySlotTeacher(
+            booking.slot_id,
+            'นักเรียนยกเลิกนัด',
+            `${studentLabel(student, 'th')} ยกเลิก ${chipLabel(date, 'th')} ${lessonTimeRange(booking.slot_hhmm, 'th')} — สล็อตว่างแล้ว`,
+            'pink',
+            'Student cancelled a lesson',
+            `${studentLabel(student, 'en')} cancelled ${chipLabel(date, 'en')} ${lessonTimeRange(booking.slot_hhmm, 'en')} — the slot is open again`,
         );
         res.json({ ok: true });
     }));
@@ -274,7 +548,7 @@ export function registerRoutes(app) {
         await query(
             `INSERT INTO dbo.move_requests (public_id, booking_id, user_id, requested_slot_id, from_text, to_text, from_text_en, to_text_en, status)
              VALUES (@publicId, @bookingId, @userId, @slotId, @fromText, @toText, @fromTextEn, @toTextEn, 'pending');
-             UPDATE dbo.bookings SET status = 'moved' WHERE id = @bookingId;`,
+             UPDATE dbo.bookings SET status = 'moved', updated_at = SYSUTCDATETIME() WHERE id = @bookingId;`,
             {
                 publicId: publicId('MR'),
                 bookingId: lesson.id,
@@ -294,13 +568,22 @@ export function registerRoutes(app) {
             'Move request sent',
             `Requested a move to ${slotLabel(toDate, newTime, 'en')} — Kru Air will confirm within 24 hours.`,
         );
+        const student = await findUserById(req.user.id);
+        await notifySlotTeacher(
+            lesson.slot_id,
+            'มีคำขอเลื่อนนัด',
+            `${studentLabel(student, 'th')} ขอเลื่อนจาก ${slotLabel(fromDate, lesson.slot_hhmm, 'th')} เป็น ${slotLabel(toDate, newTime, 'th')}`,
+            'pink',
+            'Move request received',
+            `${studentLabel(student, 'en')} asked to move from ${slotLabel(fromDate, lesson.slot_hhmm, 'en')} to ${slotLabel(toDate, newTime, 'en')}`,
+        );
         res.json({ ok: true });
     }));
 
     app.get('/api/me/history', requireAuth, asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT cl.lesson_title, cl.lesson_title_en, cl.note, cl.note_en, cl.hours_deducted, cl.outcome, cl.created_at,
+            `SELECT cl.lesson_title, cl.lesson_title_en, cl.note, cl.note_en, cl.feedback_audio_url, cl.hours_deducted, cl.outcome, cl.created_at,
                     CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
                     CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
              FROM dbo.class_logs cl
@@ -318,6 +601,7 @@ export function registerRoutes(app) {
                 time: `${row.slot_hhmm}–${plusOneHour(row.slot_hhmm)}`,
                 lesson: row.outcome === 'no_show' ? noShow : pick(row, 'lesson_title', lang),
                 note: pick(row, 'note', lang) || '—',
+                audioUrl: row.feedback_audio_url || null,
                 usedHours: row.hours_deducted,
             };
         }));
@@ -327,10 +611,12 @@ export function registerRoutes(app) {
         const lang = resolveLang(req);
         const hoursUnit = lang === 'en' ? 'hrs' : 'ชม.';
         const result = await query(
-            `SELECT t.ref_no, t.created_at, t.voucher_code, t.discount_amount, t.net_amount, t.method, t.status,
-                    p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
+            `SELECT t.ref_no, t.created_at, t.voucher_code, t.discount_amount, t.net_amount, t.method, t.method_en, t.status,
+                    p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours,
+                    pay.payment_ref, pay.gateway_status
              FROM dbo.transactions t
              JOIN dbo.packages p ON p.id = t.package_id
+             LEFT JOIN dbo.payments pay ON pay.transaction_id = t.id
              WHERE t.user_id = @userId
              ORDER BY t.created_at DESC`,
             { userId: req.user.id },
@@ -341,8 +627,9 @@ export function registerRoutes(app) {
             pkg: `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours} ${hoursUnit}`,
             voucher: row.voucher_code ? `${row.voucher_code} (-${Number(row.discount_amount).toLocaleString()})` : '—',
             amount: Number(row.net_amount),
-            method: row.method,
-            status: paymentStatus(row.status, lang),
+            method: pick(row, 'method', lang),
+            status: paymentStatus(row.gateway_status || row.status, lang),
+            paymentRef: row.payment_ref || null,
         })));
     }));
 
@@ -355,7 +642,7 @@ export function registerRoutes(app) {
     }));
 
     app.post('/api/notifications/read', requireAuth, asyncHandler(async (req, res) => {
-        await query(`UPDATE dbo.notifications SET is_read = 1 WHERE user_id = @userId`, { userId: req.user.id });
+        await query(`UPDATE dbo.notifications SET is_read = N'Y' WHERE user_id = @userId`, { userId: req.user.id });
         res.json({ ok: true });
     }));
 
@@ -363,7 +650,7 @@ export function registerRoutes(app) {
         const code = String(req.body?.code ?? '').trim().toUpperCase();
         const price = Number(req.body?.price ?? 0);
         const result = await query(
-            `SELECT * FROM dbo.vouchers WHERE code = @code AND is_active = 1 AND (valid_to IS NULL OR valid_to >= SYSUTCDATETIME())`,
+            `SELECT * FROM dbo.vouchers WHERE code = @code AND is_active = N'Y' AND (valid_to IS NULL OR valid_to >= SYSUTCDATETIME())`,
             { code },
         );
         const voucher = result.recordset[0];
@@ -380,84 +667,21 @@ export function registerRoutes(app) {
         if (req.user.role !== 'student') {
             throw new Error('เฉพาะนักเรียนที่ซื้อแพ็กเกจได้');
         }
-        const pkgId = String(req.body?.pkgId ?? '');
-        const voucherCode = String(req.body?.voucherCode ?? '').trim().toUpperCase();
-        const method = String(req.body?.method ?? 'บัตรเครดิต');
-        const pkgResult = await query(`SELECT * FROM dbo.packages WHERE id = @id AND is_active = 1`, { id: pkgId });
-        const pkg = pkgResult.recordset[0];
-        if (!pkg) {
-            throw new Error('ไม่พบแพ็กเกจที่เลือก');
-        }
-        let discount = 0;
-        let voucher = null;
-        if (voucherCode) {
-            const voucherResult = await query(
-                `SELECT * FROM dbo.vouchers WHERE code = @code AND is_active = 1 AND (valid_to IS NULL OR valid_to >= SYSUTCDATETIME())`,
-                { code: voucherCode },
-            );
-            voucher = voucherResult.recordset[0];
-            if (!voucher) {
-                throw new Error(`โค้ด "${voucherCode}" ไม่ถูกต้องหรือหมดอายุ`);
-            }
-            if (voucher.max_uses != null && voucher.used_count >= voucher.max_uses) {
-                throw new Error(`โค้ด "${voucherCode}" ถูกใช้ครบแล้ว`);
-            }
-            discount = Math.min(discountForVoucher(voucher, pkg.price), Number(pkg.price));
-        }
-        const net = Number(pkg.price) - discount;
-        const count = await query(`SELECT COUNT(*) AS n FROM dbo.transactions`);
-        const refNo = `INV-${new Date().getFullYear()}-${8800 + Number(count.recordset[0].n) + 1}`;
-        const tx = await query(
-            `INSERT INTO dbo.transactions (ref_no, user_id, package_id, gross_amount, discount_amount, net_amount, voucher_code, method, status, paid_at)
-             OUTPUT INSERTED.*
-             VALUES (@refNo, @userId, @pkgId, @gross, @discount, @net, @voucher, @method, 'success', SYSUTCDATETIME())`,
-            {
-                refNo,
-                userId: req.user.id,
-                pkgId,
-                gross: Number(pkg.price),
-                discount,
-                net,
-                voucher: voucherCode || null,
-                method: method.split(' (')[0],
-            },
-        );
-        const transaction = tx.recordset[0];
-        const expires = new Date();
-        expires.setMonth(expires.getMonth() + 6);
-        await query(
-            `UPDATE dbo.user_packages SET status = 'expired' WHERE user_id = @userId AND status = 'active'`,
-            { userId: req.user.id },
-        );
-        await query(
-            `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status, transaction_id)
-             VALUES (@userId, @pkgId, @hours, 0, @expires, 'active', @txId)`,
-            { userId: req.user.id, pkgId, hours: pkg.hours, expires: expires.toISOString(), txId: transaction.id },
-        );
-        if (voucher) {
-            await query(
-                `UPDATE dbo.vouchers SET used_count = used_count + 1 WHERE id = @id;
-                 INSERT INTO dbo.voucher_usages (voucher_id, transaction_id) VALUES (@id, @txId);`,
-                { id: voucher.id, txId: transaction.id },
-            );
-        }
-        const pkgName = pick(pkg, 'name', 'th');
-        const pkgNameEn = pick(pkg, 'name', 'en');
-        await addNotification(
-            req.user.id,
-            'ชำระเงินสำเร็จ',
-            `ซื้อแพ็กเกจ ${pkgName} — เพิ่มชั่วโมงเข้าบัญชีแล้ว`,
-            'green',
-            'Payment successful',
-            `${pkgNameEn} purchased — hours were added to your account.`,
-        );
-        res.json({ ok: true, refNo });
+        const purchased = await createPackagePurchase({
+            userId: req.user.id,
+            pkgId: String(req.body?.pkgId ?? ''),
+            voucherCode: String(req.body?.voucherCode ?? ''),
+            method: String(req.body?.method ?? 'บัตรเครดิต'),
+            enrollmentPublicId: publicId('enr-'),
+            paymentPublicId: publicId('pay-'),
+        });
+        res.json({ ok: true, refNo: purchased.refNo });
     }));
 
     app.get('/api/admin/students', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT u.name, u.nickname, u.age, u.education, u.created_at,
+            `SELECT u.name, u.nickname, u.age, u.education, u.education_en, u.phone, u.emergency_contact, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
                     up.hours_total, up.hours_used, up.expires_at, up.status AS pkg_status,
                     (SELECT COUNT(*) FROM dbo.class_logs cl WHERE cl.user_id = u.id AND cl.outcome = 'done') AS done
@@ -481,7 +705,9 @@ export function registerRoutes(app) {
             }
             return {
                 name: `${row.nickname} ${row.name.split(' ')[0] ?? ''}`.trim(),
-                info: `${row.age ?? '—'} · ${row.education ?? '—'}`,
+                info: `${row.age ?? '—'} · ${pick(row, 'education', lang) || '—'} · ${row.phone || '—'}`,
+                phone: row.phone || null,
+                emergencyContact: row.emergency_contact || null,
                 pkg: row.pkg_name ? `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.pkg_hours}` : '—',
                 left,
                 done: row.done,
@@ -493,7 +719,7 @@ export function registerRoutes(app) {
     app.get('/api/admin/users', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT u.public_id, u.role, u.email, u.phone, u.name, u.nickname, u.age, u.education,
+            `SELECT u.id, u.role, u.email, u.phone, u.name, u.nickname, u.age, u.education, u.education_en,
                     u.status, u.avatar, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
                     up.hours_total, up.hours_used
@@ -507,15 +733,15 @@ export function registerRoutes(app) {
         res.json(result.recordset.map((row) => {
             const left = row.hours_total == null ? null : Math.max(0, row.hours_total - row.hours_used);
             return {
-                id: row.public_id,
+                id: Number(row.id),
                 role: row.role,
                 email: row.email,
                 phone: row.phone,
                 name: row.name,
                 nickname: row.nickname,
                 age: row.age,
-                education: row.education,
-                status: row.status === 'active' ? 'active' : 'disabled',
+                education: pick(row, 'education', lang),
+                status: isYes(row.status) || row.status === 'active' ? 'Y' : 'N',
                 avatar: row.avatar,
                 createdAt: formatDate(new Date(row.created_at), lang),
                 pkg: row.pkg_name
@@ -533,7 +759,11 @@ export function registerRoutes(app) {
         const nickname = String(input.nickname ?? '').trim();
         const email = String(input.email ?? '').trim().toLowerCase();
         const password = String(input.password ?? '');
-        const phone = String(input.phone ?? '').trim();
+        const rawPhone = String(input.phone ?? '').trim();
+        const phone = rawPhone ? normalizePhone(rawPhone) : '';
+        if (phone && !/^0\d{8,9}$/.test(phone)) {
+            throw new Error('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง');
+        }
         if (!name || !nickname || !email) {
             throw new Error('กรุณากรอกชื่อ ชื่อเล่น และอีเมล');
         }
@@ -547,15 +777,19 @@ export function registerRoutes(app) {
         if (existing) {
             throw new Error('อีเมลนี้มีในระบบแล้ว');
         }
+        if (phone) {
+            const existingPhone = await findUserByLogin(phone);
+            if (existingPhone) {
+                throw new Error('เบอร์โทรนี้มีในระบบแล้ว');
+            }
+        }
         const hash = await bcrypt.hash(password, 10);
         const avatar = defaultAvatar(role, email);
-        const prefix = role === 'teacher' ? 'tch-' : 'stu-';
         const inserted = await query(
-            `INSERT INTO dbo.users (public_id, role, email, phone, password_hash, name, nickname, language, avatar, consent_pdpa_at)
+            `INSERT INTO dbo.users (role, email, phone, password_hash, name, nickname, language, avatar, consent_pdpa_at)
              OUTPUT INSERTED.*
-             VALUES (@publicId, @role, @email, @phone, @hash, @name, @nickname, N'th', @avatar, SYSUTCDATETIME())`,
+             VALUES (@role, @email, @phone, @hash, @name, @nickname, N'th', @avatar, SYSUTCDATETIME())`,
             {
-                publicId: publicId(prefix),
                 role,
                 email,
                 phone: phone || null,
@@ -573,7 +807,11 @@ export function registerRoutes(app) {
     }));
 
     app.patch('/api/admin/users/:id/status', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
-        const found = await query(`SELECT * FROM dbo.users WHERE public_id = @id`, { id: req.params.id });
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบบัญชีนี้');
+        }
+        const found = await query(`SELECT * FROM dbo.users WHERE id = @id`, { id: userId });
         const target = found.recordset[0];
         if (!target) {
             throw new Error('ไม่พบบัญชีนี้');
@@ -581,9 +819,10 @@ export function registerRoutes(app) {
         if (target.id === req.user.id) {
             throw new Error('ไม่สามารถระงับบัญชีของตัวเองได้');
         }
-        const status = String(req.body?.status ?? '').toLowerCase() === 'active' ? 'active' : 'disabled';
-        if (target.role === 'admin' && status !== 'active') {
-            const admins = await query(`SELECT COUNT(*) AS n FROM dbo.users WHERE role = 'admin' AND status = 'active' AND id <> @id`, { id: target.id });
+        const raw = String(req.body?.status ?? '').toLowerCase();
+        const status = raw === 'y' || raw === 'active' ? 'Y' : 'N';
+        if (target.role === 'admin' && status !== 'Y') {
+            const admins = await query(`SELECT COUNT(*) AS n FROM dbo.users WHERE role = 'admin' AND status = N'Y' AND id <> @id`, { id: target.id });
             if (Number(admins.recordset[0].n) < 1) {
                 throw new Error('ต้องมีแอดมินที่ใช้งานได้อย่างน้อย 1 คน');
             }
@@ -638,7 +877,7 @@ export function registerRoutes(app) {
                 pkg: `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours}`,
                 voucher: row.voucher_code || '—',
                 amount: Number(row.net_amount),
-                method: row.method,
+                method: pick(row, 'method', lang),
             })),
         });
     }));
@@ -660,7 +899,7 @@ export function registerRoutes(app) {
         const maxUses = req.body?.maxUses == null || req.body?.maxUses === ''
             ? null
             : Number(req.body.maxUses);
-        const isActive = req.body?.isActive === false ? 0 : 1;
+        const isActive = toYn(req.body?.isActive !== false);
         if (!code) {
             throw new Error('กรุณาระบุโค้ดวอเชอร์');
         }
@@ -703,7 +942,7 @@ export function registerRoutes(app) {
 
     app.patch('/api/admin/vouchers/:code/status', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
         const code = String(req.params.code ?? '').trim().toUpperCase();
-        const isActive = req.body?.active === false || req.body?.status === 'disabled' ? 0 : 1;
+        const isActive = toYn(!(req.body?.active === false || req.body?.status === 'disabled'));
         const result = await query(
             `UPDATE dbo.vouchers SET is_active = @isActive WHERE code = @code`,
             { code, isActive },
@@ -749,7 +988,7 @@ export function registerRoutes(app) {
             await query(
                 `UPDATE dbo.teacher_availability SET status = 'open' WHERE id = @oldSlot;
                  UPDATE dbo.teacher_availability SET status = 'booked' WHERE id = @newSlot;
-                 UPDATE dbo.bookings SET slot_id = @newSlot, status = 'confirmed', confirmed_at = SYSUTCDATETIME() WHERE id = @bookingId;
+                 UPDATE dbo.bookings SET slot_id = @newSlot, status = 'confirmed', confirmed_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME() WHERE id = @bookingId;
                  UPDATE dbo.move_requests SET status = 'approved', decided_by = @decidedBy, decided_at = SYSUTCDATETIME() WHERE id = @id;`,
                 { oldSlot: row.old_slot_id, newSlot: row.requested_slot_id, bookingId: row.booking_row_id, decidedBy: req.user.id, id: row.id },
             );
@@ -764,7 +1003,7 @@ export function registerRoutes(app) {
         }
         else {
             await query(
-                `UPDATE dbo.bookings SET status = 'pending' WHERE id = @bookingId;
+                `UPDATE dbo.bookings SET status = 'pending', updated_at = SYSUTCDATETIME() WHERE id = @bookingId;
                  UPDATE dbo.move_requests SET status = 'rejected', decided_by = @decidedBy, decided_at = SYSUTCDATETIME() WHERE id = @id;`,
                 { bookingId: row.booking_row_id, decidedBy: req.user.id, id: row.id },
             );
@@ -780,6 +1019,42 @@ export function registerRoutes(app) {
         res.json({ ok: true });
     }));
 
+    app.get('/api/admin/settings', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const pkgs = await query(
+            `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
+             FROM dbo.packages ORDER BY hours`,
+        );
+        res.json({
+            packages: pkgs.recordset.map((row) => ({
+                ...localizePackage(row, lang),
+                active: isYes(row.is_active),
+            })),
+            slotTimes: SLOT_TIMES,
+            workingHours: lang === 'en' ? 'Tue–Sun 10:00–19:00' : 'อังคาร–อาทิตย์ 10:00–19:00 น.',
+            reminders: {
+                dayBefore: {
+                    enabled: true,
+                    channel: lang === 'en' ? 'In-app only' : 'ในเว็บเท่านั้น',
+                },
+                packageExpiry: { enabled: false },
+                lastRunAt: jobState.lastRunAt,
+                lastExpired: jobState.lastResult.expired,
+                lastReminded: jobState.lastResult.reminded,
+            },
+            lineOa: { connected: false },
+            lineLogin: { configured: isLineConfigured() },
+            security: {
+                encryptionAtRest: false,
+                dailyBackup: false,
+                httpsForced: false,
+                rbac: true,
+                pdpaConsentStored: true,
+                dsrSelfService: false,
+            },
+        });
+    }));
+
     app.get('/api/teacher/schedule', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const now = new Date();
@@ -790,28 +1065,35 @@ export function registerRoutes(app) {
         }
         const start = new Date(year, month - 1, 1);
         const end = new Date(year, month, 0);
-        const teacherId = req.user.role === 'teacher' ? req.user.id : await defaultTeacherId();
-        const result = await query(
-            `SELECT CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
-                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
-                    b.public_id AS booking_id, b.status AS booking_status, b.topic, b.topic_en,
-                    u.nickname, u.name
-             FROM dbo.teacher_availability s
-             JOIN dbo.bookings b ON b.slot_id = s.id AND b.status IN ('pending', 'confirmed', 'moved')
-             JOIN dbo.users u ON u.id = b.user_id
-             WHERE s.teacher_id = @teacherId AND s.slot_date >= @start AND s.slot_date <= @end
-             ORDER BY s.slot_date, s.slot_time`,
-            { teacherId, start: toIsoDate(start), end: toIsoDate(end) },
-        );
+        const teacherId = await teacherScopeId(req);
+        const result = await listTeacherMonthSlots({
+            teacherId,
+            start: toIsoDate(start),
+            end: toIsoDate(end),
+        });
         const lessonsByDate = {};
+        const slotsByDate = {};
         let pendingCount = 0;
         for (const row of result.recordset) {
+            if (!slotsByDate[row.slot_iso]) {
+                slotsByDate[row.slot_iso] = [];
+            }
+            slotsByDate[row.slot_iso].push({
+                id: row.id,
+                time: row.slot_hhmm,
+                status: row.status,
+                bookingId: row.booking_id || null,
+            });
+            if (!row.booking_id) {
+                continue;
+            }
             const status = row.booking_status === 'confirmed' ? 'confirmed' : 'pending';
             if (status === 'pending') {
                 pendingCount += 1;
             }
             const lesson = {
                 bookingId: row.booking_id,
+                slotId: row.id,
                 time: row.slot_hhmm,
                 student: lang === 'en' ? row.nickname : `น้อง${row.nickname}`,
                 studentName: row.name,
@@ -829,7 +1111,106 @@ export function registerRoutes(app) {
             month,
             pendingCount,
             lessonsByDate,
+            slotsByDate,
+            slotTimes: SLOT_TIMES,
         });
+    }));
+
+    app.post('/api/teacher/slots', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        const day = String(req.body?.day ?? '');
+        const time = String(req.body?.time ?? '');
+        await createTeacherSlot({ teacherId, dayIso: day, time });
+        res.json({ ok: true });
+    }));
+
+    app.patch('/api/teacher/slots/:id', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        const slotId = Number(req.params.id);
+        const action = String(req.body?.action ?? '').toLowerCase() === 'open' ? 'open' : 'close';
+        if (!Number.isInteger(slotId) || slotId < 1) {
+            throw new Error('ไม่พบสล็อตนี้');
+        }
+        const result = await setTeacherSlotStatus({ slotId, action, teacherId });
+        if (result.cancelled && result.booking) {
+            const date = parseIsoDate(result.booking.slot_iso);
+            await addNotification(
+                result.booking.user_id,
+                'ครูปิดสล็อตนี้แล้ว',
+                `นัด ${chipLabel(date, 'th')} ${lessonTimeRange(result.booking.slot_hhmm, 'th')} ถูกยกเลิกเพราะครูปิดตาราง — จองเวลาใหม่ได้เลย ชั่วโมงยังไม่ถูกหัก`,
+                'pink',
+                'Teacher closed this slot',
+                `Your lesson on ${chipLabel(date, 'en')} ${lessonTimeRange(result.booking.slot_hhmm, 'en')} was cancelled because the teacher closed the slot. Hours were not deducted.`,
+            );
+        }
+        res.json({ ok: true, ...result, booking: undefined });
+    }));
+
+    app.post('/api/teacher/slots/bulk-close', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        const result = await bulkCloseTeacherSlots({
+            teacherId,
+            fromIso: String(req.body?.from ?? ''),
+            toIso: String(req.body?.to ?? ''),
+        });
+        res.json({ ok: true, ...result });
+    }));
+
+    app.post('/api/teacher/bookings/:id/remind', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const found = await query(
+            `SELECT b.*, CONVERT(varchar(10), s.slot_date, 23) AS slot_iso, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE b.public_id = @id AND b.status IN (N'pending', N'confirmed')`,
+            { id: req.params.id },
+        );
+        const booking = found.recordset[0];
+        if (!booking) {
+            throw new Error('ไม่พบคลาสที่เลือก');
+        }
+        const date = parseIsoDate(booking.slot_iso);
+        await addNotification(
+            booking.user_id,
+            'ครูทวงถามการมาเรียน',
+            `กรุณายืนยันนัด ${chipLabel(date, 'th')} ${lessonTimeRange(booking.slot_hhmm, 'th')} ในหน้าแรกของเว็บ`,
+            'blue',
+            'Please confirm your lesson',
+            `Please confirm ${chipLabel(date, 'en')} ${lessonTimeRange(booking.slot_hhmm, 'en')} from the home page.`,
+        );
+        await query(
+            `UPDATE dbo.bookings SET reminder_sent_at = SYSUTCDATETIME() WHERE id = @id`,
+            { id: booking.id },
+        );
+        res.json({ ok: true });
+    }));
+
+    app.post('/api/teacher/bookings/:id/cancel', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const found = await query(
+            `SELECT b.*, CONVERT(varchar(10), s.slot_date, 23) AS slot_iso, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE b.public_id = @id`,
+            { id: req.params.id },
+        );
+        const lesson = found.recordset[0];
+        if (!lesson) {
+            throw new Error('ไม่พบคลาสที่เลือก');
+        }
+        const booking = await cancelLessonBooking({
+            bookingRowId: lesson.id,
+            reason: String(req.body?.reason ?? 'teacher_cancel').slice(0, 200),
+            slotAfter: 'open',
+        });
+        const date = parseIsoDate(booking.slot_iso);
+        await addNotification(
+            booking.user_id,
+            'ครูยกเลิกนัดเรียน',
+            `นัด ${chipLabel(date, 'th')} ${lessonTimeRange(booking.slot_hhmm, 'th')} ถูกยกเลิก — ชั่วโมงยังไม่ถูกหัก จองใหม่ได้เลย`,
+            'pink',
+            'Teacher cancelled the lesson',
+            `Your lesson on ${chipLabel(date, 'en')} ${lessonTimeRange(booking.slot_hhmm, 'en')} was cancelled. Hours were not deducted.`,
+        );
+        res.json({ ok: true });
     }));
 
     app.post('/api/teacher/bookings/:id/log', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
@@ -846,6 +1227,7 @@ export function registerRoutes(app) {
         if (!booking) {
             throw new Error('ไม่พบคลาสที่เลือก');
         }
+        const audioUrl = String(req.body?.feedbackAudioUrl ?? '').trim().slice(0, 500) || null;
         const already = await query(`SELECT id FROM dbo.class_logs WHERE booking_id = @id`, { id: booking.id });
         if (already.recordset[0]) {
             throw new Error('บันทึกการสอนคลาสนี้แล้ว');
@@ -854,9 +1236,9 @@ export function registerRoutes(app) {
             ? { id: booking.user_package_id }
             : await activePackage(booking.user_id);
         await query(
-            `INSERT INTO dbo.class_logs (booking_id, user_id, lesson_title, lesson_title_en, note, note_en, hours_deducted, outcome)
-             VALUES (@bookingId, @userId, @title, @titleEn, @note, @noteEn, 1, @outcome);
-             UPDATE dbo.bookings SET status = @status WHERE id = @bookingId;`,
+            `INSERT INTO dbo.class_logs (booking_id, user_id, lesson_title, lesson_title_en, note, note_en, feedback_audio_url, hours_deducted, outcome)
+             VALUES (@bookingId, @userId, @title, @titleEn, @note, @noteEn, @audioUrl, 1, @outcome);
+             UPDATE dbo.bookings SET status = @status, updated_at = SYSUTCDATETIME() WHERE id = @bookingId;`,
             {
                 bookingId: booking.id,
                 userId: booking.user_id,
@@ -864,6 +1246,7 @@ export function registerRoutes(app) {
                 titleEn: booking.topic_en || 'Breathing technique + basic scales',
                 note,
                 noteEn: null,
+                audioUrl,
                 outcome,
                 status: outcome === 'done' ? 'done' : 'no_show',
             },

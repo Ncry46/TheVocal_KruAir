@@ -19,6 +19,7 @@ export default function Home() {
     const [hist, setHist] = useState(null);
     const [lessons, setLessons] = useState(null);
     const [confirming, setConfirming] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const [moveOpen, setMoveOpen] = useState(false);
     const [moveDay, setMoveDay] = useState('');
     const [moveTime, setMoveTime] = useState('');
@@ -43,9 +44,9 @@ export default function Home() {
         return <Skeleton />;
     const copy = language === 'en'
         ? {
-            lineTitle: 'LINE connected (optional)',
-            lineBody: 'Lesson reminders, receipts, and shortcuts are sent through LINE OA',
-            lineHint: '(can be disabled in settings)',
+            lineTitle: 'LINE is not connected yet',
+            lineBody: 'Reminders are sent in the website for now. LINE OA can be added later.',
+            lineHint: '',
             greeting: `Hello, ${user?.nickname ?? ''}`,
             hoursLeft: 'Hours left',
             nextLesson: 'Next lesson',
@@ -55,6 +56,10 @@ export default function Home() {
             confirming: 'Confirming...',
             confirm: 'Confirm attendance',
             move: 'Request move',
+            cancel: 'Cancel lesson',
+            cancelling: 'Cancelling...',
+            cancelToast: 'Lesson cancelled — hours were not deducted.',
+            cancelConfirm: 'Cancel this lesson? Hours will not be deducted.',
             booking: 'Book a lesson',
             buy: 'Buy package',
             studied: 'Completed',
@@ -71,7 +76,7 @@ export default function Home() {
             used: 'Used',
             remaining: 'Remaining',
             packageTip: 'Hours are deducted after attendance · packages expire in 6 months',
-            linePush: 'LINE Push: On',
+            linePush: 'LINE: not connected',
             moveTitle: 'Request lesson move',
             moveHelp: 'Choose a new date and time. Kru Air will confirm within 24 hours.',
             chooseDay: 'Choose new day',
@@ -83,9 +88,9 @@ export default function Home() {
             confirmToast: 'Attendance confirmed — see you soon.',
         }
         : {
-            lineTitle: 'LINE เชื่อมต่อแล้ว (ฟีเจอร์เสริม)',
-            lineBody: 'ระบบแจ้งเตือนนัด 1 วัน, ใบเสร็จ และเมนูลัดส่งให้ผ่าน LINE OA',
-            lineHint: '(ปิดได้ในตั้งค่า)',
+            lineTitle: 'ยังไม่ได้เชื่อม LINE',
+            lineBody: 'ตอนนี้ระบบเตือนนัดในเว็บอย่างเดียว — LINE OA ยังไม่ได้ต่อ',
+            lineHint: '',
             greeting: `สวัสดีค่า น้อง${user?.nickname ?? ''}`,
             hoursLeft: 'ชั่วโมงคงเหลือ',
             nextLesson: 'นัดถัดไป',
@@ -95,6 +100,10 @@ export default function Home() {
             confirming: 'กำลังยืนยัน…',
             confirm: 'ยืนยันการมาเรียน',
             move: 'ขอเลื่อนนัด',
+            cancel: 'ยกเลิกนัด',
+            cancelling: 'กำลังยกเลิก…',
+            cancelToast: 'ยกเลิกนัดแล้ว — ชั่วโมงยังไม่ถูกหัก',
+            cancelConfirm: 'ยกเลิกนัดนี้? ชั่วโมงจะยังไม่ถูกหัก',
             booking: 'จองเวลาเรียน',
             buy: 'ซื้อแพ็กเกจ',
             studied: 'เรียนแล้ว',
@@ -111,7 +120,7 @@ export default function Home() {
             used: 'ใช้แล้ว',
             remaining: 'คงเหลือ',
             packageTip: 'หักชั่วโมงเมื่อเรียนจริง 1 ชม./ครั้ง · แพ็กเกจหมดอายุ 6 เดือน',
-            linePush: 'LINE Push: เปิด',
+            linePush: 'LINE: ยังไม่เชื่อม',
             moveTitle: 'ขอเลื่อนนัด',
             moveHelp: 'เลือกวัน-เวลาใหม่ — ครูแอร์จะยืนยันคำขอภายใน 24 ชม.',
             chooseDay: 'เลือกวันใหม่',
@@ -123,6 +132,13 @@ export default function Home() {
             confirmToast: 'ยืนยันการมาเรียนแล้ว — แล้วพบกันนะครับ',
         };
     const next = lessons.find((l) => l.status !== 'done');
+    if (user?.lineLinked) {
+        copy.lineTitle = language === 'en' ? 'LINE login is connected' : 'เชื่อม LINE แล้ว — ล็อกอินด้วย LINE ได้';
+        copy.lineBody = language === 'en'
+            ? 'You can sign in with LINE. Lesson reminders still use the website until LINE OA Push is enabled.'
+            : 'เข้าสู่ระบบด้วย LINE ได้แล้ว ส่วนการเตือนนัดผ่าน LINE OA ยังเป็นขั้นตอนถัดไป';
+        copy.linePush = language === 'en' ? 'LINE login: linked' : 'LINE Login: ผูกแล้ว';
+    }
     const confirmNext = async () => {
         if (!next || confirming)
             return;
@@ -134,6 +150,26 @@ export default function Home() {
         }
         finally {
             setConfirming(false);
+        }
+    };
+    const cancelNext = async () => {
+        if (!next || cancelling || !next.canCancel) {
+            return;
+        }
+        if (!window.confirm(copy.cancelConfirm)) {
+            return;
+        }
+        setCancelling(true);
+        try {
+            await api.cancelLesson(next.id);
+            toast(copy.cancelToast, 'ok');
+            setLessons(await api.getMyLessons());
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : copy.cancel);
+        }
+        finally {
+            setCancelling(false);
         }
     };
     const openMove = () => {
@@ -161,6 +197,12 @@ export default function Home() {
         <div>
           <b>{copy.lineTitle}</b> — {copy.lineBody}{' '}
           <span style={{ opacity: 0.75 }}>{copy.lineHint}</span>
+          {!user?.lineLinked && (
+            <>
+              {' '}
+              <Link to="/app/profile">{language === 'en' ? 'Connect LINE' : 'ไปผูก LINE'}</Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -183,6 +225,11 @@ export default function Home() {
               {confirming ? copy.confirming : copy.confirm}
             </Button>)}
           {next && next.status !== 'moved' && (<Button ghost onClick={openMove}>{copy.move}</Button>)}
+          {next && next.canCancel && (
+            <Button danger onClick={cancelNext} disabled={cancelling}>
+              {cancelling ? copy.cancelling : copy.cancel}
+            </Button>
+          )}
           <Button green onClick={() => navigate('/app/booking')}>
             <CalendarIcon width={16} height={16}/> {copy.booking}
           </Button>

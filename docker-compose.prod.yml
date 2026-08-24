@@ -1,0 +1,35 @@
+name: kruair
+
+# Production image: thanvasu/web-kruair
+# Usage: docker compose -f docker-compose.prod.yml up --build -d
+
+services:
+  app:
+    image: thanvasu/web-kruair:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      SQL_CLIENT: tedious
+      PORT: "3000"
+      SQL_SERVER: tvsdb2.thanvasupos.com,28914
+      FRONTEND_ORIGIN: https://kruair.thanvasupos.com
+      LINE_CALLBACK_URL: https://kruair.thanvasupos.com/api/auth/line/callback
+    volumes:
+      - ./backend/.env:/app/.env:ro
+    ports:
+      - "80:3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s

@@ -1,14 +1,32 @@
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
+import { pick } from './lang.js';
+import { isYes } from './store.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 
 export function signUser(user) {
     return jwt.sign(
-        { id: user.id, publicId: user.public_id, role: user.role },
+        { id: user.id, role: user.role },
         JWT_SECRET,
         { expiresIn: '7d' },
     );
+}
+
+export function optionalAuth(req, _res, next) {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) {
+        next();
+        return;
+    }
+    try {
+        req.user = jwt.verify(token, JWT_SECRET);
+    }
+    catch {
+        req.user = null;
+    }
+    next();
 }
 
 export function requireAuth(req, res, next) {
@@ -38,25 +56,29 @@ export function requireRole(roles) {
 }
 
 export function toProfile(row) {
+    const lang = row.language === 'en' ? 'en' : 'th';
     let genres = [];
     try {
-        genres = row.genres ? JSON.parse(row.genres) : [];
+        const raw = lang === 'en' && row.genres_en ? row.genres_en : row.genres;
+        genres = raw ? JSON.parse(raw) : [];
     }
     catch {
         genres = [];
     }
     return {
-        id: row.public_id,
+        id: Number(row.id),
         name: row.name,
         nickname: row.nickname,
         age: row.age,
-        education: row.education,
+        education: pick(row, 'education', lang),
         genres,
-        reason: row.reason,
+        reason: pick(row, 'reason', lang),
         email: row.email,
-        lineLinked: Boolean(row.line_linked),
+        phone: row.phone || null,
+        emergencyContact: row.emergency_contact || null,
+        lineLinked: isYes(row.line_linked),
         role: row.role,
-        language: row.language === 'en' ? 'en' : 'th',
+        language: lang,
         avatar: row.avatar || null,
     };
 }
