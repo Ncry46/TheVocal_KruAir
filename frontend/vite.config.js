@@ -14,7 +14,11 @@ export default defineConfig({
             '@components': path.resolve(repoRoot, 'components'),
             '@app': path.resolve(dir, 'src'),
             '@data': path.resolve(repoRoot, 'data'),
+            react: path.resolve(dir, 'node_modules/react'),
+            'react-dom': path.resolve(dir, 'node_modules/react-dom'),
+            'react-router-dom': path.resolve(dir, 'node_modules/react-router-dom'),
         },
+        dedupe: ['react', 'react-dom', 'react-router-dom'],
     },
     server: {
         host: true,

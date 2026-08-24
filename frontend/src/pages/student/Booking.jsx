@@ -26,6 +26,7 @@ export default function Booking() {
     const [selectedDay, setSelectedDay] = useState(null);
     const [slots, setSlots] = useState(null);
     const [selectedTime, setSelectedTime] = useState('');
+    const [mode, setMode] = useState('studio');
     const [summary, setSummary] = useState(null);
     const [busy, setBusy] = useState(false);
     const loadDays = () => api.getDays().then(setDays);
@@ -72,7 +73,7 @@ export default function Booking() {
         }
         setBusy(true);
         try {
-            await api.createBooking(selectedDayStr, selectedTime);
+            await api.createBooking(selectedDayStr, selectedTime, mode);
             toast(t('booking.success'), 'ok');
             navigate('/app');
         }
@@ -175,6 +176,13 @@ export default function Booking() {
             <div className="sumrow">
               <span className="muted">{t('booking.teacher')}</span>
               <span>{t('booking.teacherValue')}</span>
+            </div>
+            <div className="sumrow">
+              <span className="muted">{t('booking.mode')}</span>
+              <div className="genre-row">
+                <span className={`chk ${mode === 'studio' ? 'on' : ''}`} onClick={() => setMode('studio')}>{t('booking.modeStudio')}</span>
+                <span className={`chk ${mode === 'online' ? 'on' : ''}`} onClick={() => setMode('online')}>{t('booking.modeOnline')}</span>
+              </div>
             </div>
             <div className="sumrow">
               <span className="muted">{t('booking.deduct')}</span>

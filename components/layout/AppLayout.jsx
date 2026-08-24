@@ -83,7 +83,10 @@ export function AppLayout({ mode }) {
         : { title: 'nav.studentHome', sub: 'pages.studentHomeSub' });
     const closeSidebar = useCallback(() => setSidebarOpen(false), []);
     useEffect(() => {
-        api.getNotifications().then(setNotifs);
+        const load = () => api.getNotifications().then(setNotifs).catch(() => {});
+        load();
+        const timer = setInterval(load, 20000);
+        return () => clearInterval(timer);
     }, [language]);
     const isStaff = mode === 'teacher' || mode === 'admin';
     useEffect(() => {

@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { buildAuthorizeUrl, getLineConfig, safeNextPath } from './lineLogin.js';
+
+describe('getLineConfig', () => {
+    it('is unconfigured until both channel id and secret are set', () => {
+        const config = getLineConfig({
+            LINE_CHANNEL_ID: '123',
+            LINE_CHANNEL_SECRET: '',
+            FRONTEND_ORIGIN: 'https://kruair.thanvasupos.com',
+        });
+        assert.equal(config.configured, false);
+    });
+
+    it('is configured when id and secret are present', () => {
+        const config = getLineConfig({
+            LINE_CHANNEL_ID: '123',
+            LINE_CHANNEL_SECRET: 'secret',
+        });
+        assert.equal(config.configured, true);
+        assert.equal(config.callbackUrl, 'https://kruair.thanvasupos.com/api/auth/line/callback');
+        assert.equal(config.frontendOrigin, 'https://kruair.thanvasupos.com');
+    });
+});
+
+describe('buildAuthorizeUrl', () => {
+    it('asks LINE for profile and openid with an encoded scope', () => {
+        const url = buildAuthorizeUrl(
+            {
+                channelId: '123',
+                callbackUrl: 'https://kruair.thanvasupos.com/api/auth/line/callback',
+                scopes: 'profile openid',
+            },
+            { state: 'abc', nonce: 'n1' },
+        );
+        assert.match(url, /^https:\/\/access\.line\.me\/oauth2\/v2\.1\/authorize\?/);
+        assert.match(url, /client_id=123/);
+        assert.match(url, /scope=profile%20openid/);
+    });
+});
+
+describe('safeNextPath', () => {
+    it('allows in-app paths only', () => {
+        assert.equal(safeNextPath('/app/profile'), '/app/profile');
+        assert.equal(safeNextPath('https://evil.example'), '/app');
+        assert.equal(safeNextPath('//evil.example'), '/app');
+    });
+});

@@ -3,7 +3,7 @@ import { Button } from '../ui';
 import { Logo } from '../Logo';
 import { ThemeToggle } from '../ThemeToggle';
 import { useApp } from '@app/context/AppContext';
-import { avatarSrc, homePath, profilePath } from '@app/utils/avatar';
+import { avatarSrc, profilePath } from '@app/utils/avatar';
 
 export function PublicLayout({ children, footer = true }) {
     const navigate = useNavigate();
@@ -46,20 +46,15 @@ export function PublicLayout({ children, footer = true }) {
             </button>
             <ThemeToggle />
             {user ? (
-              <>
-                <Button ghost size="sm" onClick={() => navigate(homePath(user))}>
-                  {user.role === 'admin' ? t('nav.adminGroup') : user.role === 'teacher' ? t('nav.schedule') : t('nav.studentHome')}
-                </Button>
-                <button type="button" className="user" title={t('nav.profile')} onClick={() => navigate(profilePath(user))}>
-                  <div className="ava">
-                    <img src={avatarSrc(user)} alt={user.nickname ?? user.name ?? ''}/>
-                  </div>
-                  <div>
-                    <div className="nm">{user.nickname ?? user.name ?? ''}</div>
-                    <div className="rl">{roleLabel}</div>
-                  </div>
-                </button>
-              </>
+              <button type="button" className="user" title={t('nav.profile')} onClick={() => navigate(profilePath(user))}>
+                <div className="ava">
+                  <img src={avatarSrc(user)} alt={user.nickname ?? user.name ?? ''}/>
+                </div>
+                <div>
+                  <div className="nm">{user.nickname ?? user.name ?? ''}</div>
+                  <div className="rl">{roleLabel}</div>
+                </div>
+              </button>
             ) : (
               <>
                 <Button ghost size="sm" onClick={() => navigate('/login')}>

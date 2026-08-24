@@ -6,7 +6,10 @@
     "dev": "node scripts/dev.mjs",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
-    "setup": "npm run setup --prefix backend"
+    "setup": "npm run setup --prefix backend",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:save": "docker save thanvasu/web-kruair:latest -o kruair-1.tar"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

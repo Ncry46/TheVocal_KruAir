@@ -20,6 +20,45 @@ export function pick(row, field, lang) {
     return row[field];
 }
 
+const EDUCATION_EN = {
+    'ม.ต้น': 'Lower secondary',
+    'ม.ปลาย': 'Upper secondary',
+    'ปวช. / ปวส.': 'Vocational certificate',
+    'ปริญญาตรี': "Bachelor's degree",
+    'ปริญญาโทขึ้นไป': "Master's or higher",
+    'ป.ตรี': "Bachelor's degree",
+    'ป.โท': "Master's degree",
+};
+
+const GENRE_EN = {
+    'ลูกทุ่ง': 'Luk thung',
+    'อื่น ๆ': 'Other',
+};
+
+export function educationEn(value) {
+    const key = String(value ?? '').trim();
+    return EDUCATION_EN[key] || key;
+}
+
+export function methodEn(method) {
+    const value = String(method ?? '');
+    const lower = value.toLowerCase();
+    if (value.includes('บัตร') || lower.includes('card')) {
+        return 'Credit card';
+    }
+    if (lower.includes('kbank')) {
+        return 'KBank';
+    }
+    if (value.includes('พร้อม') || lower.includes('prompt')) {
+        return 'PromptPay';
+    }
+    return value;
+}
+
+export function genresEn(genres) {
+    return (Array.isArray(genres) ? genres : []).map((item) => GENRE_EN[item] || item);
+}
+
 export function chipLabel(date, lang = 'th') {
     const days = lang === 'en' ? EN_DAYS : TH_DAYS;
     return `${days[date.getDay()]} ${date.getDate()}`;
@@ -81,18 +120,25 @@ export function relativeTime(from, lang = 'th') {
 }
 
 export function slotStatus(status, lang = 'th') {
-    const open = status === 'open';
-    if (lang === 'en') {
-        return open ? 'Open' : 'Full';
+    if (status === 'open') {
+        return lang === 'en' ? 'Open' : 'ว่าง';
     }
-    return open ? 'ว่าง' : 'เต็ม';
+    if (status === 'closed') {
+        return lang === 'en' ? 'Closed' : 'ปิด';
+    }
+    return lang === 'en' ? 'Full' : 'เต็ม';
 }
 
 export function paymentStatus(status, lang = 'th') {
-    if (status === 'success') {
-        return lang === 'en' ? 'Paid' : 'สำเร็จ';
-    }
-    return status;
+    const key = String(status ?? '');
+    const map = {
+        pending: lang === 'en' ? 'Pending' : 'รอชำระ',
+        success: lang === 'en' ? 'Paid' : 'สำเร็จ',
+        failed: lang === 'en' ? 'Failed' : 'ไม่สำเร็จ',
+        expired: lang === 'en' ? 'Expired' : 'หมดอายุ',
+        refunded: lang === 'en' ? 'Refunded' : 'คืนเงินแล้ว',
+    };
+    return map[key] ?? status;
 }
 
 export function moveStatus(status, lang = 'th') {

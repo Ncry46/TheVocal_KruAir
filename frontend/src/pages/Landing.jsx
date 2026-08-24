@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PublicLayout } from '@components/layout/PublicLayout';
-import { Button, Field, Input, Spinner, Stat } from '@components/ui';
+import { Button, Field, Input, Spinner } from '@components/ui';
 import { BellIcon, BookIcon, CalendarIcon, CartIcon, CardIcon, ChartIcon, ChatIcon, ClockIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PhoneIcon, PinIcon, TargetIcon, UserIcon } from '@components/icons';
 import { api } from '../services/apiClient';
 import { useApp } from '../context/AppContext';
@@ -17,6 +17,35 @@ function localized(value, language) {
         return value[language] ?? value.th ?? value.en ?? '';
     }
     return value ?? '';
+}
+function CountStat({ end, suffix = '', decimals = 0, label }) {
+    const [value, setValue] = useState(0);
+    useEffect(() => {
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) {
+            setValue(end);
+            return undefined;
+        }
+        let frame = 0;
+        const started = performance.now();
+        const tick = (now) => {
+            const t = Math.min(1, (now - started) / 1400);
+            const eased = 1 - ((1 - t) ** 3);
+            setValue(end * eased);
+            if (t < 1) {
+                frame = requestAnimationFrame(tick);
+            }
+        };
+        frame = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(frame);
+    }, [end]);
+    const shown = decimals > 0 ? value.toFixed(decimals) : Math.round(value).toLocaleString();
+    return (
+      <div>
+        <div className="v">{shown}{suffix}</div>
+        <div className="l">{label}</div>
+      </div>
+    );
 }
 export default function Landing() {
     const navigate = useNavigate();
@@ -53,44 +82,81 @@ export default function Landing() {
         els.forEach((el) => io.observe(el));
         return () => io.disconnect();
     }, [pkgs]);
+    useEffect(() => {
+        const hero = document.querySelector('.hero');
+        if (!hero) {
+            return undefined;
+        }
+        const onMove = (event) => {
+            const box = hero.getBoundingClientRect();
+            hero.style.setProperty('--mx', String((event.clientX - box.left) / box.width - 0.5));
+            hero.style.setProperty('--my', String((event.clientY - box.top) / box.height - 0.5));
+            hero.style.setProperty('--lx', `${((event.clientX - box.left) / box.width) * 100}%`);
+            hero.style.setProperty('--ly', `${((event.clientY - box.top) / box.height) * 100}%`);
+        };
+        const onLeave = () => {
+            hero.style.setProperty('--mx', '0');
+            hero.style.setProperty('--my', '0');
+            hero.style.setProperty('--lx', '50%');
+            hero.style.setProperty('--ly', '32%');
+        };
+        hero.addEventListener('mousemove', onMove);
+        hero.addEventListener('mouseleave', onLeave);
+        return () => {
+            hero.removeEventListener('mousemove', onMove);
+            hero.removeEventListener('mouseleave', onLeave);
+        };
+    }, []);
     return (<PublicLayout>
       {/* ===== Hero ===== */}
       <section className="hero">
-        <div className="hero-orb" aria-hidden="true"/>
+        <div className="hero-wash" aria-hidden="true"/>
+        <div className="hero-glow g1" aria-hidden="true"/>
+        <div className="hero-glow g2" aria-hidden="true"/>
+        <div className="hero-glow g3" aria-hidden="true"/>
+        <div className="hero-glow g4" aria-hidden="true"/>
+        <div className="hero-spot" aria-hidden="true"/>
+        <div className="hero-halo" aria-hidden="true"/>
+        <div className="hero-mesh" aria-hidden="true"/>
         <div className="hero-arch" aria-hidden="true"/>
+        <div className="hero-arch inner" aria-hidden="true"/>
+        <div className="hero-flare" aria-hidden="true"/>
+        <div className="hero-grain" aria-hidden="true"/>
+        <div className="hero-notes" aria-hidden="true">
+          <span className="hn-wrap n1"><MusicNoteIcon className="hn"/></span>
+          <span className="hn-wrap n2"><MusicNoteIcon className="hn"/></span>
+          <span className="hn-wrap n3"><MusicNoteIcon className="hn"/></span>
+          <span className="hn-wrap n4"><MusicNoteIcon className="hn"/></span>
+          <span className="hn-wrap n5"><MusicNoteIcon className="hn"/></span>
+          <span className="hn-wrap n6"><MusicNoteIcon className="hn"/></span>
+          <i className="hero-spark s1"/>
+          <i className="hero-spark s2"/>
+          <i className="hero-spark s3"/>
+          <i className="hero-spark s4"/>
+          <i className="hero-spark s5"/>
+          <i className="hero-spark s6"/>
+        </div>
         <div className="hero-staff" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
+          <i /><i /><i /><i /><i />
           <MusicNoteIcon className="sn s1"/>
           <MusicNoteIcon className="sn s2"/>
-        </div>
-        <div className="hero-notes" aria-hidden="true">
-          <MusicNoteIcon className="hn n1"/>
-          <MusicNoteIcon className="hn n2"/>
-          <MusicNoteIcon className="hn n3"/>
-          <MusicNoteIcon className="hn n4"/>
-          <MusicNoteIcon className="hn n5"/>
+          <MusicNoteIcon className="sn s3"/>
         </div>
         <div className="wrap hero-center reveal">
           <div className="hero-orn" aria-hidden="true">
             <i />
-            <svg viewBox="0 0 24 24" width={10} height={10} fill="currentColor">
+            <svg viewBox="0 0 24 24" width={11} height={11} fill="currentColor">
               <path d="M12 2l10 10-10 10L2 12z"/>
             </svg>
             <i />
           </div>
           <div className="tagline">{t('landing.tagline')}</div>
           <h1>
-            {t('landing.heroBefore')} <em>ครูแอร์</em>
+            {t('landing.heroBefore')} <em>{t('landing.heroName')}</em>
             <br />
             {t('landing.heroAfter')}
           </h1>
-          <p>
-            {t('landing.heroBody')}
-          </p>
+          <p>{t('landing.heroBody')}</p>
           <div className="cta">
             <Button pink onClick={() => navigate(user?.role === 'student' ? '/app/booking' : user ? homePath(user) : '/register')}>
               <MicIcon width={17} height={17}/> {user?.role === 'student' ? t('nav.booking') : t('landing.startNow')}
@@ -100,11 +166,11 @@ export default function Landing() {
             </Button>
           </div>
           <div className="stats">
-            <Stat value="120+" label={t('landing.students')}/>
+            <CountStat end={120} suffix="+" label={t('landing.students')}/>
             <i className="stats-line" aria-hidden="true"/>
-            <Stat value="2,400+" label={t('landing.hoursTaught')}/>
+            <CountStat end={2400} suffix="+" label={t('landing.hoursTaught')}/>
             <i className="stats-line" aria-hidden="true"/>
-            <Stat value="5.0 ★" label={t('landing.reviewScore')}/>
+            <CountStat end={5} decimals={1} suffix=" ★" label={t('landing.reviewScore')}/>
           </div>
         </div>
       </section>

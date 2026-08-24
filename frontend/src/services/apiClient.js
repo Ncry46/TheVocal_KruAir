@@ -57,6 +57,19 @@ export const api = {
         setToken(data.token);
         return data.user;
     },
+    startLineLogin(intent) {
+        return request('/auth/line/start', { method: 'POST', body: JSON.stringify({ intent }) });
+    },
+    getLineStatus() {
+        return request('/auth/line/status');
+    },
+    getLinePending(ticket) {
+        return request(`/auth/line/pending?ticket=${encodeURIComponent(ticket)}`);
+    },
+    async completeLineLogin(token) {
+        setToken(token);
+        return request('/me');
+    },
     logout() {
         setToken(null);
     },
@@ -66,6 +79,9 @@ export const api = {
     },
     getMe() {
         return request('/me');
+    },
+    updateMe(input) {
+        return request('/me', { method: 'PATCH', body: JSON.stringify(input) });
     },
     getPackages() {
         return request('/packages');
@@ -88,14 +104,17 @@ export const api = {
     getBookingSummary(day, time) {
         return request(`/booking-summary?day=${encodeURIComponent(day)}&time=${encodeURIComponent(time)}`);
     },
-    createBooking(day, time) {
-        return request('/bookings', { method: 'POST', body: JSON.stringify({ day, time }) });
+    createBooking(day, time, mode = 'studio') {
+        return request('/bookings', { method: 'POST', body: JSON.stringify({ day, time, mode }) });
     },
     getMyLessons() {
         return request('/me/lessons');
     },
     confirmLesson(id) {
         return request(`/me/lessons/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+    },
+    cancelLesson(id) {
+        return request(`/me/lessons/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
     },
     requestMoveLesson(id, day, time) {
         return request(`/me/lessons/${encodeURIComponent(id)}/move`, { method: 'POST', body: JSON.stringify({ day, time }) });
@@ -155,10 +174,31 @@ export const api = {
         }
         return request('/teacher/schedule');
     },
-    recordLesson(bookingId, outcome, note) {
+    createTeacherSlot(day, time) {
+        return request('/teacher/slots', { method: 'POST', body: JSON.stringify({ day, time }) });
+    },
+    setTeacherSlot(id, action) {
+        return request(`/teacher/slots/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ action }),
+        });
+    },
+    bulkCloseSlots(from, to) {
+        return request('/teacher/slots/bulk-close', { method: 'POST', body: JSON.stringify({ from, to }) });
+    },
+    remindLesson(bookingId) {
+        return request(`/teacher/bookings/${encodeURIComponent(bookingId)}/remind`, { method: 'POST' });
+    },
+    cancelTeacherLesson(bookingId) {
+        return request(`/teacher/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: 'POST' });
+    },
+    getSettings() {
+        return request('/admin/settings');
+    },
+    recordLesson(bookingId, outcome, note, feedbackAudioUrl = '') {
         return request(`/teacher/bookings/${encodeURIComponent(bookingId)}/log`, {
             method: 'POST',
-            body: JSON.stringify({ outcome, note }),
+            body: JSON.stringify({ outcome, note, feedbackAudioUrl }),
         });
     },
 };

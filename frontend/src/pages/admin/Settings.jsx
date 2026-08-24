@@ -1,55 +1,99 @@
-import { Badge, Card } from '@components/ui';
+import { useEffect, useState } from 'react';
+import { Badge, Card, Spinner } from '@components/ui';
+import { api } from '@app/services/apiClient';
+import { useApp } from '@app/context/AppContext';
+
 function Row({ k, v }) {
-    return (<div className="info-row">
-      <span className="muted">{k}</span>
-      <b>{v}</b>
-    </div>);
+    return (
+      <div className="info-row">
+        <span className="muted">{k}</span>
+        <b>{v}</b>
+      </div>
+    );
 }
+
 export default function Settings() {
-    return (<div className="grid cols-2">
-      <Card title="แพ็กเกจ">
-        <Row k="Beginner 10 ชม." v="฿22,000 · ใช้งาน"/>
-        <Row k="Pro 20 ชม. (ยอดนิยม)" v="฿40,000 · ใช้งาน"/>
-        <Row k="Master 30 ชม." v="฿56,000 · ใช้งาน"/>
-        <div className="pagetip">อายุแพ็กเกจ: <b>6 เดือน</b> · หักชั่วโมงเมื่อเรียนจริง</div>
-      </Card>
+    const { language, t, toast } = useApp();
+    const [data, setData] = useState(null);
 
-      <Card title="สล็อตสอน">
-        <Row k="ความยาวสล็อต" v="60 นาที"/>
-        <Row k="เวลาทำการ" v="อังคาร–อาทิตย์ 10:00–20:00 น."/>
-        <Row k="แจ้งเตือนนักเรียน" v="24 ชม. + ทวงถาม 6 ชม. ก่อน"/>
-        <Row k="ช่องทางแจ้งเตือน" v="ในเว็บ + LINE Push (เสริม)"/>
-      </Card>
+    useEffect(() => {
+        api.getSettings()
+            .then(setData)
+            .catch((err) => toast(err instanceof Error ? err.message : t('settings.loadFailed')));
+    }, [language]);
 
-      <Card title="การแจ้งเตือน">
-        <div className="toggle-row">
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>เตือนนัด 1 วัน</div>
-            <div className="muted" style={{ fontSize: 11 }}>ในเว็บ + LINE (ถ้าผูกบัญชี)</div>
-          </div>
-          <Badge tone="green">เปิด</Badge>
-        </div>
-        <div className="toggle-row">
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>แจ้งเตือนแพ็กเกจใกล้หมดอายุ</div>
-            <div className="muted" style={{ fontSize: 11 }}>30 / 7 / 1 วันก่อนหมดอายุ</div>
-          </div>
-          <Badge tone="green">เปิด</Badge>
-        </div>
-        <div className="toggle-row">
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>LINE OA (ฟีเจอร์เสริม)</div>
-            <div className="muted" style={{ fontSize: 11 }}>Push เตือนนัด + เมนูลัดลิงก์กลับเว็บ</div>
-          </div>
-          <Badge tone="amber">เชื่อมต่อแล้ว</Badge>
-        </div>
-      </Card>
+    if (!data) {
+        return <Spinner />;
+    }
 
-      <Card title="ความปลอดภัย">
-        <Row k="เข้ารหัสข้อมูล" v="Encryption at rest + TLS"/>
-        <Row k="สิทธิ์การเข้าถึง" v="RBAC (student/teacher/admin)"/>
-        <Row k="สำรองข้อมูล" v="อัตโนมัติทุกวัน"/>
-        <Row k="PDPA" v="เก็บ consent + สิทธิ์ลบข้อมูล"/>
-      </Card>
-    </div>);
+    const lastRun = data.reminders.lastRunAt
+        ? new Date(data.reminders.lastRunAt).toLocaleString(language === 'en' ? 'en-GB' : 'th-TH')
+        : t('settings.neverRun');
+
+    return (
+      <div className="grid cols-2">
+        <Card title={t('settings.packages')}>
+          {data.packages.map((pkg) => (
+            <Row
+              key={pkg.id}
+              k={`${pkg.name} ${pkg.hours} ${language === 'en' ? 'hrs' : 'ชม.'}`}
+              v={`฿${Number(pkg.price).toLocaleString()} · ${pkg.active ? t('settings.active') : t('settings.inactive')}`}
+            />
+          ))}
+          <div className="pagetip">{t('settings.packageTip')}</div>
+        </Card>
+
+        <Card title={t('settings.slots')}>
+          <Row k={t('settings.slotLength')} v={t('settings.slotLengthVal')}/>
+          <Row k={t('settings.workingHours')} v={data.workingHours}/>
+          <Row k={t('settings.times')} v={data.slotTimes.join(', ')}/>
+          <div className="pagetip">{t('settings.slotTip')}</div>
+        </Card>
+
+        <Card title={t('settings.alerts')}>
+          <div className="toggle-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.dayBefore')}</div>
+              <div className="muted" style={{ fontSize: 11 }}>{data.reminders.dayBefore.channel}</div>
+            </div>
+            <Badge tone={data.reminders.dayBefore.enabled ? 'green' : 'gray'}>
+              {data.reminders.dayBefore.enabled ? t('settings.on') : t('settings.off')}
+            </Badge>
+          </div>
+          <div className="toggle-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.expiry')}</div>
+              <div className="muted" style={{ fontSize: 11 }}>{t('settings.expiryHint')}</div>
+            </div>
+            <Badge tone="gray">{t('settings.off')}</Badge>
+          </div>
+          <div className="toggle-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.lineLogin')}</div>
+              <div className="muted" style={{ fontSize: 11 }}>
+                {data.lineLogin?.configured ? t('settings.lineLoginOn') : t('settings.lineLoginOff')}
+              </div>
+            </div>
+            <Badge tone={data.lineLogin?.configured ? 'green' : 'gray'}>
+              {data.lineLogin?.configured ? t('settings.on') : t('settings.notConnected')}
+            </Badge>
+          </div>
+          <div className="toggle-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.lineOa')}</div>
+              <div className="muted" style={{ fontSize: 11 }}>{t('settings.lineHint')}</div>
+            </div>
+            <Badge tone="gray">{t('settings.notConnected')}</Badge>
+          </div>
+          <div className="pagetip">{t('settings.lastJob')}: {lastRun}</div>
+        </Card>
+
+        <Card title={t('settings.security')}>
+          <Row k={t('settings.tls')} v={t('settings.tlsVal')}/>
+          <Row k={t('settings.rbac')} v={t('settings.rbacVal')}/>
+          <Row k={t('settings.backup')} v={t('settings.backupVal')}/>
+          <Row k={t('settings.pdpa')} v={t('settings.pdpaVal')}/>
+        </Card>
+      </div>
+    );
 }

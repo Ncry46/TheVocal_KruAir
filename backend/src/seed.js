@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { toIsoDate } from './dates.js';
 import { closePool } from './db.js';
-import { query } from './store.js';
+import { educationEn, genresEn } from './lang.js';
+import { query, toYn } from './store.js';
 
 const dataDir = join(dirname(fileURLToPath(import.meta.url)), '../../data');
 function loadJson(name) {
@@ -20,22 +21,25 @@ function addDays(date, days) {
 async function insertUser(row) {
     const hash = await bcrypt.hash(row.password, 10);
     const result = await query(
-        `INSERT INTO dbo.users (public_id, role, email, phone, password_hash, name, nickname, age, education, genres, reason, line_linked, avatar, consent_pdpa_at)
+        `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, nickname, age, education, education_en, genres, genres_en, reason, reason_en, line_linked, avatar, consent_pdpa_at)
          OUTPUT INSERTED.id
-         VALUES (@publicId, @role, @email, @phone, @hash, @name, @nickname, @age, @education, @genres, @reason, @lineLinked, @avatar, SYSUTCDATETIME())`,
+         VALUES (@role, @email, @phone, @emergency, @hash, @name, @nickname, @age, @education, @educationEn, @genres, @genresEn, @reason, @reasonEn, @lineLinked, @avatar, SYSUTCDATETIME())`,
         {
-            publicId: row.publicId,
             role: row.role,
             email: row.email,
             phone: row.phone ?? null,
+            emergency: row.emergencyContact ?? null,
             hash,
             name: row.name,
             nickname: row.nickname,
             age: row.age,
             education: row.education,
+            educationEn: educationEn(row.education),
             genres: JSON.stringify(row.genres),
+            genresEn: JSON.stringify(genresEn(row.genres)),
             reason: row.reason,
-            lineLinked: row.lineLinked ? 1 : 0,
+            reasonEn: null,
+            lineLinked: toYn(row.lineLinked),
             avatar: row.avatar ?? null,
         },
     );
@@ -79,7 +83,7 @@ async function seed() {
                 validTo: voucher.validTo,
                 maxUses: voucher.maxUses,
                 usedCount: voucher.usedCount,
-                isActive: voucher.isActive ? 1 : 0,
+                isActive: toYn(voucher.isActive),
             },
         );
     }
@@ -111,13 +115,13 @@ async function seed() {
     );
 
     await query(
-        `INSERT INTO dbo.transactions (ref_no, user_id, package_id, gross_amount, discount_amount, net_amount, voucher_code, method, status, paid_at)
+        `INSERT INTO dbo.transactions (ref_no, user_id, package_id, gross_amount, discount_amount, net_amount, voucher_code, method, method_en, status, paid_at)
          VALUES
-         ('INV-2026-8801', @mint, 'pro', 40000, 3000, 37000, 'WELCOME10', N'บัตรเครดิต', 'success', SYSUTCDATETIME()),
-         ('INV-2026-8800', @mint, 'beginner', 22000, 0, 22000, NULL, N'KBank', 'success', DATEADD(month, -1, SYSUTCDATETIME())),
-         ('INV-2026-8802', @fern, 'pro', 40000, 1000, 39000, 'SAVE1000', N'KBank', 'success', SYSUTCDATETIME()),
-         ('INV-2026-8803', @min, 'beginner', 22000, 0, 22000, NULL, N'บัตรเครดิต', 'success', DATEADD(day, -3, SYSUTCDATETIME())),
-         ('INV-2026-8804', @ton, 'master', 56000, 1000, 55000, 'SAVE1000', N'KBank', 'success', DATEADD(day, -8, SYSUTCDATETIME()))`,
+         ('INV-2026-8801', @mint, 'pro', 40000, 3000, 37000, 'WELCOME10', N'บัตรเครดิต', N'Credit card', 'success', SYSUTCDATETIME()),
+         ('INV-2026-8800', @mint, 'beginner', 22000, 0, 22000, NULL, N'KBank', N'KBank', 'success', DATEADD(month, -1, SYSUTCDATETIME())),
+         ('INV-2026-8802', @fern, 'pro', 40000, 1000, 39000, 'SAVE1000', N'KBank', N'KBank', 'success', SYSUTCDATETIME()),
+         ('INV-2026-8803', @min, 'beginner', 22000, 0, 22000, NULL, N'บัตรเครดิต', N'Credit card', 'success', DATEADD(day, -3, SYSUTCDATETIME())),
+         ('INV-2026-8804', @ton, 'master', 56000, 1000, 55000, 'SAVE1000', N'KBank', N'KBank', 'success', DATEADD(day, -8, SYSUTCDATETIME()))`,
         { mint: mintId, fern: fernId, min: minId, ton: tonId },
     );
 
@@ -153,9 +157,9 @@ async function seed() {
     const fernSlot = await slotFor(2, '10:00');
     if (mintSlot) {
         const booking = await query(
-            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, user_package_id, status, topic)
+            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, user_package_id, status, topic, source, mode, confirm_deadline, updated_at)
              OUTPUT INSERTED.id
-             VALUES ('L-mint-next', @userId, @slotId, @pkgId, 'pending', N'เทคนิคการหายใจ + สเกลพื้นฐาน');
+             VALUES ('L-mint-next', @userId, @slotId, @pkgId, 'pending', N'เทคนิคการหายใจ + สเกลพื้นฐาน', N'web', N'studio', DATEADD(hour, 24, SYSUTCDATETIME()), SYSUTCDATETIME());
              UPDATE dbo.teacher_availability SET status = 'booked' WHERE id = @slotId;`,
             { userId: mintId, slotId: mintSlot, pkgId: mintPkg.recordset[0].id },
         );
@@ -170,16 +174,16 @@ async function seed() {
     }
     if (minSlot) {
         await query(
-            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, status, topic)
-             VALUES ('L-min-next', @userId, @slotId, 'pending', N'Ballad');
+            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, status, topic, source, mode, confirm_deadline, updated_at)
+             VALUES ('L-min-next', @userId, @slotId, 'pending', N'Ballad', N'web', N'studio', DATEADD(hour, 24, SYSUTCDATETIME()), SYSUTCDATETIME());
              UPDATE dbo.teacher_availability SET status = 'booked' WHERE id = @slotId;`,
             { userId: minId, slotId: minSlot },
         );
     }
     if (fernSlot) {
         await query(
-            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, status, topic)
-             VALUES ('L-fern-next', @userId, @slotId, 'confirmed', N'Pop + สเกล');
+            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, status, topic, source, mode, confirm_deadline, confirmed_at, updated_at)
+             VALUES ('L-fern-next', @userId, @slotId, 'confirmed', N'Pop + สเกล', N'web', N'studio', DATEADD(hour, 24, SYSUTCDATETIME()), SYSUTCDATETIME(), SYSUTCDATETIME());
              UPDATE dbo.teacher_availability SET status = 'booked' WHERE id = @slotId;`,
             { userId: fernId, slotId: fernSlot },
         );
@@ -193,9 +197,9 @@ async function seed() {
         { teacherId, slotDate: toIsoDate(pastDate) },
     );
     const pastBooking = await query(
-        `INSERT INTO dbo.bookings (public_id, user_id, slot_id, user_package_id, status, topic)
+        `INSERT INTO dbo.bookings (public_id, user_id, slot_id, user_package_id, status, topic, source, mode, confirm_deadline, updated_at)
          OUTPUT INSERTED.id
-         VALUES ('L-mint-past', @userId, @slotId, @pkgId, 'done', N'เทคนิคการหายใจ + สเกลพื้นฐาน')`,
+         VALUES ('L-mint-past', @userId, @slotId, @pkgId, 'done', N'เทคนิคการหายใจ + สเกลพื้นฐาน', N'web', N'studio', DATEADD(hour, -6, SYSUTCDATETIME()), SYSUTCDATETIME())`,
         { userId: mintId, slotId: pastSlot.recordset[0].id, pkgId: mintPkg.recordset[0].id },
     );
     await query(
