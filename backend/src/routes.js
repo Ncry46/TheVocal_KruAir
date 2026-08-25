@@ -943,8 +943,9 @@ export function registerRoutes(app) {
                 monthly: visibleMonthly,
                 yearly: visibleYearly,
             },
-            sales: rows.slice(0, 12).map((row) => ({
+            sales: rows.map((row) => ({
                 date: formatDate(new Date(row.analytics_at), lang),
+                paidAt: new Date(row.analytics_at).toISOString(),
                 student: pick(row, 'nickname', lang) || `User #${row.user_id}`,
                 pkg: packageLabel(row),
                 voucher: row.voucher_code || '—',
