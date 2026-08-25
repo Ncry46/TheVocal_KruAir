@@ -20,6 +20,17 @@ export function pick(row, field, lang) {
     return row[field];
 }
 
+export function requiredPersonNames(input) {
+    const name = String(input.name ?? '').trim();
+    const nameEn = String(input.nameEn ?? '').trim();
+    const nickname = String(input.nickname ?? '').trim();
+    const nicknameEn = String(input.nicknameEn ?? '').trim();
+    if (!name || !nameEn || !nickname || !nicknameEn) {
+        throw new Error('กรุณากรอกชื่อและชื่อเล่นทั้งภาษาไทยและภาษาอังกฤษ');
+    }
+    return { name, nameEn, nickname, nicknameEn };
+}
+
 const EDUCATION_EN = {
     'ม.ต้น': 'Lower secondary',
     'ม.ปลาย': 'Upper secondary',

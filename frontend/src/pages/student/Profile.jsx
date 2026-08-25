@@ -28,8 +28,10 @@ export default function Profile() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [editing, setEditing] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [name, setName] = useState(user?.name ?? '');
-    const [nickname, setNickname] = useState(user?.nickname ?? '');
+    const [name, setName] = useState(user?.nameTh ?? user?.name ?? '');
+    const [nameEn, setNameEn] = useState(user?.nameEn ?? '');
+    const [nickname, setNickname] = useState(user?.nicknameTh ?? user?.nickname ?? '');
+    const [nicknameEn, setNicknameEn] = useState(user?.nicknameEn ?? '');
     const [age, setAge] = useState(user?.age ?? '');
     const [phone, setPhone] = useState(user?.phone ?? '');
     const [emergencyContact, setEmergencyContact] = useState(user?.emergencyContact ?? '');
@@ -52,8 +54,10 @@ export default function Profile() {
         const educationValue = EDUCATION_OPTIONS.find((item) => (
             item.value === user?.education || item.en === user?.education || item.th === user?.education
         ))?.value ?? user?.education ?? '';
-        setName(user?.name ?? '');
-        setNickname(user?.nickname ?? '');
+        setName(user?.nameTh ?? user?.name ?? '');
+        setNameEn(user?.nameEn ?? '');
+        setNickname(user?.nicknameTh ?? user?.nickname ?? '');
+        setNicknameEn(user?.nicknameEn ?? '');
         setAge(user?.age ?? '');
         setPhone(user?.phone ?? '');
         setEmergencyContact(user?.emergencyContact ?? '');
@@ -75,7 +79,9 @@ export default function Profile() {
         try {
             await updateProfile({
                 name,
+                nameEn,
                 nickname,
+                nicknameEn,
                 age: age === '' ? null : Number(age),
                 phone,
                 emergencyContact,
@@ -132,9 +138,17 @@ export default function Profile() {
               <Field label={t('profile.name')} required>
                 <Input value={name} onChange={(event) => setName(event.target.value)}/>
               </Field>
-              <Field label={t('profile.nickname')} required>
-                <Input value={nickname} onChange={(event) => setNickname(event.target.value)}/>
+              <Field label={t('profile.nameEn')} required>
+                <Input placeholder={t('profile.nameEnPlaceholder')} value={nameEn} onChange={(event) => setNameEn(event.target.value)}/>
               </Field>
+              <div className="two-col">
+                <Field label={t('profile.nickname')} required>
+                  <Input value={nickname} onChange={(event) => setNickname(event.target.value)}/>
+                </Field>
+                <Field label={t('profile.nicknameEn')} required>
+                  <Input placeholder={t('profile.nicknameEnPlaceholder')} value={nicknameEn} onChange={(event) => setNicknameEn(event.target.value)}/>
+                </Field>
+              </div>
               <div className="two-col">
                 <Field label={t('profile.age')}>
                   <Input type="number" value={age} onChange={(event) => setAge(event.target.value)}/>

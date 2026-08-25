@@ -23,11 +23,11 @@ export default function Login() {
         if (!token && !lineError) {
             return undefined;
         }
-        navigate('/login', { replace: true });
         if (lineError) {
             const key = `auth.lineError.${lineError}`;
             const message = t(key);
             toast(message === key ? t('auth.lineFailed') : message);
+            navigate('/login', { replace: true });
             return undefined;
         }
         let cancelled = false;
@@ -46,6 +46,7 @@ export default function Login() {
             catch (err) {
                 if (!cancelled) {
                     toast(err instanceof Error ? err.message : t('auth.loginFailed'));
+                    navigate('/login', { replace: true });
                 }
             }
         })();

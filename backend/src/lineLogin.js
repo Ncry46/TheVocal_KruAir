@@ -60,6 +60,22 @@ export function signLinePending(profile) {
     );
 }
 
+export function lineSignupDefaults(pending = {}) {
+    const display = String(pending.name || '').trim();
+    const first = display.split(/\s+/).filter(Boolean)[0] || display;
+    const ascii = display.length > 0 && /^[\x20-\x7E]+$/.test(display);
+    const sub = String(pending.sub || '').replace(/[^a-zA-Z0-9]/g, '') || 'user';
+    const email = String(pending.email || '').trim().toLowerCase()
+        || `line.${sub}@kruair.local`;
+    return {
+        name: display || 'นักเรียน',
+        nickname: first || 'นักเรียน',
+        nameEn: ascii ? display : '',
+        nicknameEn: ascii ? first : '',
+        email,
+    };
+}
+
 export function verifyLinePending(ticket) {
     try {
         const decoded = jwt.verify(String(ticket || ''), JWT_SECRET);

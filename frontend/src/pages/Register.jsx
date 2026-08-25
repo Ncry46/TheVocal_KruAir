@@ -30,7 +30,9 @@ export default function Register() {
     const [searchParams] = useSearchParams();
     const lineTicket = searchParams.get('lineTicket') || '';
     const [name, setName] = useState('');
+    const [nameEn, setNameEn] = useState('');
     const [nickname, setNickname] = useState('');
+    const [nicknameEn, setNicknameEn] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [emergencyContact, setEmergencyContact] = useState('');
@@ -57,6 +59,10 @@ export default function Register() {
                 if (pending.name) {
                     setName((current) => current || pending.name);
                     setNickname((current) => current || String(pending.name).split(/\s+/)[0]);
+                    if (/^[\x20-\x7E]+$/.test(String(pending.name))) {
+                        setNameEn((current) => current || pending.name);
+                        setNicknameEn((current) => current || String(pending.name).split(/\s+/)[0]);
+                    }
                 }
                 if (pending.email) {
                     setEmail((current) => current || pending.email);
@@ -77,21 +83,30 @@ export default function Register() {
         e.preventDefault();
         setBusy(true);
         try {
-            await register({
-                name,
-                nickname,
-                age: Number(age),
-                education,
-                genres,
-                reason,
-                consent,
-                email,
-                phone,
-                emergencyContact,
-                password,
-                lineTicket: lineTicket || undefined,
-            });
-            navigate('/app/booking');
+            await register(lineTicket
+                ? {
+                    nameEn,
+                    nicknameEn,
+                    consent,
+                    phone,
+                    lineTicket,
+                }
+                : {
+                    name,
+                    nameEn,
+                    nickname,
+                    nicknameEn,
+                    age: Number(age),
+                    education,
+                    genres,
+                    reason,
+                    consent,
+                    email,
+                    phone,
+                    emergencyContact,
+                    password,
+                });
+            navigate('/app');
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('auth.registerFailed'));
@@ -119,14 +134,36 @@ export default function Register() {
           <form className="authcard" onSubmit={submit}>
             <LogoMark size={64}/>
             <h2>{t('auth.registerTitle')}</h2>
-            <div className="sub">{lineTicket ? t('auth.linePrefill') : t('auth.registerSub')}</div>
+            <div className="sub">{lineTicket ? t('auth.lineRegisterSub') : t('auth.registerSub')}</div>
 
+        {lineTicket ? (
+          <>
+            <Field label={t('auth.phone')} required>
+              <Input type="tel" placeholder={t('auth.phonePlaceholder')} value={phone} onChange={(e) => setPhone(e.target.value)}/>
+            </Field>
+            <Field label={t('auth.nameEn')} required>
+              <Input placeholder={t('auth.nameEnPlaceholder')} value={nameEn} onChange={(e) => setNameEn(e.target.value)}/>
+            </Field>
+            <Field label={t('auth.nicknameEn')} required>
+              <Input placeholder={t('auth.nicknameEnPlaceholder')} value={nicknameEn} onChange={(e) => setNicknameEn(e.target.value)}/>
+            </Field>
+          </>
+        ) : (
+          <>
         <Field label={t('auth.name')} required>
           <Input placeholder="เช่น สมชาย ใจดี" value={name} onChange={(e) => setName(e.target.value)}/>
         </Field>
-        <Field label={t('auth.nickname')} required>
-          <Input placeholder="เช่น มิ้นท์" value={nickname} onChange={(e) => setNickname(e.target.value)}/>
+        <Field label={t('auth.nameEn')} required>
+          <Input placeholder={t('auth.nameEnPlaceholder')} value={nameEn} onChange={(e) => setNameEn(e.target.value)}/>
         </Field>
+        <div className="two-col">
+          <Field label={t('auth.nickname')} required>
+            <Input placeholder="เช่น มิ้นท์" value={nickname} onChange={(e) => setNickname(e.target.value)}/>
+          </Field>
+          <Field label={t('auth.nicknameEn')} required>
+            <Input placeholder={t('auth.nicknameEnPlaceholder')} value={nicknameEn} onChange={(e) => setNicknameEn(e.target.value)}/>
+          </Field>
+        </div>
 
         <div className="two-col">
           <Field label={t('auth.email')} required>
@@ -171,6 +208,8 @@ export default function Register() {
         <Field label={t('auth.reason')} required>
           <textarea className="input" rows={2} placeholder="เช่น อยากออดิชันวงดนตรี / พัฒนาน้ำเสียง…" value={reason} onChange={(e) => setReason(e.target.value)}/>
         </Field>
+          </>
+        )}
 
         <div className="consent">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)}/>

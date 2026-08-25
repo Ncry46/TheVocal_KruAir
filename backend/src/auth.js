@@ -55,11 +55,11 @@ export function requireRole(roles) {
     };
 }
 
-export function toProfile(row) {
-    const lang = row.language === 'en' ? 'en' : 'th';
+export function toProfile(row, lang = null) {
+    const displayLang = lang ?? (row.language === 'en' ? 'en' : 'th');
     let genres = [];
     try {
-        const raw = lang === 'en' && row.genres_en ? row.genres_en : row.genres;
+        const raw = displayLang === 'en' && row.genres_en ? row.genres_en : row.genres;
         genres = raw ? JSON.parse(raw) : [];
     }
     catch {
@@ -67,18 +67,22 @@ export function toProfile(row) {
     }
     return {
         id: Number(row.id),
-        name: row.name,
-        nickname: row.nickname,
+        name: pick(row, 'name', displayLang),
+        nickname: pick(row, 'nickname', displayLang),
+        nameTh: row.name,
+        nameEn: row.name_en ?? '',
+        nicknameTh: row.nickname,
+        nicknameEn: row.nickname_en ?? '',
         age: row.age,
-        education: pick(row, 'education', lang),
+        education: pick(row, 'education', displayLang),
         genres,
-        reason: pick(row, 'reason', lang),
+        reason: pick(row, 'reason', displayLang),
         email: row.email,
         phone: row.phone || null,
         emergencyContact: row.emergency_contact || null,
         lineLinked: isYes(row.line_linked),
         role: row.role,
-        language: lang,
+        language: displayLang,
         avatar: row.avatar || null,
     };
 }

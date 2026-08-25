@@ -186,7 +186,9 @@ IF OBJECT_ID(N'dbo.users', N'U') IS NULL
         emergency_contact NVARCHAR(120) NULL,
         password_hash NVARCHAR(255) NOT NULL,
         name NVARCHAR(100) NOT NULL,
+        name_en NVARCHAR(100) NULL,
         nickname NVARCHAR(50) NOT NULL,
+        nickname_en NVARCHAR(50) NULL,
         age INT NULL,
         education NVARCHAR(100) NULL,
         education_en NVARCHAR(100) NULL,
@@ -314,6 +316,12 @@ IF COL_LENGTH(N'dbo.users', N'avatar') IS NULL
 GO
 IF COL_LENGTH(N'dbo.users', N'emergency_contact') IS NULL
     ALTER TABLE dbo.users ADD emergency_contact NVARCHAR(120) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'name_en') IS NULL
+    ALTER TABLE dbo.users ADD name_en NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH(N'dbo.users', N'nickname_en') IS NULL
+    ALTER TABLE dbo.users ADD nickname_en NVARCHAR(50) NULL;
 GO
 IF COL_LENGTH(N'dbo.users', N'education_en') IS NULL
     ALTER TABLE dbo.users ADD education_en NVARCHAR(100) NULL;

@@ -188,7 +188,7 @@ export async function notifySlotTeacher(slotId, title, body, tone = 'blue', titl
 }
 
 export function studentLabel(user, lang = 'th') {
-    const nickname = user?.nickname || user?.name || (lang === 'en' ? 'student' : 'นักเรียน');
+    const nickname = pick(user, 'nickname', lang) || pick(user, 'name', lang) || (lang === 'en' ? 'student' : 'นักเรียน');
     return lang === 'en' ? nickname : `น้อง${nickname}`;
 }
 
@@ -204,9 +204,10 @@ export function mapNotification(row, lang = 'th') {
 }
 
 export function mapMoveRequest(row, lang = 'th') {
+    const nickname = pick(row, 'nickname', lang);
     return {
         id: row.public_id,
-        student: lang === 'en' ? row.nickname : `น้อง${row.nickname}`,
+        student: lang === 'en' ? nickname : `น้อง${nickname}`,
         from: pick(row, 'from_text', lang),
         to: pick(row, 'to_text', lang),
         at: relativeTime(new Date(row.created_at), lang),
@@ -459,6 +460,8 @@ export async function ensureEnrollmentSchema() {
     await ensureColumn('bookings', 'reminder_sent_at', 'reminder_sent_at DATETIME2 NULL');
     await ensureColumn('bookings', 'updated_at', 'updated_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_updated DEFAULT SYSUTCDATETIME()');
     await ensureColumn('class_logs', 'feedback_audio_url', 'feedback_audio_url NVARCHAR(500) NULL');
+    await ensureColumn('users', 'name_en', 'name_en NVARCHAR(100) NULL');
+    await ensureColumn('users', 'nickname_en', 'nickname_en NVARCHAR(50) NULL');
     await ensureColumn('users', 'education_en', 'education_en NVARCHAR(100) NULL');
     await ensureColumn('users', 'reason_en', 'reason_en NVARCHAR(MAX) NULL');
     await ensureColumn('users', 'genres_en', 'genres_en NVARCHAR(MAX) NULL');
@@ -615,19 +618,21 @@ export async function ensureEnrollmentSchema() {
 export async function enrollStudent(input) {
     return withTransaction(async (run) => {
         const inserted = await run(
-            `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, nickname, age, education, education_en, genres, genres_en, reason, reason_en, language, avatar, consent_pdpa_at)
+            `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, name_en, nickname, nickname_en, age, education, education_en, genres, genres_en, reason, reason_en, language, avatar, consent_pdpa_at)
              OUTPUT INSERTED.*
-             VALUES ('student', @email, @phone, @emergency, @hash, @name, @nickname, @age, @education, @educationEn, @genres, @genresEn, @reason, @reasonEn, @language, @avatar, SYSUTCDATETIME())`,
+             VALUES ('student', @email, @phone, @emergency, @hash, @name, @nameEn, @nickname, @nicknameEn, @age, @education, @educationEn, @genres, @genresEn, @reason, @reasonEn, @language, @avatar, SYSUTCDATETIME())`,
             {
                 email: input.email,
                 phone: input.phone,
                 emergency: input.emergencyContact || null,
                 hash: input.hash,
                 name: input.name,
+                nameEn: input.nameEn,
                 nickname: input.nickname,
+                nicknameEn: input.nicknameEn,
                 age: input.age,
                 education: input.education,
-                educationEn: input.educationEn || educationEn(input.education),
+                educationEn: input.educationEn || (input.education ? educationEn(input.education) : null),
                 genres: input.genres,
                 genresEn: input.genresEn || null,
                 reason: input.reason,
@@ -1058,7 +1063,7 @@ export async function listTeacherMonthSlots({ teacherId, start, end }) {
                 CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
                 s.status,
                 b.public_id AS booking_id, b.status AS booking_status, b.topic, b.topic_en,
-                u.nickname, u.name, u.id AS student_id
+                u.nickname, u.nickname_en, u.name, u.name_en, u.id AS student_id
          FROM dbo.teacher_availability s
          LEFT JOIN dbo.bookings b ON b.slot_id = s.id AND b.status IN (N'pending', N'confirmed', N'moved')
          LEFT JOIN dbo.users u ON u.id = b.user_id

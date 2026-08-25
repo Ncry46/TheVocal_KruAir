@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildAuthorizeUrl, getLineConfig, safeNextPath } from './lineLogin.js';
+import { buildAuthorizeUrl, getLineConfig, lineSignupDefaults, safeNextPath } from './lineLogin.js';
 
 describe('getLineConfig', () => {
     it('is unconfigured until both channel id and secret are set', () => {
@@ -36,6 +36,30 @@ describe('buildAuthorizeUrl', () => {
         assert.match(url, /^https:\/\/access\.line\.me\/oauth2\/v2\.1\/authorize\?/);
         assert.match(url, /client_id=123/);
         assert.match(url, /scope=profile%20openid/);
+    });
+});
+
+describe('lineSignupDefaults', () => {
+    it('uses LINE display name and generates an email', () => {
+        const defaults = lineSignupDefaults({
+            sub: 'Uabc123',
+            name: 'สมชาย ใจดี',
+        });
+        assert.equal(defaults.name, 'สมชาย ใจดี');
+        assert.equal(defaults.nickname, 'สมชาย');
+        assert.equal(defaults.nameEn, '');
+        assert.equal(defaults.email, 'line.Uabc123@kruair.local');
+    });
+
+    it('prefills English names when LINE name is Latin', () => {
+        const defaults = lineSignupDefaults({
+            sub: 'U1',
+            name: 'Mint Jaidee',
+            email: 'mint@email.com',
+        });
+        assert.equal(defaults.nameEn, 'Mint Jaidee');
+        assert.equal(defaults.nicknameEn, 'Mint');
+        assert.equal(defaults.email, 'mint@email.com');
     });
 });
 
