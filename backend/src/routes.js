@@ -865,8 +865,13 @@ export function registerRoutes(app) {
             `SELECT t.*, COALESCE(t.paid_at, t.created_at) AS analytics_at,
                     u.nickname, u.nickname_en, p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
              FROM dbo.transactions t
-             JOIN dbo.users u ON u.id = t.user_id
-             JOIN dbo.packages p ON p.id = t.package_id
+             LEFT JOIN dbo.users u ON u.id = t.user_id
+             LEFT JOIN dbo.packages p ON p.id = CASE CAST(t.package_id AS NVARCHAR(20))
+                 WHEN N'1' THEN N'beginner'
+                 WHEN N'2' THEN N'pro'
+                 WHEN N'3' THEN N'master'
+                 ELSE CAST(t.package_id AS NVARCHAR(20))
+             END
              WHERE LOWER(t.status) IN (N'success', N'paid', N'completed')
                 OR t.paid_at IS NOT NULL
              ORDER BY COALESCE(t.paid_at, t.created_at) DESC`,
@@ -874,7 +879,13 @@ export function registerRoutes(app) {
         const rows = txs.recordset;
         const anchor = rows[0]?.analytics_at ? new Date(rows[0].analytics_at) : now;
         const anchorMonthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-        const packageLabel = (row) => `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours} ${hoursUnit}`;
+        const packageLabel = (row) => {
+            if (row.pkg_name) {
+                return `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours} ${hoursUnit}`;
+            }
+            const fallbackHours = { 1: 10, 2: 20, 3: 30 }[String(row.package_id)];
+            return fallbackHours ? `Package ${fallbackHours} ${hoursUnit}` : `Package ${row.package_id}`;
+        };
         const rowsBetween = (start, end) => rows.filter((row) => {
             const at = new Date(row.analytics_at);
             return at >= start && at < end;
@@ -931,7 +942,7 @@ export function registerRoutes(app) {
             },
             sales: rows.slice(0, 12).map((row) => ({
                 date: formatDate(new Date(row.analytics_at), lang),
-                student: pick(row, 'nickname', lang),
+                student: pick(row, 'nickname', lang) || `User #${row.user_id}`,
                 pkg: packageLabel(row),
                 voucher: row.voucher_code || '—',
                 amount: Number(row.net_amount),
