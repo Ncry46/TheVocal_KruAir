@@ -5,7 +5,7 @@ import { useApp } from '@app/context/AppContext';
 import { avatarSrc } from '@app/utils/avatar';
 
 const FILTERS = ['all', 'student', 'teacher', 'admin'];
-const EMPTY_FORM = { name: '', nickname: '', email: '', password: '', phone: '' };
+const EMPTY_FORM = { name: '', nameEn: '', nickname: '', nicknameEn: '', email: '', password: '', phone: '' };
 
 export default function Users() {
     const { language, t, toast, user: me } = useApp();
@@ -57,7 +57,7 @@ export default function Users() {
     };
 
     const createTeacher = async () => {
-        if (!form.name.trim() || !form.nickname.trim() || !form.email.trim() || form.password.length < 6) {
+        if (!form.name.trim() || !form.nameEn.trim() || !form.nickname.trim() || !form.nicknameEn.trim() || !form.email.trim() || form.password.length < 6) {
             return;
         }
         setBusy(true);
@@ -65,7 +65,9 @@ export default function Users() {
             await api.createUser({
                 role: 'teacher',
                 name: form.name.trim(),
+                nameEn: form.nameEn.trim(),
                 nickname: form.nickname.trim(),
+                nicknameEn: form.nicknameEn.trim(),
                 email: form.email.trim(),
                 password: form.password,
                 phone: form.phone.trim(),
@@ -156,9 +158,17 @@ export default function Users() {
           <Field label={t('users.name')} required>
             <Input value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}/>
           </Field>
-          <Field label={t('users.nickname')} required>
-            <Input value={form.nickname} onChange={(e) => setForm((current) => ({ ...current, nickname: e.target.value }))}/>
+          <Field label={t('users.nameEn')} required>
+            <Input placeholder={t('users.nameEnPlaceholder')} value={form.nameEn} onChange={(e) => setForm((current) => ({ ...current, nameEn: e.target.value }))}/>
           </Field>
+          <div className="two-col">
+            <Field label={t('users.nickname')} required>
+              <Input value={form.nickname} onChange={(e) => setForm((current) => ({ ...current, nickname: e.target.value }))}/>
+            </Field>
+            <Field label={t('users.nicknameEn')} required>
+              <Input placeholder={t('users.nicknameEnPlaceholder')} value={form.nicknameEn} onChange={(e) => setForm((current) => ({ ...current, nicknameEn: e.target.value }))}/>
+            </Field>
+          </div>
           <Field label={t('users.email')} required>
             <Input type="email" placeholder="teacher@email.com" value={form.email} onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}/>
           </Field>

@@ -95,7 +95,20 @@ export function AppProvider({ children }) {
         const language = nextLanguage === 'en' ? 'en' : 'th';
         setLanguageState(language);
         if (getToken()) {
-            api.setLanguage(language).catch(() => {});
+            api.setLanguage(language).then((data) => {
+                if (data?.user) {
+                    setUser((current) => {
+                        const next = { ...(current ?? {}), ...data.user };
+                        try {
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+                        }
+                        catch {
+                            /* ignore quota/private-mode errors */
+                        }
+                        return next;
+                    });
+                }
+            }).catch(() => {});
         }
     }, []);
     const setTheme = useCallback((nextTheme) => {

@@ -1,18 +1,20 @@
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { asyncHandler, optionalAuth, requireAuth, requireRole, signUser, toProfile } from './auth.js';
 import {
     createLineAuthorizeUrl,
     frontendRedirectUrl,
     isLineConfigured,
+    lineSignupDefaults,
     loadLineProfile,
     resolveLineCallbackDecision,
     signLinePending,
     verifyLinePending,
 } from './lineLogin.js';
-import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, resolveLang, slotLabel, slotStatus } from './lang.js';
+import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, requiredPersonNames, resolveLang, slotLabel, slotStatus } from './lang.js';
 import { defaultAvatar } from './avatar.js';
 import { parseIsoDate, plusOneHour, toIsoDate } from './dates.js';
-import { canStudentCancel, hoursUntilSlot, SLOT_TIMES } from './bookingPolicy.js';
+import { canStudentCancel, hoursUntilSlot, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
 import { jobState } from './jobs.js';
 import {
     activePackage,
@@ -133,19 +135,37 @@ export function registerRoutes(app) {
 
     app.post('/api/auth/register', asyncHandler(async (req, res) => {
         const input = req.body ?? {};
-        if (!input.name || !input.nickname || !input.age || !input.education || !input.genres?.length || !input.reason) {
-            throw new Error('กรุณากรอกข้อมูลให้ครบทุกช่อง');
-        }
         if (!input.consent) {
             throw new Error('กรุณายอมรับนโยบาย PDPA');
         }
-        const email = String(input.email ?? '').trim().toLowerCase();
+        let pending = null;
+        if (input.lineTicket) {
+            pending = verifyLinePending(input.lineTicket);
+            const taken = await findUserByLineUserId(pending.sub);
+            if (taken) {
+                throw new Error('บัญชี LINE นี้ถูกผูกแล้ว — เข้าสู่ระบบด้วย LINE ได้เลย');
+            }
+        }
+        const viaLine = Boolean(pending);
+        if (!viaLine && (!input.age || !input.education || !input.genres?.length || !input.reason)) {
+            throw new Error('กรุณากรอกข้อมูลให้ครบทุกช่อง');
+        }
+        const defaults = viaLine ? lineSignupDefaults(pending) : null;
+        const names = requiredPersonNames(viaLine
+            ? {
+                name: defaults.name,
+                nickname: defaults.nickname,
+                nameEn: input.nameEn,
+                nicknameEn: input.nicknameEn,
+            }
+            : input);
+        const email = String((viaLine ? defaults.email : input.email) ?? '').trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             throw new Error('กรุณากรอกอีเมลให้ถูกต้อง');
         }
         const phone = assertStudentPhone(input.phone);
         const emergencyContact = String(input.emergencyContact ?? '').trim().slice(0, 120);
-        if (String(input.password ?? '').length < 6) {
+        if (!viaLine && String(input.password ?? '').length < 6) {
             throw new Error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
         }
         const existingEmail = await findUserByLogin(email);
@@ -156,33 +176,32 @@ export function registerRoutes(app) {
         if (existingPhone) {
             throw new Error('เบอร์โทรนี้ลงทะเบียนแล้ว — เข้าสู่ระบบเลย');
         }
-        let pending = null;
-        if (input.lineTicket) {
-            pending = verifyLinePending(input.lineTicket);
-            const taken = await findUserByLineUserId(pending.sub);
-            if (taken) {
-                throw new Error('บัญชี LINE นี้ถูกผูกแล้ว — เข้าสู่ระบบด้วย LINE ได้เลย');
-            }
-        }
-        const hash = await bcrypt.hash(String(input.password), 10);
+        const password = viaLine ? randomBytes(24).toString('hex') : String(input.password);
+        const hash = await bcrypt.hash(password, 10);
         const language = resolveLang(req);
         const avatar = pending?.picture || defaultAvatar('student', email);
-        const genreList = Array.isArray(input.genres) ? input.genres.map(String) : [];
+        const genreList = viaLine
+            ? []
+            : (Array.isArray(input.genres) ? input.genres.map(String) : []);
+        const education = viaLine ? null : String(input.education);
+        const reason = viaLine ? 'สมัครผ่าน LINE' : String(input.reason);
         const enrolled = await enrollStudent({
             enrollmentId: publicId('enr-'),
             email,
             phone,
             emergencyContact: emergencyContact || null,
             hash,
-            name: String(input.name),
-            nickname: String(input.nickname),
-            age: Number(input.age),
-            education: String(input.education),
-            educationEn: educationEn(String(input.education)),
-            genres: JSON.stringify(genreList),
-            genresEn: JSON.stringify(genresEn(genreList)),
-            reason: String(input.reason),
-            reasonEn: language === 'en' ? String(input.reason) : null,
+            name: names.name,
+            nameEn: names.nameEn,
+            nickname: names.nickname,
+            nicknameEn: names.nicknameEn,
+            age: viaLine ? null : Number(input.age),
+            education,
+            educationEn: education ? educationEn(education) : null,
+            genres: genreList.length ? JSON.stringify(genreList) : null,
+            genresEn: genreList.length ? JSON.stringify(genresEn(genreList)) : null,
+            reason,
+            reasonEn: viaLine ? 'Signed up with LINE' : (language === 'en' ? reason : null),
             language,
             avatar,
         });
@@ -308,11 +327,7 @@ export function registerRoutes(app) {
 
     app.patch('/api/me', requireAuth, asyncHandler(async (req, res) => {
         const input = req.body ?? {};
-        const name = String(input.name ?? '').trim();
-        const nickname = String(input.nickname ?? '').trim();
-        if (!name || !nickname) {
-            throw new Error('กรุณากรอกชื่อและชื่อเล่น');
-        }
+        const names = requiredPersonNames(input);
         const ageRaw = input.age;
         const age = ageRaw == null || ageRaw === '' ? null : Number(ageRaw);
         if (age != null && (!Number.isInteger(age) || age < 5 || age > 90)) {
@@ -333,15 +348,18 @@ export function registerRoutes(app) {
         const language = resolveLang(req);
         await query(
             `UPDATE dbo.users
-             SET name = @name, nickname = @nickname, age = @age, phone = @phone,
+             SET name = @name, name_en = @nameEn, nickname = @nickname, nickname_en = @nicknameEn,
+                 age = @age, phone = @phone,
                  emergency_contact = @emergencyContact, education = @education, education_en = @educationEn,
                  genres = @genres, genres_en = @genresEn, reason = @reason, reason_en = @reasonEn,
                  updated_at = SYSUTCDATETIME()
              WHERE id = @id`,
             {
                 id: req.user.id,
-                name,
-                nickname,
+                name: names.name,
+                nameEn: names.nameEn,
+                nickname: names.nickname,
+                nicknameEn: names.nicknameEn,
                 age,
                 phone,
                 emergencyContact,
@@ -681,7 +699,7 @@ export function registerRoutes(app) {
     app.get('/api/admin/students', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT u.name, u.nickname, u.age, u.education, u.education_en, u.phone, u.emergency_contact, u.created_at,
+            `SELECT u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.education, u.education_en, u.phone, u.emergency_contact, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
                     up.hours_total, up.hours_used, up.expires_at, up.status AS pkg_status,
                     (SELECT COUNT(*) FROM dbo.class_logs cl WHERE cl.user_id = u.id AND cl.outcome = 'done') AS done
@@ -704,7 +722,7 @@ export function registerRoutes(app) {
                 state = 'new';
             }
             return {
-                name: `${row.nickname} ${row.name.split(' ')[0] ?? ''}`.trim(),
+                name: `${pick(row, 'nickname', lang)} ${pick(row, 'name', lang).split(' ')[0] ?? ''}`.trim(),
                 info: `${row.age ?? '—'} · ${pick(row, 'education', lang) || '—'} · ${row.phone || '—'}`,
                 phone: row.phone || null,
                 emergencyContact: row.emergency_contact || null,
@@ -719,7 +737,7 @@ export function registerRoutes(app) {
     app.get('/api/admin/users', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT u.id, u.role, u.email, u.phone, u.name, u.nickname, u.age, u.education, u.education_en,
+            `SELECT u.id, u.role, u.email, u.phone, u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.education, u.education_en,
                     u.status, u.avatar, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
                     up.hours_total, up.hours_used
@@ -737,8 +755,12 @@ export function registerRoutes(app) {
                 role: row.role,
                 email: row.email,
                 phone: row.phone,
-                name: row.name,
-                nickname: row.nickname,
+                name: pick(row, 'name', lang),
+                nickname: pick(row, 'nickname', lang),
+                nameTh: row.name,
+                nameEn: row.name_en ?? '',
+                nicknameTh: row.nickname,
+                nicknameEn: row.nickname_en ?? '',
                 age: row.age,
                 education: pick(row, 'education', lang),
                 status: isYes(row.status) || row.status === 'active' ? 'Y' : 'N',
@@ -755,8 +777,7 @@ export function registerRoutes(app) {
     app.post('/api/admin/users', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
         const input = req.body ?? {};
         const role = String(input.role ?? 'teacher').toLowerCase() === 'student' ? 'student' : 'teacher';
-        const name = String(input.name ?? '').trim();
-        const nickname = String(input.nickname ?? '').trim();
+        const names = requiredPersonNames(input);
         const email = String(input.email ?? '').trim().toLowerCase();
         const password = String(input.password ?? '');
         const rawPhone = String(input.phone ?? '').trim();
@@ -764,8 +785,8 @@ export function registerRoutes(app) {
         if (phone && !/^0\d{8,9}$/.test(phone)) {
             throw new Error('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง');
         }
-        if (!name || !nickname || !email) {
-            throw new Error('กรุณากรอกชื่อ ชื่อเล่น และอีเมล');
+        if (!email) {
+            throw new Error('กรุณากรอกอีเมล');
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             throw new Error('กรุณากรอกอีเมลให้ถูกต้อง');
@@ -786,16 +807,18 @@ export function registerRoutes(app) {
         const hash = await bcrypt.hash(password, 10);
         const avatar = defaultAvatar(role, email);
         const inserted = await query(
-            `INSERT INTO dbo.users (role, email, phone, password_hash, name, nickname, language, avatar, consent_pdpa_at)
+            `INSERT INTO dbo.users (role, email, phone, password_hash, name, name_en, nickname, nickname_en, language, avatar, consent_pdpa_at)
              OUTPUT INSERTED.*
-             VALUES (@role, @email, @phone, @hash, @name, @nickname, N'th', @avatar, SYSUTCDATETIME())`,
+             VALUES (@role, @email, @phone, @hash, @name, @nameEn, @nickname, @nicknameEn, N'th', @avatar, SYSUTCDATETIME())`,
             {
                 role,
                 email,
                 phone: phone || null,
                 hash,
-                name,
-                nickname,
+                name: names.name,
+                nameEn: names.nameEn,
+                nickname: names.nickname,
+                nicknameEn: names.nicknameEn,
                 avatar,
             },
         );
@@ -839,7 +862,7 @@ export function registerRoutes(app) {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const txs = await query(
-            `SELECT t.*, u.nickname, p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
+            `SELECT t.*, u.nickname, u.nickname_en, p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
              FROM dbo.transactions t
              JOIN dbo.users u ON u.id = t.user_id
              JOIN dbo.packages p ON p.id = t.package_id
@@ -873,7 +896,7 @@ export function registerRoutes(app) {
             monthly,
             sales: txs.recordset.slice(0, 12).map((row) => ({
                 date: formatDate(new Date(row.created_at), lang),
-                student: row.nickname,
+                student: pick(row, 'nickname', lang),
                 pkg: `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours}`,
                 voucher: row.voucher_code || '—',
                 amount: Number(row.net_amount),
@@ -955,7 +978,7 @@ export function registerRoutes(app) {
 
     app.get('/api/admin/move-requests', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const result = await query(
-            `SELECT m.*, u.nickname, b.public_id AS booking_public_id,
+            `SELECT m.*, u.nickname, u.nickname_en, b.public_id AS booking_public_id,
                     CONVERT(varchar(10), s.slot_date, 23) AS requested_iso,
                     CONVERT(varchar(5), s.slot_time, 108) AS requested_time
              FROM dbo.move_requests m
@@ -1021,36 +1044,78 @@ export function registerRoutes(app) {
 
     app.get('/api/admin/settings', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
+        const origin = String(process.env.FRONTEND_ORIGIN || '').replace(/\/$/, '');
+        const callbackUrl = String(process.env.LINE_CALLBACK_URL || '').trim();
+        const sqlHost = String(process.env.SQL_SERVER || '').split(',')[0].trim();
         const pkgs = await query(
             `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
              FROM dbo.packages ORDER BY hours`,
         );
+        const roles = await query(
+            `SELECT role, COUNT(*) AS n FROM dbo.users WHERE status = N'Y' GROUP BY role`,
+        );
+        const upcoming = await query(
+            `SELECT COUNT(*) AS n FROM dbo.bookings WHERE status IN (N'pending', N'confirmed')`,
+        );
+        const counts = { student: 0, teacher: 0, admin: 0 };
+        for (const row of roles.recordset) {
+            if (row.role in counts) {
+                counts[row.role] = Number(row.n);
+            }
+        }
         res.json({
+            school: {
+                name: lang === 'en' ? 'Kru Air Singing School' : 'ครูแอร์ Singing School',
+                publicUrl: origin || 'https://kruair.thanvasupos.com',
+                studio: lang === 'en' ? 'Live 1:1 vocal lesson' : 'เรียนร้องเพลงสด ตัวต่อตัว 1:1',
+                closedDay: lang === 'en' ? 'Closed on Monday' : 'หยุดวันจันทร์',
+            },
+            accounts: {
+                ...counts,
+                upcomingLessons: Number(upcoming.recordset[0]?.n || 0),
+            },
             packages: pkgs.recordset.map((row) => ({
                 ...localizePackage(row, lang),
                 active: isYes(row.is_active),
             })),
-            slotTimes: SLOT_TIMES,
-            workingHours: lang === 'en' ? 'Tue–Sun 10:00–19:00' : 'อังคาร–อาทิตย์ 10:00–19:00 น.',
-            reminders: {
-                dayBefore: {
-                    enabled: true,
-                    channel: lang === 'en' ? 'In-app only' : 'ในเว็บเท่านั้น',
+            schedule: {
+                slotMinutes: 60,
+                slotTimes: SLOT_TIMES,
+                workingHours: lang === 'en' ? 'Tue–Sun 10:00–19:00' : 'อังคาร–อาทิตย์ 10:00–19:00 น.',
+                confirmHours: 24,
+                cancelHours: CANCEL_MIN_HOURS,
+                reminderWindowHours: [20, 28],
+                packageMonths: 6,
+                trialHours: 1,
+            },
+            integrations: {
+                lineLogin: {
+                    configured: isLineConfigured(),
+                    callbackUrl: callbackUrl || null,
                 },
-                packageExpiry: { enabled: false },
+                lineOa: { connected: false },
+                payment: {
+                    mode: 'mock',
+                    methods: ['card', 'kbank', 'promptpay'],
+                },
+            },
+            jobs: {
+                enabled: jobState.enabled,
                 lastRunAt: jobState.lastRunAt,
                 lastExpired: jobState.lastResult.expired,
                 lastReminded: jobState.lastResult.reminded,
+                dayBefore: { enabled: true, channel: 'in_app' },
+                expireUnconfirmed: { enabled: true },
+                packageExpiry: { enabled: false },
             },
-            lineOa: { connected: false },
-            lineLogin: { configured: isLineConfigured() },
-            security: {
-                encryptionAtRest: false,
-                dailyBackup: false,
-                httpsForced: false,
+            data: {
+                database: process.env.SQL_DATABASE || 'BD_AIR',
+                sqlHost: sqlHost || null,
+                https: origin.startsWith('https://'),
                 rbac: true,
                 pdpaConsentStored: true,
                 dsrSelfService: false,
+                dailyBackup: false,
             },
         });
     }));
@@ -1095,8 +1160,8 @@ export function registerRoutes(app) {
                 bookingId: row.booking_id,
                 slotId: row.id,
                 time: row.slot_hhmm,
-                student: lang === 'en' ? row.nickname : `น้อง${row.nickname}`,
-                studentName: row.name,
+                student: studentLabel(row, lang),
+                studentName: pick(row, 'name', lang),
                 lesson: pick(row, 'topic', lang) || (lang === 'en' ? 'Course based on your favorite genres' : 'คอร์สตามแนวเพลงที่ชอบ'),
                 status,
             };

@@ -60,6 +60,16 @@ async function seedI18n() {
     );
 
     await query(
+        `UPDATE dbo.users SET name_en = N'Somchai Jaidee', nickname_en = N'Mint' WHERE email = N'mint@email.com' AND name_en IS NULL;
+         UPDATE dbo.users SET name_en = N'Kru Air', nickname_en = N'Air' WHERE email = N'kruaer@email.com' AND name_en IS NULL;
+         UPDATE dbo.users SET name_en = N'Admin', nickname_en = N'Admin' WHERE email = N'admin@kruaer.com' AND name_en IS NULL;
+         UPDATE dbo.users SET name_en = N'Fern Wong', nickname_en = N'Fern' WHERE email = N'fern@email.com' AND name_en IS NULL;
+         UPDATE dbo.users SET name_en = N'Min Jaidee', nickname_en = N'Min' WHERE email = N'min@email.com' AND name_en IS NULL;
+         UPDATE dbo.users SET name_en = N'Tonnam Suda', nickname_en = N'Tonnam' WHERE email = N'tonnam@email.com' AND name_en IS NULL;
+         UPDATE dbo.users SET name_en = N'Prim Pimp', nickname_en = N'Prim' WHERE email = N'prim@email.com' AND name_en IS NULL;`,
+    );
+
+    await query(
         `UPDATE dbo.users SET avatar = N'/img/av-1.jpg' WHERE email = N'mint@email.com';
          UPDATE dbo.users SET avatar = N'/img/teacher-studio.jpg' WHERE email = N'kruaer@email.com';
          UPDATE dbo.users SET avatar = N'/img/av-3.jpg' WHERE email = N'admin@kruaer.com';

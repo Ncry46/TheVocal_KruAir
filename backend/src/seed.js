@@ -21,9 +21,9 @@ function addDays(date, days) {
 async function insertUser(row) {
     const hash = await bcrypt.hash(row.password, 10);
     const result = await query(
-        `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, nickname, age, education, education_en, genres, genres_en, reason, reason_en, line_linked, avatar, consent_pdpa_at)
+        `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, name_en, nickname, nickname_en, age, education, education_en, genres, genres_en, reason, reason_en, line_linked, avatar, consent_pdpa_at)
          OUTPUT INSERTED.id
-         VALUES (@role, @email, @phone, @emergency, @hash, @name, @nickname, @age, @education, @educationEn, @genres, @genresEn, @reason, @reasonEn, @lineLinked, @avatar, SYSUTCDATETIME())`,
+         VALUES (@role, @email, @phone, @emergency, @hash, @name, @nameEn, @nickname, @nicknameEn, @age, @education, @educationEn, @genres, @genresEn, @reason, @reasonEn, @lineLinked, @avatar, SYSUTCDATETIME())`,
         {
             role: row.role,
             email: row.email,
@@ -31,7 +31,9 @@ async function insertUser(row) {
             emergency: row.emergencyContact ?? null,
             hash,
             name: row.name,
+            nameEn: row.nameEn ?? row.name,
             nickname: row.nickname,
+            nicknameEn: row.nicknameEn ?? row.nickname,
             age: row.age,
             education: row.education,
             educationEn: educationEn(row.education),
