@@ -18,8 +18,9 @@ export default defineConfig({
             react: path.resolve(dir, 'node_modules/react'),
             'react-dom': path.resolve(dir, 'node_modules/react-dom'),
             'react-router-dom': path.resolve(dir, 'node_modules/react-router-dom'),
+            recharts: path.resolve(dir, 'node_modules/recharts'),
         },
-        dedupe: ['react', 'react-dom', 'react-router-dom'],
+        dedupe: ['react', 'react-dom', 'react-router-dom', 'recharts'],
     },
     server: {
         host: true,
