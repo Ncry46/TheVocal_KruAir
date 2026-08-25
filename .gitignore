@@ -3,6 +3,8 @@ node_modules/
 backend/.env
 air/
 *.log
+.freebuff/
+*.freebufftunnel.log
 frontend/dist/
 kruair-1.tar
 thanvasu-web-kruair-latest.tar
