@@ -12,6 +12,7 @@ export default function Sales() {
     if (!report)
         return <Spinner />;
     const max = Math.max(...report.monthly.map((m) => m.value));
+    const monthlyRevenueTitle = language === 'en' ? 'Monthly revenue (THB)' : 'รายได้รายเดือน (บาท)';
     const latestSalesTitle = language === 'en' ? 'Latest sales' : 'รายการขายล่าสุด';
     return (<>
       <div className="grid cols-4" style={{ marginBottom: 18 }}>
@@ -21,8 +22,8 @@ export default function Sales() {
         <Kpi tone="green" icon={<GraduationIcon width={19} height={19}/>} value={String(report.newStudents)} label="นักเรียนใหม่" sub="เดือนนี้"/>
       </div>
 
-      <div className="grid cols-2">
-        <Card title={latestSalesTitle} action={<Badge tone="green">12 เดือน</Badge>}>
+      <div className="grid">
+        <Card title={monthlyRevenueTitle} action={<Badge tone="green">12 เดือน</Badge>}>
           <div className="bar-chart">
             {report.monthly.map((m) => (<div className="bar" key={m.label}>
                 <b>{m.value}k</b>
