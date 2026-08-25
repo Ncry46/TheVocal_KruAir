@@ -920,8 +920,11 @@ export function registerRoutes(app) {
             const next = new Date(anchor.getFullYear() - i + 1, 0, 1);
             yearly.push(periodPoint(String(cursor.getFullYear()), String(cursor.getFullYear()), rowsBetween(cursor, next)));
         }
+        const visibleDaily = daily.filter((item) => item.orders > 0);
+        const visibleMonthly = monthlyAnalytics.filter((item) => item.orders > 0);
+        const visibleYearly = yearly.filter((item) => item.orders > 0);
         const monthRows = rows.filter((row) => new Date(row.analytics_at) >= anchorMonthStart);
-        const monthly = monthlyAnalytics.map((item) => ({
+        const monthly = visibleMonthly.map((item) => ({
             label: item.axisLabel,
             value: Math.round(item.revenue / 1000),
         }));
@@ -936,9 +939,9 @@ export function registerRoutes(app) {
             newStudents: Number(newStudents.recordset[0].n),
             monthly,
             analytics: {
-                daily,
-                monthly: monthlyAnalytics,
-                yearly,
+                daily: visibleDaily,
+                monthly: visibleMonthly,
+                yearly: visibleYearly,
             },
             sales: rows.slice(0, 12).map((row) => ({
                 date: formatDate(new Date(row.analytics_at), lang),
