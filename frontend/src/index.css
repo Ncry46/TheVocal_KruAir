@@ -247,11 +247,19 @@ tbody tr { transition: background 0.15s ease; }
 tbody tr:hover td { background: rgba(252, 0, 122, 0.045); }
 tbody tr:last-child td { border-bottom: none; }
 .sales-filter {
-  width: 96px;
-  min-width: 96px;
-  max-width: 96px;
-  padding: 7px 24px 7px 10px;
+  width: 118px;
+  min-width: 118px;
+  max-width: 118px;
+  padding: 7px 32px 7px 12px;
   font-size: 13px;
+}
+select.input.sales-filter,
+select.input.sales-filter:focus {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
 }
 .table-pagination {
   display: flex;
