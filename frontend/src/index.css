@@ -1,6 +1,3 @@
-@import "tailwindcss";
-@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
-
 /* ============================================================
    ครูแอร์ Singing School — Luxury Design System
    Ivory · Gold · Wine — modern & premium
@@ -1049,6 +1046,119 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .bar-chart .bar b { font-size: 11px; color: var(--wine); font-weight: 700; }
 .bar-chart .bar i { width: 100%; border-radius: 6px 6px 3px 3px; background: linear-gradient(180deg, #d60a6e, var(--wine)); }
 .bar-chart .bar span { font-size: 10.5px; color: var(--muted); }
+
+/* revenue analytics chart */
+.revenue-analytics-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.revenue-analytics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.revenue-analytics-head h3 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.revenue-analytics-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.timeframe-toggle {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+}
+.timeframe-toggle button {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--wine);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.timeframe-toggle button:hover { background: rgba(255, 255, 255, 0.72); }
+.timeframe-toggle button.active {
+  background: var(--gold);
+  color: #fff;
+  box-shadow: 0 12px 26px -14px rgba(252, 0, 122, 0.7);
+}
+.revenue-chart-shell {
+  width: 100%;
+  height: 340px;
+}
+.revenue-tooltip {
+  min-width: 230px;
+  padding: 16px;
+  border: 1px solid rgba(252, 0, 122, 0.22);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+}
+.revenue-tooltip-title {
+  margin-bottom: 4px;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.revenue-tooltip-total {
+  color: var(--gold);
+  font-weight: 800;
+}
+.revenue-tooltip-orders {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.revenue-tooltip-breakdown {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.revenue-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.revenue-tooltip-row b {
+  color: var(--ink);
+}
+
+@media (max-width: 720px) {
+  .revenue-analytics-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .timeframe-toggle {
+    width: 100%;
+  }
+  .timeframe-toggle button {
+    flex: 1;
+    padding-inline: 10px;
+  }
+}
 
 /* booking */
 .chip-row { display: flex; flex-wrap: wrap; gap: 9px; }

@@ -78,21 +78,21 @@ function RevenueTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const item = payload[0].payload;
   return (
-    <div className="rounded-2xl border border-rose-200/80 bg-white/95 p-4 text-sm shadow-2xl shadow-rose-950/10 backdrop-blur dark:border-rose-300/20 dark:bg-[#20121d]/95">
-      <div className="mb-1 font-serif text-base font-bold text-rose-900 dark:text-rose-100">
+    <div className="revenue-tooltip">
+      <div className="revenue-tooltip-title">
         {item.period}
       </div>
-      <div className="font-bold text-rose-600 dark:text-rose-300">
+      <div className="revenue-tooltip-total">
         รายได้รวม: ฿{item.revenue.toLocaleString('th-TH')}
       </div>
-      <div className="mt-1 text-slate-600 dark:text-rose-100/75">
+      <div className="revenue-tooltip-orders">
         ออเดอร์ทั้งหมด: {item.orders.toLocaleString('th-TH')}
       </div>
-      <div className="mt-3 space-y-1 border-t border-rose-100 pt-3 dark:border-rose-300/15">
+      <div className="revenue-tooltip-breakdown">
         {Object.entries(item.packages).map(([name, units]) => (
-          <div key={name} className="flex items-center justify-between gap-6 text-xs">
-            <span className="text-slate-500 dark:text-rose-100/65">{name}</span>
-            <b className="text-slate-800 dark:text-rose-50">{units} units</b>
+          <div key={name} className="revenue-tooltip-row">
+            <span>{name}</span>
+            <b>{units} units</b>
           </div>
         ))}
       </div>
@@ -108,29 +108,25 @@ export function RevenueAnalyticsChart() {
   );
 
   return (
-    <section className="rounded-[24px] border border-rose-100 bg-white p-5 shadow-[0_24px_70px_-36px_rgba(200,16,100,0.36)] dark:border-rose-300/15 dark:bg-[#20121d]">
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="revenue-analytics-card">
+      <div className="revenue-analytics-head">
         <div>
-          <h3 className="font-serif text-xl font-bold text-[#2e1220] dark:text-rose-50">
+          <h3>
             รายงานยอดขาย (Revenue Analytics)
           </h3>
-          <p className="mt-1 text-sm text-[#8a6878] dark:text-rose-100/65">
+          <p>
             วิเคราะห์รายได้ ออเดอร์ และแพ็กเกจขายดีของ Kru Air Vocal Studio
           </p>
         </div>
 
-        <div className="flex rounded-full border border-rose-100 bg-rose-50 p-1 dark:border-rose-300/15 dark:bg-rose-950/20">
+        <div className="timeframe-toggle">
           {timeframeOptions.map((option) => {
             const isActive = timeframe === option.key;
             return (
               <button
                 key={option.key}
                 type="button"
-                className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                  isActive
-                    ? 'bg-[#fc007a] text-white shadow-lg shadow-rose-500/25'
-                    : 'text-[#a0105e] hover:bg-white/75 dark:text-rose-100 dark:hover:bg-white/10'
-                }`}
+                className={isActive ? 'active' : ''}
                 onClick={() => setTimeframe(option.key)}
               >
                 {option.label}
@@ -140,7 +136,7 @@ export function RevenueAnalyticsChart() {
         </div>
       </div>
 
-      <div className="h-[340px] w-full">
+      <div className="revenue-chart-shell">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={activeOption.data} margin={{ top: 18, right: 16, left: 4, bottom: 0 }}>
             <defs>
