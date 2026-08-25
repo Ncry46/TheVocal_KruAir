@@ -261,6 +261,17 @@ select.input.sales-filter:focus {
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
+.sales-date-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sales-date-filter {
+  width: 154px;
+  min-width: 154px;
+  padding-block: 7px;
+  font-size: 13px;
+}
 .table-pagination {
   display: flex;
   align-items: center;

@@ -7,39 +7,30 @@ import { useApp } from '@app/context/AppContext';
 export default function Sales() {
     const { language } = useApp();
     const [report, setReport] = useState(null);
-    const [salesPeriod, setSalesPeriod] = useState('monthly');
+    const [salesDate, setSalesDate] = useState('');
     const [salesPage, setSalesPage] = useState(1);
     useEffect(() => {
         api.getSalesReport().then(setReport);
     }, [language]);
     useEffect(() => {
+        if (!salesDate && report?.sales?.[0]?.paidAt) {
+            setSalesDate(report.sales[0].paidAt.slice(0, 10));
+        }
+    }, [report, salesDate]);
+    useEffect(() => {
         setSalesPage(1);
-    }, [salesPeriod]);
+    }, [salesDate]);
     const latestSalesTitle = language === 'en' ? 'Latest sales' : 'รายการขายล่าสุด';
-    const salesPeriodOptions = [
-        { value: 'daily', label: language === 'en' ? 'Daily' : 'รายวัน' },
-        { value: 'monthly', label: language === 'en' ? 'Monthly' : 'รายเดือน' },
-        { value: 'yearly', label: language === 'en' ? 'Yearly' : 'รายปี' },
-    ];
     const filteredSales = useMemo(() => {
         const sales = report?.sales ?? [];
-        const anchor = sales[0]?.paidAt ? new Date(sales[0].paidAt) : null;
-        if (!anchor)
+        if (!salesDate)
             return sales;
         return sales.filter((sale) => {
-            const paidAt = new Date(sale.paidAt);
-            if (salesPeriod === 'daily') {
-                return paidAt.getFullYear() === anchor.getFullYear()
-                    && paidAt.getMonth() === anchor.getMonth()
-                    && paidAt.getDate() === anchor.getDate();
-            }
-            if (salesPeriod === 'yearly') {
-                return paidAt.getFullYear() === anchor.getFullYear();
-            }
-            return paidAt.getFullYear() === anchor.getFullYear()
-                && paidAt.getMonth() === anchor.getMonth();
+            if (!sale.paidAt)
+                return false;
+            return sale.paidAt.slice(0, 10) === salesDate;
         });
-    }, [report?.sales, salesPeriod]);
+    }, [report?.sales, salesDate]);
     const pageSize = 10;
     const totalPages = Math.max(1, Math.ceil(filteredSales.length / pageSize));
     const safePage = Math.min(salesPage, totalPages);
@@ -59,9 +50,12 @@ export default function Sales() {
 
         <Card
           title={latestSalesTitle}
-          action={<select className="input sales-filter" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value)}>
-            {salesPeriodOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
-          </select>}
+          action={<div className="sales-date-actions">
+            <input className="input sales-date-filter" type="date" value={salesDate} onChange={(e) => setSalesDate(e.target.value)} />
+            <button className="btn ghost sm" type="button" onClick={() => setSalesDate('')}>
+              {language === 'en' ? 'All' : 'ทั้งหมด'}
+            </button>
+          </div>}
         >
           <Table heads={['วันที่', 'นักเรียน', 'แพ็กเกจ', 'วอเชอร์', 'ยอด', 'ช่องทาง']} rows={pagedSales.map((s) => [
             s.date,
