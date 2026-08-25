@@ -895,50 +895,34 @@ export function registerRoutes(app) {
             acc[label] = (acc[label] ?? 0) + 1;
             return acc;
         }, {});
-        const periodPoint = (period, axisLabel, periodRows, meta = {}) => ({
+        const periodPoint = (period, axisLabel, periodRows) => ({
             period,
             axisLabel,
             revenue: periodRows.reduce((acc, row) => acc + Number(row.net_amount), 0),
             orders: periodRows.length,
             packages: packageBreakdown(periodRows),
-            ...meta,
         });
-        const groupRows = (keyFor) => {
-            const groups = new Map();
-            rows.forEach((row) => {
-                const at = new Date(row.analytics_at);
-                const key = keyFor(at);
-                const next = groups.get(key) ?? [];
-                next.push(row);
-                groups.set(key, next);
-            });
-            return groups;
-        };
-        const dailyGroups = groupRows((date) => date.toISOString().slice(0, 10));
-        const visibleDaily = Array.from(dailyGroups.entries()).map(([key, periodRows]) => {
-            const date = new Date(`${key}T00:00:00`);
-            return periodPoint(formatDate(date, lang), String(date.getDate()), periodRows, {
-                key,
-                year: date.getFullYear(),
-                month: date.getMonth() + 1,
-                day: date.getDate(),
-            });
-        }).sort((a, b) => a.key.localeCompare(b.key));
-        const monthlyGroups = groupRows((date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
-        const visibleMonthly = Array.from(monthlyGroups.entries()).map(([key, periodRows]) => {
-            const [year, month] = key.split('-').map(Number);
-            const date = new Date(year, month - 1, 1);
-            return periodPoint(monthYear(date, lang), monthYear(date, lang).split(' ')[0], periodRows, {
-                key,
-                year,
-                month,
-            });
-        }).sort((a, b) => a.key.localeCompare(b.key));
-        const yearlyGroups = groupRows((date) => String(date.getFullYear()));
-        const visibleYearly = Array.from(yearlyGroups.entries()).map(([key, periodRows]) => periodPoint(key, key, periodRows, {
-            key,
-            year: Number(key),
-        })).sort((a, b) => a.year - b.year);
+        const daily = [];
+        for (let i = 29; i >= 0; i -= 1) {
+            const cursor = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - i);
+            const next = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - i + 1);
+            daily.push(periodPoint(formatDate(cursor, lang), String(cursor.getDate()), rowsBetween(cursor, next)));
+        }
+        const monthlyAnalytics = [];
+        for (let i = 11; i >= 0; i -= 1) {
+            const cursor = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
+            const next = new Date(anchor.getFullYear(), anchor.getMonth() - i + 1, 1);
+            monthlyAnalytics.push(periodPoint(monthYear(cursor, lang), monthYear(cursor, lang).split(' ')[0], rowsBetween(cursor, next)));
+        }
+        const yearly = [];
+        for (let i = 2; i >= 0; i -= 1) {
+            const cursor = new Date(anchor.getFullYear() - i, 0, 1);
+            const next = new Date(anchor.getFullYear() - i + 1, 0, 1);
+            yearly.push(periodPoint(String(cursor.getFullYear()), String(cursor.getFullYear()), rowsBetween(cursor, next)));
+        }
+        const visibleDaily = daily.filter((item) => item.orders > 0);
+        const visibleMonthly = monthlyAnalytics.filter((item) => item.orders > 0);
+        const visibleYearly = yearly.filter((item) => item.orders > 0);
         const monthRows = rows.filter((row) => new Date(row.analytics_at) >= anchorMonthStart);
         const monthly = visibleMonthly.map((item) => ({
             label: item.axisLabel,
