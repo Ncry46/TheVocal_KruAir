@@ -4,22 +4,7 @@ import { Card, Kpi, Spinner, Table } from '@components/ui';
 import { GraduationIcon, ReceiptIcon, TicketIcon, WalletIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
-
-const PAGE_SIZE = 10;
-
-function saleInPeriod(sale, period, anchor) {
-    const paidAt = new Date(sale.paidAt);
-    if (period === 'daily') {
-        return paidAt.getFullYear() === anchor.getFullYear()
-            && paidAt.getMonth() === anchor.getMonth()
-            && paidAt.getDate() === anchor.getDate();
-    }
-    if (period === 'yearly') {
-        return paidAt.getFullYear() === anchor.getFullYear();
-    }
-    return paidAt.getFullYear() === anchor.getFullYear()
-        && paidAt.getMonth() === anchor.getMonth();
-}
+import { filterSalesByPeriod, paginateSales, SALES_PAGE_SIZE } from './salesTable';
 
 export default function Sales() {
     const { language } = useApp();
@@ -38,16 +23,11 @@ export default function Sales() {
         { value: 'monthly', label: language === 'en' ? 'Monthly' : 'รายเดือน' },
         { value: 'yearly', label: language === 'en' ? 'Yearly' : 'รายปี' },
     ];
-    const filteredSales = useMemo(() => {
-        const sales = report?.sales ?? [];
-        const anchor = sales[0]?.paidAt ? new Date(sales[0].paidAt) : null;
-        if (!anchor)
-            return sales;
-        return sales.filter((sale) => saleInPeriod(sale, salesPeriod, anchor));
-    }, [report?.sales, salesPeriod]);
-    const totalPages = Math.max(1, Math.ceil(filteredSales.length / PAGE_SIZE));
-    const safePage = Math.min(salesPage, totalPages);
-    const pagedSales = filteredSales.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+    const filteredSales = useMemo(
+        () => filterSalesByPeriod(report?.sales ?? [], salesPeriod),
+        [report?.sales, salesPeriod],
+    );
+    const { totalPages, safePage, rows: pagedSales, showPagination } = paginateSales(filteredSales, salesPage, SALES_PAGE_SIZE);
     const emptyMessage = language === 'en' ? 'No sales in this period' : 'ไม่มีรายการขายในช่วงนี้';
     if (!report)
         return <Spinner />;
@@ -80,7 +60,7 @@ export default function Sales() {
               s.method,
             ])}/>
           )}
-          {filteredSales.length > PAGE_SIZE && (<div className="table-pagination">
+          {showPagination && (<div className="table-pagination">
               <button className="btn ghost sm" type="button" disabled={safePage === 1} onClick={() => setSalesPage((page) => Math.max(1, page - 1))}>
                 {language === 'en' ? 'Previous' : 'ก่อนหน้า'}
               </button>
