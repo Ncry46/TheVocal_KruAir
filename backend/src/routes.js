@@ -860,20 +860,23 @@ export function registerRoutes(app) {
     app.get('/api/admin/sales', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const hoursUnit = lang === 'en' ? 'hrs' : 'ชม.';
         const txs = await query(
-            `SELECT t.*, u.nickname, u.nickname_en, p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
+            `SELECT t.*, COALESCE(t.paid_at, t.created_at) AS analytics_at,
+                    u.nickname, u.nickname_en, p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
              FROM dbo.transactions t
              JOIN dbo.users u ON u.id = t.user_id
              JOIN dbo.packages p ON p.id = t.package_id
-             WHERE t.status = N'success'
-             ORDER BY t.created_at DESC`,
+             WHERE LOWER(t.status) IN (N'success', N'paid', N'completed')
+                OR t.paid_at IS NOT NULL
+             ORDER BY COALESCE(t.paid_at, t.created_at) DESC`,
         );
         const rows = txs.recordset;
+        const anchor = rows[0]?.analytics_at ? new Date(rows[0].analytics_at) : now;
+        const anchorMonthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
         const packageLabel = (row) => `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours} ${hoursUnit}`;
         const rowsBetween = (start, end) => rows.filter((row) => {
-            const at = new Date(row.created_at);
+            const at = new Date(row.analytics_at);
             return at >= start && at < end;
         });
         const packageBreakdown = (periodRows) => periodRows.reduce((acc, row) => {
@@ -890,30 +893,30 @@ export function registerRoutes(app) {
         });
         const daily = [];
         for (let i = 29; i >= 0; i -= 1) {
-            const cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-            const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+            const cursor = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - i);
+            const next = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - i + 1);
             daily.push(periodPoint(formatDate(cursor, lang), String(cursor.getDate()), rowsBetween(cursor, next)));
         }
         const monthlyAnalytics = [];
         for (let i = 11; i >= 0; i -= 1) {
-            const cursor = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+            const cursor = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
+            const next = new Date(anchor.getFullYear(), anchor.getMonth() - i + 1, 1);
             monthlyAnalytics.push(periodPoint(monthYear(cursor, lang), monthYear(cursor, lang).split(' ')[0], rowsBetween(cursor, next)));
         }
         const yearly = [];
         for (let i = 2; i >= 0; i -= 1) {
-            const cursor = new Date(now.getFullYear() - i, 0, 1);
-            const next = new Date(now.getFullYear() - i + 1, 0, 1);
+            const cursor = new Date(anchor.getFullYear() - i, 0, 1);
+            const next = new Date(anchor.getFullYear() - i + 1, 0, 1);
             yearly.push(periodPoint(String(cursor.getFullYear()), String(cursor.getFullYear()), rowsBetween(cursor, next)));
         }
-        const monthRows = rows.filter((row) => new Date(row.created_at) >= monthStart);
+        const monthRows = rows.filter((row) => new Date(row.analytics_at) >= anchorMonthStart);
         const monthly = monthlyAnalytics.map((item) => ({
             label: item.axisLabel,
             value: Math.round(item.revenue / 1000),
         }));
         const newStudents = await query(
             `SELECT COUNT(*) AS n FROM dbo.users WHERE role = 'student' AND created_at >= @monthStart`,
-            { monthStart: monthStart.toISOString() },
+            { monthStart: anchorMonthStart.toISOString() },
         );
         res.json({
             revenue: monthRows.reduce((acc, row) => acc + Number(row.net_amount), 0),
@@ -927,7 +930,7 @@ export function registerRoutes(app) {
                 yearly,
             },
             sales: rows.slice(0, 12).map((row) => ({
-                date: formatDate(new Date(row.created_at), lang),
+                date: formatDate(new Date(row.analytics_at), lang),
                 student: pick(row, 'nickname', lang),
                 pkg: packageLabel(row),
                 voucher: row.voucher_code || '—',
