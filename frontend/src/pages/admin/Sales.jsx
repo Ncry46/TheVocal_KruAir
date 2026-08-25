@@ -12,6 +12,7 @@ export default function Sales() {
     if (!report)
         return <Spinner />;
     const max = Math.max(...report.monthly.map((m) => m.value));
+    const latestSalesTitle = language === 'en' ? 'Latest sales' : 'รายการขายล่าสุด';
     return (<>
       <div className="grid cols-4" style={{ marginBottom: 18 }}>
         <Kpi tone="pink" icon={<WalletIcon width={19} height={19}/>} value={`฿${report.revenue.toLocaleString()}`} label="รายได้เดือน ส.ค." sub="+18% vs เดือนก่อน"/>
@@ -21,7 +22,7 @@ export default function Sales() {
       </div>
 
       <div className="grid cols-2">
-        <Card title="รายได้รายเดือน (บาท)" action={<Badge tone="green">12 เดือน</Badge>}>
+        <Card title={latestSalesTitle} action={<Badge tone="green">12 เดือน</Badge>}>
           <div className="bar-chart">
             {report.monthly.map((m) => (<div className="bar" key={m.label}>
                 <b>{m.value}k</b>
@@ -31,7 +32,7 @@ export default function Sales() {
           </div>
         </Card>
 
-        <Card title="รายการขายล่าสุด">
+        <Card title={latestSalesTitle}>
           <Table heads={['วันที่', 'นักเรียน', 'แพ็กเกจ', 'วอเชอร์', 'ยอด', 'ช่องทาง']} rows={report.sales.map((s) => [
             s.date,
             <b key="n">{s.student}</b>,
