@@ -261,16 +261,30 @@ select.input.sales-filter:focus {
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
-.sales-date-actions {
+.sales-filter-toggle {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
 }
-.sales-date-filter {
-  width: 154px;
-  min-width: 154px;
-  padding-block: 7px;
-  font-size: 13px;
+.sales-filter-toggle button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--wine);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.sales-filter-toggle button:hover { background: rgba(255, 255, 255, 0.72); }
+.sales-filter-toggle button.active {
+  background: var(--gold);
+  color: #fff;
+  box-shadow: 0 12px 26px -14px rgba(252, 0, 122, 0.7);
 }
 .table-pagination {
   display: flex;
@@ -1268,10 +1282,12 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
     align-items: flex-start;
     flex-direction: column;
   }
-  .timeframe-toggle {
+  .timeframe-toggle,
+  .sales-filter-toggle {
     width: 100%;
   }
-  .timeframe-toggle button {
+  .timeframe-toggle button,
+  .sales-filter-toggle button {
     flex: 1;
     padding-inline: 10px;
   }
