@@ -943,13 +943,14 @@ export function registerRoutes(app) {
                 monthly: visibleMonthly,
                 yearly: visibleYearly,
             },
-            sales: rows.slice(0, 12).map((row) => ({
+            sales: rows.map((row) => ({
                 date: formatDate(new Date(row.analytics_at), lang),
                 student: pick(row, 'nickname', lang) || `User #${row.user_id}`,
                 pkg: packageLabel(row),
                 voucher: row.voucher_code || '—',
                 amount: Number(row.net_amount),
                 method: pick(row, 'method', lang),
+                paidAt: new Date(row.analytics_at).toISOString(),
             })),
         });
     }));
