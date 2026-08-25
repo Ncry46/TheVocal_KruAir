@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RevenueAnalyticsChart } from '@components/admin/RevenueAnalyticsChart';
 import { Card, Kpi, Spinner, Table } from '@components/ui';
 import { GraduationIcon, ReceiptIcon, TicketIcon, WalletIcon } from '@components/icons';
@@ -7,34 +7,10 @@ import { useApp } from '@app/context/AppContext';
 export default function Sales() {
     const { language } = useApp();
     const [report, setReport] = useState(null);
-    const [salesDate, setSalesDate] = useState('');
-    const [salesPage, setSalesPage] = useState(1);
     useEffect(() => {
         api.getSalesReport().then(setReport);
     }, [language]);
-    useEffect(() => {
-        if (!salesDate && report?.sales?.[0]?.paidAt) {
-            setSalesDate(report.sales[0].paidAt.slice(0, 10));
-        }
-    }, [report, salesDate]);
-    useEffect(() => {
-        setSalesPage(1);
-    }, [salesDate]);
     const latestSalesTitle = language === 'en' ? 'Latest sales' : 'รายการขายล่าสุด';
-    const filteredSales = useMemo(() => {
-        const sales = report?.sales ?? [];
-        if (!salesDate)
-            return sales;
-        return sales.filter((sale) => {
-            if (!sale.paidAt)
-                return false;
-            return sale.paidAt.slice(0, 10) === salesDate;
-        });
-    }, [report?.sales, salesDate]);
-    const pageSize = 10;
-    const totalPages = Math.max(1, Math.ceil(filteredSales.length / pageSize));
-    const safePage = Math.min(salesPage, totalPages);
-    const pagedSales = filteredSales.slice((safePage - 1) * pageSize, safePage * pageSize);
     if (!report)
         return <Spinner />;
     return (<>
@@ -48,16 +24,8 @@ export default function Sales() {
       <div className="grid">
         <RevenueAnalyticsChart analytics={report.analytics} />
 
-        <Card
-          title={latestSalesTitle}
-          action={<div className="sales-date-actions">
-            <input className="input sales-date-filter" type="date" value={salesDate} onChange={(e) => setSalesDate(e.target.value)} />
-            <button className="btn ghost sm" type="button" onClick={() => setSalesDate('')}>
-              {language === 'en' ? 'All' : 'ทั้งหมด'}
-            </button>
-          </div>}
-        >
-          <Table heads={['วันที่', 'นักเรียน', 'แพ็กเกจ', 'วอเชอร์', 'ยอด', 'ช่องทาง']} rows={pagedSales.map((s) => [
+        <Card title={latestSalesTitle}>
+          <Table heads={['วันที่', 'นักเรียน', 'แพ็กเกจ', 'วอเชอร์', 'ยอด', 'ช่องทาง']} rows={report.sales.map((s) => [
             s.date,
             <b key="n">{s.student}</b>,
             s.pkg,
@@ -65,17 +33,6 @@ export default function Sales() {
             <b key="a">฿{s.amount.toLocaleString()}</b>,
             s.method,
         ])}/>
-          {filteredSales.length > pageSize && (<div className="table-pagination">
-              <button className="btn ghost sm" disabled={safePage === 1} onClick={() => setSalesPage((page) => Math.max(1, page - 1))}>
-                {language === 'en' ? 'Previous' : 'ก่อนหน้า'}
-              </button>
-              <span>
-                {language === 'en' ? 'Page' : 'หน้า'} {safePage} / {totalPages}
-              </span>
-              <button className="btn ghost sm" disabled={safePage === totalPages} onClick={() => setSalesPage((page) => Math.min(totalPages, page + 1))}>
-                {language === 'en' ? 'Next' : 'ถัดไป'}
-              </button>
-            </div>)}
         </Card>
       </div>
     </>);
