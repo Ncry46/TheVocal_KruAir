@@ -22,7 +22,7 @@ export default function Sales() {
       </div>
 
       <div className="grid">
-        <RevenueAnalyticsChart />
+        <RevenueAnalyticsChart analytics={report.analytics} />
 
         <Card title={latestSalesTitle}>
           <Table heads={['วันที่', 'นักเรียน', 'แพ็กเกจ', 'วอเชอร์', 'ยอด', 'ช่องทาง']} rows={report.sales.map((s) => [

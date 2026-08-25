@@ -861,29 +861,56 @@ export function registerRoutes(app) {
         const lang = resolveLang(req);
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const hoursUnit = lang === 'en' ? 'hrs' : 'ชม.';
         const txs = await query(
             `SELECT t.*, u.nickname, u.nickname_en, p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours
              FROM dbo.transactions t
              JOIN dbo.users u ON u.id = t.user_id
              JOIN dbo.packages p ON p.id = t.package_id
+             WHERE t.status = N'success'
              ORDER BY t.created_at DESC`,
         );
-        const monthRows = txs.recordset.filter((row) => new Date(row.created_at) >= monthStart);
-        const monthly = [];
+        const rows = txs.recordset;
+        const packageLabel = (row) => `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours} ${hoursUnit}`;
+        const rowsBetween = (start, end) => rows.filter((row) => {
+            const at = new Date(row.created_at);
+            return at >= start && at < end;
+        });
+        const packageBreakdown = (periodRows) => periodRows.reduce((acc, row) => {
+            const label = packageLabel(row);
+            acc[label] = (acc[label] ?? 0) + 1;
+            return acc;
+        }, {});
+        const periodPoint = (period, axisLabel, periodRows) => ({
+            period,
+            axisLabel,
+            revenue: periodRows.reduce((acc, row) => acc + Number(row.net_amount), 0),
+            orders: periodRows.length,
+            packages: packageBreakdown(periodRows),
+        });
+        const daily = [];
+        for (let i = 29; i >= 0; i -= 1) {
+            const cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+            const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+            daily.push(periodPoint(formatDate(cursor, lang), String(cursor.getDate()), rowsBetween(cursor, next)));
+        }
+        const monthlyAnalytics = [];
         for (let i = 11; i >= 0; i -= 1) {
             const cursor = new Date(now.getFullYear(), now.getMonth() - i, 1);
             const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-            const sum = txs.recordset
-                .filter((row) => {
-                    const at = new Date(row.created_at);
-                    return at >= cursor && at < next;
-                })
-                .reduce((acc, row) => acc + Number(row.net_amount), 0);
-            monthly.push({
-                label: monthYear(cursor, lang).split(' ')[0],
-                value: Math.round(sum / 1000),
-            });
+            monthlyAnalytics.push(periodPoint(monthYear(cursor, lang), monthYear(cursor, lang).split(' ')[0], rowsBetween(cursor, next)));
         }
+        const yearly = [];
+        for (let i = 2; i >= 0; i -= 1) {
+            const cursor = new Date(now.getFullYear() - i, 0, 1);
+            const next = new Date(now.getFullYear() - i + 1, 0, 1);
+            yearly.push(periodPoint(String(cursor.getFullYear()), String(cursor.getFullYear()), rowsBetween(cursor, next)));
+        }
+        const monthRows = rows.filter((row) => new Date(row.created_at) >= monthStart);
+        const monthly = monthlyAnalytics.map((item) => ({
+            label: item.axisLabel,
+            value: Math.round(item.revenue / 1000),
+        }));
         const newStudents = await query(
             `SELECT COUNT(*) AS n FROM dbo.users WHERE role = 'student' AND created_at >= @monthStart`,
             { monthStart: monthStart.toISOString() },
@@ -894,10 +921,15 @@ export function registerRoutes(app) {
             vouchersUsed: monthRows.filter((row) => row.voucher_code).length,
             newStudents: Number(newStudents.recordset[0].n),
             monthly,
-            sales: txs.recordset.slice(0, 12).map((row) => ({
+            analytics: {
+                daily,
+                monthly: monthlyAnalytics,
+                yearly,
+            },
+            sales: rows.slice(0, 12).map((row) => ({
                 date: formatDate(new Date(row.created_at), lang),
                 student: pick(row, 'nickname', lang),
-                pkg: `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.hours}`,
+                pkg: packageLabel(row),
                 voucher: row.voucher_code || '—',
                 amount: Number(row.net_amount),
                 method: pick(row, 'method', lang),
