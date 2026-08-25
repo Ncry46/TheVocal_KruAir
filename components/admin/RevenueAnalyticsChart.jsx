@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -28,11 +28,15 @@ function formatTHB(value) {
 
 function normalizePoint(point) {
   return {
+    key: point.key,
     period: point.period,
     axisLabel: point.axisLabel ?? point.period,
     revenue: Number(point.revenue ?? 0),
     orders: Number(point.orders ?? 0),
     packages: point.packages ?? {},
+    year: point.year,
+    month: point.month,
+    day: point.day,
   };
 }
 
@@ -77,6 +81,9 @@ function DonutTooltip({ active, payload }) {
 
 export function RevenueAnalyticsChart({ analytics }) {
   const [timeframe, setTimeframe] = useState('monthly');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [focusedPoint, setFocusedPoint] = useState(null);
   const timeframeOptions = useMemo(
     () => ['daily', 'monthly', 'yearly'].map((key) => ({
       key,
@@ -89,9 +96,43 @@ export function RevenueAnalyticsChart({ analytics }) {
     () => timeframeOptions.find((option) => option.key === timeframe) ?? timeframeOptions[1],
     [timeframe, timeframeOptions],
   );
+  const availableYears = useMemo(
+    () => Array.from(new Set(activeOption.data.map((item) => item.year).filter(Boolean))).sort((a, b) => b - a),
+    [activeOption.data],
+  );
+  const availableMonths = useMemo(
+    () => Array.from(new Set(activeOption.data
+      .filter((item) => !selectedYear || item.year === Number(selectedYear))
+      .map((item) => item.month)
+      .filter(Boolean))).sort((a, b) => b - a),
+    [activeOption.data, selectedYear],
+  );
+  useEffect(() => {
+    const years = Array.from(new Set(activeOption.data.map((item) => item.year).filter(Boolean))).sort((a, b) => b - a);
+    setSelectedYear((current) => (current && years.includes(Number(current)) ? current : String(years[0] ?? '')));
+    setFocusedPoint(null);
+  }, [activeOption.data, timeframe]);
+  useEffect(() => {
+    if (timeframe !== 'daily') {
+      setSelectedMonth('');
+      return;
+    }
+    const months = Array.from(new Set(activeOption.data
+      .filter((item) => !selectedYear || item.year === Number(selectedYear))
+      .map((item) => item.month)
+      .filter(Boolean))).sort((a, b) => b - a);
+    setSelectedMonth((current) => (current && months.includes(Number(current)) ? current : String(months[0] ?? '')));
+  }, [activeOption.data, selectedYear, timeframe]);
+  const filteredData = useMemo(() => activeOption.data.filter((item) => {
+    if (timeframe === 'yearly') return true;
+    if (selectedYear && item.year !== Number(selectedYear)) return false;
+    if (timeframe === 'daily' && selectedMonth && item.month !== Number(selectedMonth)) return false;
+    return true;
+  }), [activeOption.data, selectedMonth, selectedYear, timeframe]);
   const donutData = useMemo(() => {
+    const donutSource = focusedPoint ? [focusedPoint] : filteredData;
     const totals = new Map();
-    activeOption.data.forEach((point) => {
+    donutSource.forEach((point) => {
       Object.entries(point.packages).forEach(([name, units]) => {
         totals.set(name, (totals.get(name) ?? 0) + Number(units || 0));
       });
@@ -99,8 +140,13 @@ export function RevenueAnalyticsChart({ analytics }) {
     return Array.from(totals, ([name, value]) => ({ name, value }))
       .filter((item) => item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [activeOption.data]);
+  }, [filteredData, focusedPoint]);
   const bestSeller = donutData[0];
+  const monthLabel = (month) => new Date(2026, Number(month) - 1, 1).toLocaleString('th-TH', { month: 'short' });
+  const focusChartPoint = (state) => {
+    const next = state?.activePayload?.[0]?.payload;
+    if (next) setFocusedPoint(next);
+  };
 
   return (
     <section className="revenue-analytics-card">
@@ -127,10 +173,33 @@ export function RevenueAnalyticsChart({ analytics }) {
         </div>
       </div>
 
+      <div className="revenue-period-controls">
+        {timeframe !== 'yearly' && availableYears.length > 0 && (
+          <select className="input revenue-period-select" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+            {availableYears.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        )}
+        {timeframe === 'daily' && availableMonths.length > 0 && (
+          <select className="input revenue-period-select" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+            {availableMonths.map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}
+          </select>
+        )}
+        {focusedPoint && (
+          <button className="btn ghost sm" type="button" onClick={() => setFocusedPoint(null)}>
+            ดูรวมทั้งช่วง
+          </button>
+        )}
+      </div>
+
       <div className="revenue-analytics-grid">
         <div className="revenue-chart-shell">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={activeOption.data} margin={{ top: 18, right: 16, left: 4, bottom: 0 }}>
+            <AreaChart
+              data={filteredData}
+              margin={{ top: 18, right: 16, left: 4, bottom: 0 }}
+              onMouseMove={focusChartPoint}
+              onClick={focusChartPoint}
+            >
               <defs>
                 <linearGradient id="revenueRoseGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#fc007a" stopOpacity={0.35} />
@@ -168,7 +237,7 @@ export function RevenueAnalyticsChart({ analytics }) {
         <aside className="package-donut-card">
           <div>
             <h4>แพ็กเกจขายดีที่สุด</h4>
-            <p>{bestSeller ? `${bestSeller.name} · ${bestSeller.value} units` : 'ยังไม่มีข้อมูลการขาย'}</p>
+            <p>{bestSeller ? `${bestSeller.name} · ${bestSeller.value} units${focusedPoint ? ` · ${focusedPoint.period}` : ''}` : 'ยังไม่มีข้อมูลการขาย'}</p>
           </div>
           <div className="package-donut-shell">
             <ResponsiveContainer width="100%" height="100%">
