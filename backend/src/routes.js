@@ -11,10 +11,12 @@ import {
     signLinePending,
     verifyLinePending,
 } from './lineLogin.js';
+import { isLineMessagingConfigured } from './lineMessaging.js';
 import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, requiredPersonNames, resolveLang, slotLabel, slotStatus } from './lang.js';
 import { defaultAvatar } from './avatar.js';
 import { parseIsoDate, plusOneHour, toIsoDate } from './dates.js';
 import { canStudentCancel, hoursUntilSlot, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
+import { packageHoursLeft } from './packagePolicy.js';
 import { jobState } from './jobs.js';
 import {
     activePackage,
@@ -23,8 +25,11 @@ import {
     assertStudentPhone,
     bulkCloseTeacherSlots,
     cancelLessonBooking,
+    cancelStudentOffer,
     createLessonBooking,
     createPackagePurchase,
+    createStandardPackage,
+    createStudentOffer,
     createTeacherSlot,
     defaultTeacherId,
     discountForVoucher,
@@ -36,16 +41,22 @@ import {
     findUserByLogin,
     linkLineAccount,
     isYes,
+    listAdminPackages,
+    listStudentOffers,
     listTeacherMonthSlots,
     mapMoveRequest,
     mapNotification,
+    mapStudentOffer,
+    maybeNotifyPackageHours,
     normalizePhone,
+    notifyHomeworkAssigned,
     notifySlotTeacher,
     packageStatusFromRow,
     query,
     setTeacherSlotStatus,
     studentLabel,
     toYn,
+    updateStandardPackage,
 } from './store.js';
 
 function publicId(prefix) {
@@ -53,21 +64,15 @@ function publicId(prefix) {
 }
 
 function homePathForRole(role) {
-    if (role === 'teacher') {
+    if (role === 'teacher' || role === 'admin') {
         return '/teacher';
-    }
-    if (role === 'admin') {
-        return '/admin';
     }
     return '/app';
 }
 
 function profilePathForRole(role) {
-    if (role === 'teacher') {
+    if (role === 'teacher' || role === 'admin') {
         return '/teacher/profile';
-    }
-    if (role === 'admin') {
-        return '/admin/profile';
     }
     return '/app/profile';
 }
@@ -122,7 +127,7 @@ export function registerRoutes(app) {
             throw new Error('อีเมล/เบอร์ หรือรหัสผ่านไม่ถูกต้อง');
         }
         if (!isYes(user.status)) {
-            throw new Error('บัญชีนี้ถูกระงับ กรุณาติดต่อแอดมิน');
+            throw new Error('บัญชีนี้ถูกระงับ กรุณาติดต่อครูแอร์');
         }
         const language = resolveLang(req);
         await query(`UPDATE dbo.users SET language = @language, updated_at = SYSUTCDATETIME() WHERE id = @id`, {
@@ -224,7 +229,14 @@ export function registerRoutes(app) {
     }));
 
     app.get('/api/auth/line/status', (_req, res) => {
-        res.json({ configured: isLineConfigured() });
+        const qrUrl = String(process.env.LINE_OA_QR_URL || '').trim() || null;
+        const addFriendUrl = String(process.env.LINE_OA_ADD_FRIEND_URL || '').trim() || null;
+        res.json({
+            configured: isLineConfigured(),
+            messagingConfigured: isLineMessagingConfigured(),
+            oaQrUrl: qrUrl,
+            oaAddFriendUrl: addFriendUrl,
+        });
     });
 
     app.post('/api/auth/line/start', optionalAuth, asyncHandler(async (req, res) => {
@@ -308,6 +320,40 @@ export function registerRoutes(app) {
         const lang = resolveLang(req);
         const result = await query(`SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone FROM dbo.packages WHERE is_active = N'Y' ORDER BY hours`);
         res.json(result.recordset.map((row) => localizePackage(row, lang)));
+    }));
+
+    function mapAdminPackageRow(row, lang) {
+        return {
+            id: row.id,
+            ...localizePackage(row, lang),
+            active: isYes(row.is_active),
+            nameTh: row.name,
+            nameEn: row.name_en ?? '',
+            noteTh: row.note ?? '',
+            noteEn: row.note_en ?? '',
+            tagTh: row.tag ?? '',
+            tagEn: row.tag_en ?? '',
+            tone: row.tone ?? 'pink',
+        };
+    }
+
+    app.get('/api/admin/packages', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const result = await listAdminPackages();
+        res.json(result.recordset.map((row) => mapAdminPackageRow(row, lang)));
+    }));
+
+    app.post('/api/admin/packages', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const input = req.body ?? {};
+        const created = await createStandardPackage(input);
+        res.json(mapAdminPackageRow(created, lang));
+    }));
+
+    app.patch('/api/admin/packages/:id', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const updated = await updateStandardPackage(req.params.id, req.body ?? {});
+        res.json(mapAdminPackageRow(updated, lang));
     }));
 
     app.put('/api/me/language', requireAuth, asyncHandler(async (req, res) => {
@@ -411,6 +457,12 @@ export function registerRoutes(app) {
         res.json(packageStatusFromRow(await activePackage(req.user.id), resolveLang(req)));
     }));
 
+    app.get('/api/me/offers', requireAuth, asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const rows = await listStudentOffers(req.user.id);
+        res.json(rows.map((row) => mapStudentOffer(row, lang)));
+    }));
+
     app.get('/api/booking-summary', requireAuth, asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const day = assertDayIso(req.query.day);
@@ -458,7 +510,7 @@ export function registerRoutes(app) {
     app.get('/api/me/lessons', requireAuth, asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT b.public_id, b.status, b.topic, b.topic_en,
+            `SELECT b.public_id, b.status, b.topic, b.topic_en, COALESCE(b.duration_hours, 1) AS duration_hours,
                     CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
                     CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
              FROM dbo.bookings b
@@ -470,16 +522,31 @@ export function registerRoutes(app) {
         res.json(result.recordset.map((row) => {
             const date = parseIsoDate(row.slot_iso);
             const hoursUntil = hoursUntilSlot(row.slot_iso, row.slot_hhmm);
+            const hours = Number(row.duration_hours) || 1;
             return {
                 id: row.public_id,
                 date: chipLabel(date, lang),
-                time: lessonTimeRange(row.slot_hhmm, lang),
+                time: lessonTimeRange(row.slot_hhmm, lang, hours),
+                hours,
                 teacher: lang === 'en' ? 'Kru Air (live 1:1)' : 'ครูแอร์ (เรียนสด 1:1)',
                 status: row.status,
                 topic: pick(row, 'topic', lang),
                 canCancel: canStudentCancel({ status: row.status, hoursUntil }),
             };
         }));
+    }));
+
+    app.post('/api/me/lessons/:id/reject', requireAuth, asyncHandler(async (req, res) => {
+        const lesson = await loadLessonForUser(req.params.id, req.user.id);
+        if (lesson.status !== 'pending') {
+            throw new Error('ปฏิเสธได้เฉพาะนัดที่รอคอนเฟิร์ม');
+        }
+        await cancelLessonBooking({
+            bookingRowId: lesson.id,
+            reason: 'student_rejected',
+            slotAfter: 'open',
+        });
+        res.json({ ok: true });
     }));
 
     app.post('/api/me/lessons/:id/confirm', requireAuth, asyncHandler(async (req, res) => {
@@ -699,7 +766,7 @@ export function registerRoutes(app) {
     app.get('/api/admin/students', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.education, u.education_en, u.phone, u.emergency_contact, u.created_at,
+            `SELECT u.id, u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.education, u.education_en, u.phone, u.emergency_contact, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
                     up.hours_total, up.hours_used, up.expires_at, up.status AS pkg_status,
                     (SELECT COUNT(*) FROM dbo.class_logs cl WHERE cl.user_id = u.id AND cl.outcome = 'done') AS done
@@ -722,6 +789,7 @@ export function registerRoutes(app) {
                 state = 'new';
             }
             return {
+                id: Number(row.id),
                 name: `${pick(row, 'nickname', lang)} ${pick(row, 'name', lang).split(' ')[0] ?? ''}`.trim(),
                 info: `${row.age ?? '—'} · ${pick(row, 'education', lang) || '—'} · ${row.phone || '—'}`,
                 phone: row.phone || null,
@@ -734,7 +802,61 @@ export function registerRoutes(app) {
         }));
     }));
 
-    app.get('/api/admin/users', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.get('/api/teacher/students/:id/offers', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const lang = resolveLang(req);
+        const rows = await listStudentOffers(userId, { includeCancelled: true });
+        res.json(rows.map((row) => mapStudentOffer(row, lang)));
+    }));
+
+    app.post('/api/teacher/students/:id/offers', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const input = req.body ?? {};
+        const title = String(input.title ?? '').trim();
+        const titleEn = String(input.titleEn ?? '').trim();
+        const hours = Number(input.hours);
+        const price = Number(input.price);
+        if (!title) {
+            throw new Error('กรุณากรอกชื่อคอร์ส');
+        }
+        if (!Number.isInteger(hours) || hours <= 0) {
+            throw new Error('กรุณากรอกจำนวนชั่วโมงให้ถูกต้อง');
+        }
+        if (!Number.isInteger(price) || price < 0) {
+            throw new Error('กรุณากรอกราคาให้ถูกต้อง');
+        }
+        const lang = resolveLang(req);
+        const created = await createStudentOffer({
+            publicId: publicId('of-'),
+            userId,
+            createdBy: req.user.id,
+            title,
+            titleEn: titleEn || title,
+            hours,
+            price,
+            note: String(input.note ?? '').trim() || null,
+            noteEn: String(input.noteEn ?? '').trim() || null,
+            grantNow: Boolean(input.grantNow),
+        });
+        res.json(mapStudentOffer(created, lang));
+    }));
+
+    app.patch('/api/teacher/offers/:publicId', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const status = String(req.body?.status ?? '').toLowerCase();
+        if (status !== 'cancelled') {
+            throw new Error('สถานะไม่ถูกต้อง');
+        }
+        await cancelStudentOffer(req.params.publicId);
+        res.json({ ok: true });
+    }));
+
+    app.get('/api/admin/users', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
             `SELECT u.id, u.role, u.email, u.phone, u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.education, u.education_en,
@@ -774,7 +896,7 @@ export function registerRoutes(app) {
         }));
     }));
 
-    app.post('/api/admin/users', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.post('/api/admin/users', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const input = req.body ?? {};
         const role = String(input.role ?? 'teacher').toLowerCase() === 'student' ? 'student' : 'teacher';
         const names = requiredPersonNames(input);
@@ -829,7 +951,7 @@ export function registerRoutes(app) {
         res.json({ ok: true, user: toProfile(created) });
     }));
 
-    app.patch('/api/admin/users/:id/status', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.patch('/api/admin/users/:id/status', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const userId = Number(req.params.id);
         if (!Number.isInteger(userId) || userId < 1) {
             throw new Error('ไม่พบบัญชีนี้');
@@ -844,10 +966,13 @@ export function registerRoutes(app) {
         }
         const raw = String(req.body?.status ?? '').toLowerCase();
         const status = raw === 'y' || raw === 'active' ? 'Y' : 'N';
-        if (target.role === 'admin' && status !== 'Y') {
-            const admins = await query(`SELECT COUNT(*) AS n FROM dbo.users WHERE role = 'admin' AND status = N'Y' AND id <> @id`, { id: target.id });
-            if (Number(admins.recordset[0].n) < 1) {
-                throw new Error('ต้องมีแอดมินที่ใช้งานได้อย่างน้อย 1 คน');
+        if ((target.role === 'teacher' || target.role === 'admin') && status !== 'Y') {
+            const staff = await query(
+                `SELECT COUNT(*) AS n FROM dbo.users WHERE role IN (N'teacher', N'admin') AND status = N'Y' AND id <> @id`,
+                { id: target.id },
+            );
+            if (Number(staff.recordset[0].n) < 1) {
+                throw new Error('ต้องมีครูที่ใช้งานได้อย่างน้อย 1 คน');
             }
         }
         await query(`UPDATE dbo.users SET status = @status, updated_at = SYSUTCDATETIME() WHERE id = @id`, {
@@ -857,7 +982,7 @@ export function registerRoutes(app) {
         res.json({ ok: true, status });
     }));
 
-    app.get('/api/admin/sales', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.get('/api/admin/sales', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const now = new Date();
         const hoursUnit = lang === 'en' ? 'hrs' : 'ชม.';
@@ -955,13 +1080,13 @@ export function registerRoutes(app) {
         });
     }));
 
-    app.get('/api/admin/vouchers', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.get('/api/admin/vouchers', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(`SELECT * FROM dbo.vouchers ORDER BY id DESC`);
         res.json(result.recordset.map((row) => mapAdminVoucher(row, lang)));
     }));
 
-    app.post('/api/admin/vouchers', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.post('/api/admin/vouchers', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const code = String(req.body?.code ?? '').trim().toUpperCase();
         const type = req.body?.type === 'percent' ? 'percent' : 'fixed';
         const value = Number(req.body?.value);
@@ -1013,7 +1138,7 @@ export function registerRoutes(app) {
         res.json({ ok: true });
     }));
 
-    app.patch('/api/admin/vouchers/:code/status', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.patch('/api/admin/vouchers/:code/status', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const code = String(req.params.code ?? '').trim().toUpperCase();
         const isActive = toYn(!(req.body?.active === false || req.body?.status === 'disabled'));
         const result = await query(
@@ -1092,14 +1217,16 @@ export function registerRoutes(app) {
         res.json({ ok: true });
     }));
 
-    app.get('/api/admin/settings', requireAuth, requireRole(['admin']), asyncHandler(async (req, res) => {
+    app.get('/api/admin/settings', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const origin = String(process.env.FRONTEND_ORIGIN || '').replace(/\/$/, '');
         const callbackUrl = String(process.env.LINE_CALLBACK_URL || '').trim();
         const sqlHost = String(process.env.SQL_SERVER || '').split(',')[0].trim();
         const pkgs = await query(
             `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
-             FROM dbo.packages ORDER BY hours`,
+             FROM dbo.packages
+             WHERE id NOT IN (N'trial', N'offer')
+             ORDER BY hours`,
         );
         const roles = await query(
             `SELECT role, COUNT(*) AS n FROM dbo.users WHERE status = N'Y' GROUP BY role`,
@@ -1116,7 +1243,7 @@ export function registerRoutes(app) {
         res.json({
             school: {
                 name: lang === 'en' ? 'Kru Air Singing School' : 'ครูแอร์ Singing School',
-                publicUrl: origin || 'https://kruair.thanvasupos.com',
+                publicUrl: origin || 'http://localhost:5173',
                 studio: lang === 'en' ? 'Live 1:1 vocal lesson' : 'เรียนร้องเพลงสด ตัวต่อตัว 1:1',
                 closedDay: lang === 'en' ? 'Closed on Monday' : 'หยุดวันจันทร์',
             },
@@ -1143,7 +1270,12 @@ export function registerRoutes(app) {
                     configured: isLineConfigured(),
                     callbackUrl: callbackUrl || null,
                 },
-                lineOa: { connected: false },
+                lineOa: {
+                    connected: isLineMessagingConfigured(),
+                    pushEnabled: isLineMessagingConfigured(),
+                    qrUrl: String(process.env.LINE_OA_QR_URL || '').trim() || null,
+                    addFriendUrl: String(process.env.LINE_OA_ADD_FRIEND_URL || '').trim() || null,
+                },
                 payment: {
                     mode: 'mock',
                     methods: ['card', 'kbank', 'promptpay'],
@@ -1154,9 +1286,10 @@ export function registerRoutes(app) {
                 lastRunAt: jobState.lastRunAt,
                 lastExpired: jobState.lastResult.expired,
                 lastReminded: jobState.lastResult.reminded,
-                dayBefore: { enabled: true, channel: 'in_app' },
+                lastLowHours: jobState.lastResult.lowHours,
+                dayBefore: { enabled: true, channel: 'in_app+line' },
                 expireUnconfirmed: { enabled: true },
-                packageExpiry: { enabled: false },
+                packageLowHours: { enabled: true, thresholdHours: 2, channel: 'in_app+line' },
             },
             data: {
                 database: process.env.SQL_DATABASE || 'BD_AIR',
@@ -1202,14 +1335,20 @@ export function registerRoutes(app) {
             if (!row.booking_id) {
                 continue;
             }
+            if (Number(row.is_primary_slot) !== 1) {
+                continue;
+            }
             const status = row.booking_status === 'confirmed' ? 'confirmed' : 'pending';
             if (status === 'pending') {
                 pendingCount += 1;
             }
+            const hours = Number(row.duration_hours) || 1;
             const lesson = {
                 bookingId: row.booking_id,
                 slotId: row.id,
                 time: row.slot_hhmm,
+                hours,
+                timeRange: lessonTimeRange(row.slot_hhmm, lang, hours),
                 student: studentLabel(row, lang),
                 studentName: pick(row, 'name', lang),
                 lesson: pick(row, 'topic', lang) || (lang === 'en' ? 'Course based on your favorite genres' : 'คอร์สตามแนวเพลงที่ชอบ'),
@@ -1228,6 +1367,48 @@ export function registerRoutes(app) {
             lessonsByDate,
             slotsByDate,
             slotTimes: SLOT_TIMES,
+        });
+    }));
+
+    app.post('/api/teacher/bookings', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        const studentId = Number(req.body?.studentId);
+        const dayIso = String(req.body?.day ?? '');
+        const time = String(req.body?.time ?? '');
+        const hours = Number(req.body?.hours ?? 1);
+        assertDayIso(dayIso);
+        if (!Number.isInteger(studentId) || studentId < 1) {
+            throw new Error('กรุณาเลือกนักเรียน');
+        }
+        const student = await findUserById(studentId);
+        if (!student || student.role !== 'student') {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        if (!isYes(student.status)) {
+            throw new Error('บัญชีนักเรียนนี้ถูกระงับ');
+        }
+        const lang = resolveLang(req);
+        const topic = String(req.body?.topic ?? '').trim()
+            || (lang === 'en' ? 'Lesson with Kru Air' : 'เรียนกับครูแอร์');
+        const topicEn = String(req.body?.topicEn ?? '').trim() || 'Lesson with Kru Air';
+        const booking = await createLessonBooking({
+            publicId: publicId('L'),
+            userId: studentId,
+            dayIso,
+            time,
+            topic,
+            topicEn,
+            source: 'teacher',
+            mode: req.body?.mode === 'online' ? 'online' : 'studio',
+            durationHours: hours,
+            teacherId,
+            createdByTeacher: true,
+        });
+        res.json({
+            id: booking.public_id,
+            saved: true,
+            status: booking.status,
+            hours: Number(booking.duration_hours) || hours,
         });
     }));
 
@@ -1332,7 +1513,8 @@ export function registerRoutes(app) {
         const outcome = req.body?.outcome === 'no_show' ? 'no_show' : 'done';
         const note = String(req.body?.note ?? '').trim() || (outcome === 'done' ? 'บันทึกโดยครูแอร์' : '—');
         const found = await query(
-            `SELECT b.*, s.id AS slot_row_id, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+            `SELECT b.*, s.id AS slot_row_id, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                    COALESCE(b.duration_hours, 1) AS duration_hours
              FROM dbo.bookings b
              JOIN dbo.teacher_availability s ON s.id = b.slot_id
              WHERE b.public_id = @id`,
@@ -1342,17 +1524,27 @@ export function registerRoutes(app) {
         if (!booking) {
             throw new Error('ไม่พบคลาสที่เลือก');
         }
+        const deductHours = Math.max(1, Number(booking.duration_hours) || 1);
         const audioUrl = String(req.body?.feedbackAudioUrl ?? '').trim().slice(0, 500) || null;
         const already = await query(`SELECT id FROM dbo.class_logs WHERE booking_id = @id`, { id: booking.id });
         if (already.recordset[0]) {
             throw new Error('บันทึกการสอนคลาสนี้แล้ว');
         }
-        const pkg = booking.user_package_id
-            ? { id: booking.user_package_id }
-            : await activePackage(booking.user_id);
+        let pkg = null;
+        if (booking.user_package_id) {
+            const pkgResult = await query(
+                `SELECT id, hours_total, hours_used FROM dbo.user_packages WHERE id = @id`,
+                { id: booking.user_package_id },
+            );
+            pkg = pkgResult.recordset[0] ?? null;
+        }
+        else {
+            pkg = await activePackage(booking.user_id);
+        }
+        const hoursBefore = pkg ? packageHoursLeft(pkg.hours_total, pkg.hours_used) : 0;
         await query(
             `INSERT INTO dbo.class_logs (booking_id, user_id, lesson_title, lesson_title_en, note, note_en, feedback_audio_url, hours_deducted, outcome)
-             VALUES (@bookingId, @userId, @title, @titleEn, @note, @noteEn, @audioUrl, 1, @outcome);
+             VALUES (@bookingId, @userId, @title, @titleEn, @note, @noteEn, @audioUrl, @hours, @outcome);
              UPDATE dbo.bookings SET status = @status, updated_at = SYSUTCDATETIME() WHERE id = @bookingId;`,
             {
                 bookingId: booking.id,
@@ -1362,27 +1554,37 @@ export function registerRoutes(app) {
                 note,
                 noteEn: null,
                 audioUrl,
+                hours: deductHours,
                 outcome,
                 status: outcome === 'done' ? 'done' : 'no_show',
             },
         );
         if (pkg?.id) {
-            await query(`UPDATE dbo.user_packages SET hours_used = hours_used + 1 WHERE id = @pkgId`, { pkgId: pkg.id });
+            await query(`UPDATE dbo.user_packages SET hours_used = hours_used + @hours WHERE id = @pkgId`, {
+                pkgId: pkg.id,
+                hours: deductHours,
+            });
+            const hoursAfter = Math.max(0, hoursBefore - deductHours);
+            await maybeNotifyPackageHours(booking.user_id, pkg.id, hoursBefore, hoursAfter);
         }
+        await query(`DELETE FROM dbo.booking_slots WHERE booking_id = @id`, { id: booking.id });
         const student = await findUserById(booking.user_id);
+        if (outcome === 'done') {
+            await notifyHomeworkAssigned(booking.user_id, note, Boolean(audioUrl));
+        }
         await addNotification(
             booking.user_id,
             outcome === 'done' ? 'บันทึกการเรียนแล้ว' : 'บันทึกว่าไม่มาเรียน',
             outcome === 'done'
-                ? `ครูแอร์บันทึกคลาสแล้ว หัก 1 ชม. จากบัญชีของน้อง${student?.nickname ?? ''}`
-                : 'บันทึก No-show และหัก 1 ชม. ตามเงื่อนไขแพ็กเกจ',
+                ? `ครูแอร์บันทึกคลาสแล้ว หัก ${deductHours} ชม. จากบัญชีของน้อง${student?.nickname ?? ''}`
+                : `บันทึก No-show และหัก ${deductHours} ชม. ตามเงื่อนไขแพ็กเกจ`,
             outcome === 'done' ? 'green' : 'pink',
             outcome === 'done' ? 'Lesson recorded' : 'Marked as no-show',
             outcome === 'done'
-                ? `Kru Air recorded the class and deducted 1 hour from ${student?.nickname ?? 'your'} account.`
-                : 'Marked as no-show and deducted 1 hour per package terms.',
+                ? `Kru Air recorded the class and deducted ${deductHours} hour(s) from ${student?.nickname ?? 'your'} account.`
+                : `Marked as no-show and deducted ${deductHours} hour(s) per package terms.`,
         );
-        res.json({ ok: true });
+        res.json({ ok: true, hoursDeducted: deductHours });
     }));
 }
 

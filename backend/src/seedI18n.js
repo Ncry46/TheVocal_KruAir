@@ -4,20 +4,10 @@ import { query } from './store.js';
 async function seedI18n() {
     await query(
         `UPDATE dbo.packages SET
-            name_en = N'10-hour package',
-            note_en = N'About ฿2,200/hour · great for beginners',
-            tag_en = NULL
-         WHERE id = 'beginner';
-         UPDATE dbo.packages SET
-            name_en = N'20-hour package',
-            note_en = N'About ฿2,000/hour · best for committed students',
-            tag_en = N'Popular'
-         WHERE id = 'pro';
-         UPDATE dbo.packages SET
-            name_en = N'30-hour package',
-            note_en = N'About ฿1,867/hour',
-            tag_en = N'Best value'
-         WHERE id = 'master';`,
+            name_en = N'1-hour lesson',
+            note_en = N'฿2,500/hour · Book a lesson right away'
+         WHERE id = 'single' AND name_en IS NULL;
+         UPDATE dbo.packages SET is_active = N'N' WHERE id IN (N'beginner', N'pro', N'master');`,
     );
 
     await query(
@@ -72,7 +62,7 @@ async function seedI18n() {
     await query(
         `UPDATE dbo.users SET avatar = N'/img/av-1.jpg' WHERE email = N'mint@email.com';
          UPDATE dbo.users SET avatar = N'/img/teacher-studio.jpg' WHERE email = N'kruaer@email.com';
-         UPDATE dbo.users SET avatar = N'/img/av-3.jpg' WHERE email = N'admin@kruaer.com';
+         UPDATE dbo.users SET avatar = N'/img/av-3.jpg', status = N'N' WHERE email = N'admin@kruaer.com';
          UPDATE dbo.users SET avatar = N'/img/av-2.jpg' WHERE email = N'fern@email.com';
          UPDATE dbo.users SET avatar = N'/img/av-3.jpg' WHERE email = N'min@email.com';
          UPDATE dbo.users SET avatar = N'/img/av-1.jpg' WHERE email = N'tonnam@email.com';

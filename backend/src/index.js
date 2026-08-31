@@ -9,7 +9,7 @@ import { runSchoolJobs } from './jobs.js';
 import { ensureEnrollmentSchema } from './store.js';
 
 function corsOrigin(reqOrigin, callback) {
-    const configured = process.env.FRONTEND_ORIGIN || 'https://kruair.thanvasupos.com';
+    const configured = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
     if (!reqOrigin) {
         callback(null, true);
         return;
@@ -20,7 +20,9 @@ function corsOrigin(reqOrigin, callback) {
     }
     try {
         const host = new URL(reqOrigin).hostname;
-        const allowed = host === 'kruair.thanvasupos.com'
+        const allowed = host === 'localhost'
+            || host === '127.0.0.1'
+            || host === 'kruair.thanvasupos.com'
             || host.endsWith('.trycloudflare.com')
             || host.endsWith('.ngrok-free.app')
             || host.endsWith('.ngrok.app')
@@ -81,7 +83,7 @@ getPool()
         await ensureEnrollmentSchema();
         console.log(`Connected to SQL Server with ${getAuthMode()}`);
         const tick = () => runSchoolJobs().then((result) => {
-            if (result.expired || result.reminded) {
+            if (result.expired || result.reminded || result.lowHours) {
                 console.log('school jobs', result);
             }
         }).catch((err) => {

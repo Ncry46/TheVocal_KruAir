@@ -10,11 +10,9 @@ export function PublicLayout({ children, footer = true }) {
     const location = useLocation();
     const { language, setLanguage, t, user } = useApp();
     const goHome = () => navigate('/');
-    const roleLabel = user?.role === 'teacher'
+    const roleLabel = user?.role === 'teacher' || user?.role === 'admin'
         ? t('roles.teacher')
-        : user?.role === 'admin'
-            ? t('roles.admin')
-            : t('roles.student');
+        : t('roles.student');
     const go = (id) => {
         if (location.pathname === '/') {
             document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });

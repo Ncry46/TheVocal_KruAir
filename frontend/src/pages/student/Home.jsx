@@ -55,6 +55,10 @@ export default function Home() {
             pending: 'Awaiting confirmation',
             confirming: 'Confirming...',
             confirm: 'Confirm attendance',
+            reject: 'Decline',
+            rejecting: 'Declining...',
+            rejectToast: 'Lesson declined — the slot is free again.',
+            rejectConfirm: 'Decline this lesson?',
             move: 'Request move',
             cancel: 'Cancel lesson',
             cancelling: 'Cancelling...',
@@ -99,6 +103,10 @@ export default function Home() {
             pending: 'รอคอนเฟิร์ม',
             confirming: 'กำลังยืนยัน…',
             confirm: 'ยืนยันการมาเรียน',
+            reject: 'ปฏิเสธนัด',
+            rejecting: 'กำลังปฏิเสธ…',
+            rejectToast: 'ปฏิเสธนัดแล้ว — สล็อตว่างกลับ',
+            rejectConfirm: 'ปฏิเสธนัดนี้ใช่ไหม?',
             move: 'ขอเลื่อนนัด',
             cancel: 'ยกเลิกนัด',
             cancelling: 'กำลังยกเลิก…',
@@ -135,9 +143,9 @@ export default function Home() {
     if (user?.lineLinked) {
         copy.lineTitle = language === 'en' ? 'LINE login is connected' : 'เชื่อม LINE แล้ว — ล็อกอินด้วย LINE ได้';
         copy.lineBody = language === 'en'
-            ? 'You can sign in with LINE. Lesson reminders still use the website until LINE OA Push is enabled.'
-            : 'เข้าสู่ระบบด้วย LINE ได้แล้ว ส่วนการเตือนนัดผ่าน LINE OA ยังเป็นขั้นตอนถัดไป';
-        copy.linePush = language === 'en' ? 'LINE login: linked' : 'LINE Login: ผูกแล้ว';
+            ? 'You can sign in with LINE. Lesson and hours alerts also push to LINE OA when Messaging is configured.'
+            : 'เข้าสู่ระบบด้วย LINE ได้แล้ว และเมื่อเปิด LINE OA push จะได้รับแจ้งนัด/ชั่วโมงทาง LINE ด้วย';
+        copy.linePush = language === 'en' ? 'LINE: linked (in-app + OA when enabled)' : 'LINE: ผูกแล้ว (ในแอป + OA เมื่อตั้งค่าแล้ว)';
     }
     const confirmNext = async () => {
         if (!next || confirming)
@@ -147,6 +155,26 @@ export default function Home() {
             await api.confirmLesson(next.id);
             toast(copy.confirmToast, 'ok');
             setLessons(await api.getMyLessons());
+        }
+        finally {
+            setConfirming(false);
+        }
+    };
+    const rejectNext = async () => {
+        if (!next || confirming || next.status !== 'pending') {
+            return;
+        }
+        if (!window.confirm(copy.rejectConfirm)) {
+            return;
+        }
+        setConfirming(true);
+        try {
+            await api.rejectLesson(next.id);
+            toast(copy.rejectToast, 'ok');
+            setLessons(await api.getMyLessons());
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : copy.reject);
         }
         finally {
             setConfirming(false);
@@ -223,6 +251,9 @@ export default function Home() {
         <div className="hero-actions">
           {next && next.status === 'pending' && (<Button green onClick={confirmNext} disabled={confirming}>
               {confirming ? copy.confirming : copy.confirm}
+            </Button>)}
+          {next && next.status === 'pending' && (<Button danger onClick={rejectNext} disabled={confirming}>
+              {confirming ? copy.rejecting : copy.reject}
             </Button>)}
           {next && next.status !== 'moved' && (<Button ghost onClick={openMove}>{copy.move}</Button>)}
           {next && next.canCancel && (

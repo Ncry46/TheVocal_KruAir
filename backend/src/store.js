@@ -1,8 +1,10 @@
 import { getPool, sql } from './db.js';
-import { confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, slotStartAt } from './bookingPolicy.js';
+import { confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, SLOT_TIMES, slotStartAt } from './bookingPolicy.js';
 import { parseIsoDate, toIsoDate } from './dates.js';
-import { chipLabel, educationEn, genresEn, methodEn, moveStatus, pick, relativeTime } from './lang.js';
+import { chipLabel, educationEn, formatDate, genresEn, methodEn, moveStatus, pick, relativeTime } from './lang.js';
 import { isYes, toYn } from './yn.js';
+import { formatLineNotifyMessage, findLineUserIdForAppUser, pushLineText } from './lineMessaging.js';
+import { isHomeworkNote, packageHoursLeft, shouldNotifyLowHours } from './packagePolicy.js';
 
 export async function query(text, params = {}) {
     const pool = await getPool();
@@ -167,6 +169,69 @@ export async function addNotification(userId, title, body, tone = 'blue', titleE
          VALUES (CONCAT('N', REPLACE(CONVERT(varchar(36), NEWID()), '-', '')), @userId, @title, @body, @titleEn, @bodyEn, @tone)`,
         { userId, title, body, titleEn, bodyEn, tone },
     );
+    try {
+        const lineUserId = await findLineUserIdForAppUser(userId, query);
+        if (lineUserId) {
+            await pushLineText(lineUserId, formatLineNotifyMessage(title, body));
+        }
+    }
+    catch (err) {
+        console.error('LINE OA push failed:', err instanceof Error ? err.message : err);
+    }
+}
+
+export async function maybeNotifyPackageHours(userId, userPackageId, previousLeft, newLeft) {
+    if (!userPackageId || !shouldNotifyLowHours(previousLeft, newLeft)) {
+        return false;
+    }
+    const left = Math.max(0, Number(newLeft));
+    if (left === 0) {
+        await addNotification(
+            userId,
+            'ชั่วโมงเรียนหมดแล้ว',
+            'ชั่วโมงในคอร์สหมดแล้ว — ติดต่อครูแอร์หรือซื้อแพ็กเกจเพื่อเรียนต่อ',
+            'pink',
+            'Course hours used up',
+            'Your course hours are used up — contact Kru Air or buy a package to continue.',
+        );
+    }
+    else {
+        await addNotification(
+            userId,
+            'ชั่วโมงเรียนใกล้หมด',
+            `เหลืออีก ${left} ชม. — ติดต่อครูแอร์เพื่อต่อคอร์สหรือซื้อแพ็กเกจ`,
+            'pink',
+            'Course hours running low',
+            `${left} hour(s) left — contact Kru Air to renew or buy a package.`,
+        );
+    }
+    await query(
+        `UPDATE dbo.user_packages SET low_hours_notified_at = SYSUTCDATETIME() WHERE id = @pkgId`,
+        { pkgId: userPackageId },
+    );
+    return true;
+}
+
+export async function notifyHomeworkAssigned(userId, note, hasAudio = false) {
+    if (!isHomeworkNote(note)) {
+        return false;
+    }
+    const trimmed = String(note).trim();
+    const bodyTh = hasAudio
+        ? `${trimmed.slice(0, 400)}\nมีเสียงตอบกลับจากครูในแอป`
+        : trimmed.slice(0, 500);
+    const bodyEn = hasAudio
+        ? `${trimmed.slice(0, 400)}\nVoice feedback is available in the app.`
+        : trimmed.slice(0, 500);
+    await addNotification(
+        userId,
+        'มีการบ้านใหม่',
+        bodyTh,
+        'blue',
+        'New homework',
+        bodyEn,
+    );
+    return true;
 }
 
 export async function notifySlotTeacher(slotId, title, body, tone = 'blue', titleEn = null, bodyEn = null) {
@@ -460,6 +525,7 @@ export async function ensureEnrollmentSchema() {
     await ensureColumn('bookings', 'reminder_sent_at', 'reminder_sent_at DATETIME2 NULL');
     await ensureColumn('bookings', 'updated_at', 'updated_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_updated DEFAULT SYSUTCDATETIME()');
     await ensureColumn('class_logs', 'feedback_audio_url', 'feedback_audio_url NVARCHAR(500) NULL');
+    await ensureColumn('user_packages', 'low_hours_notified_at', 'low_hours_notified_at DATETIME2 NULL');
     await ensureColumn('users', 'name_en', 'name_en NVARCHAR(100) NULL');
     await ensureColumn('users', 'nickname_en', 'nickname_en NVARCHAR(50) NULL');
     await ensureColumn('users', 'education_en', 'education_en NVARCHAR(100) NULL');
@@ -613,6 +679,81 @@ export async function ensureEnrollmentSchema() {
     await query(`
         IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_enrollments_package')
             ALTER TABLE dbo.enrollments ADD CONSTRAINT FK_enrollments_package FOREIGN KEY (package_id) REFERENCES dbo.packages (id)`);
+    await query(
+        `UPDATE dbo.users SET status = N'N', updated_at = SYSUTCDATETIME()
+         WHERE email = N'admin@kruaer.com' AND status <> N'N'`,
+    );
+    await ensureStudentOffersSchema();
+    await ensureCatalogMigration();
+    await ensureBookingDurationSchema();
+}
+
+async function ensureBookingDurationSchema() {
+    await ensureColumn('bookings', 'duration_hours', 'duration_hours INT NOT NULL CONSTRAINT DF_bookings_duration_hours DEFAULT 1');
+    await query(`
+        IF OBJECT_ID(N'dbo.booking_slots', N'U') IS NULL
+        CREATE TABLE dbo.booking_slots (
+            booking_id INT NOT NULL,
+            slot_id INT NOT NULL,
+            CONSTRAINT PK_booking_slots PRIMARY KEY (slot_id),
+            CONSTRAINT FK_booking_slots_booking FOREIGN KEY (booking_id) REFERENCES dbo.bookings (id),
+            CONSTRAINT FK_booking_slots_slot FOREIGN KEY (slot_id) REFERENCES dbo.teacher_availability (id)
+        )`);
+    await query(`
+        INSERT INTO dbo.booking_slots (booking_id, slot_id)
+        SELECT b.id, b.slot_id
+        FROM dbo.bookings b
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.booking_slots bs WHERE bs.slot_id = b.slot_id)`);
+}
+
+async function ensureStudentOffersSchema() {
+    await query(`
+        IF OBJECT_ID(N'dbo.student_offers', N'U') IS NULL
+        CREATE TABLE dbo.student_offers (
+            id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+            public_id NVARCHAR(40) NOT NULL UNIQUE,
+            user_id INT NOT NULL,
+            title NVARCHAR(120) NOT NULL,
+            title_en NVARCHAR(120) NULL,
+            hours INT NOT NULL,
+            price INT NOT NULL,
+            note NVARCHAR(500) NULL,
+            note_en NVARCHAR(500) NULL,
+            status NVARCHAR(20) NOT NULL CONSTRAINT DF_student_offers_status DEFAULT N'pending_payment',
+            user_package_id INT NULL,
+            created_by INT NOT NULL,
+            created_at DATETIME2 NOT NULL CONSTRAINT DF_student_offers_created DEFAULT SYSUTCDATETIME(),
+            updated_at DATETIME2 NOT NULL CONSTRAINT DF_student_offers_updated DEFAULT SYSUTCDATETIME(),
+            CONSTRAINT FK_student_offers_user FOREIGN KEY (user_id) REFERENCES dbo.users (id),
+            CONSTRAINT FK_student_offers_creator FOREIGN KEY (created_by) REFERENCES dbo.users (id)
+        )`);
+}
+
+async function ensureCatalogMigration() {
+    await query(
+        `UPDATE dbo.packages SET is_active = N'N'
+         WHERE id IN (N'beginner', N'pro', N'master')`,
+    );
+    await query(`
+        IF NOT EXISTS (SELECT 1 FROM dbo.packages WHERE id = N'offer')
+        INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone, name_en, note_en, is_active)
+        VALUES (N'offer', N'คอร์สพิเศษ', 0, 0, N'แพ็กเกจระบบสำหรับคอร์สที่ครูจัดให้', NULL, N'pink',
+                N'Custom offer', N'System package for teacher-assigned courses', N'N')`);
+    await query(`
+        IF NOT EXISTS (SELECT 1 FROM dbo.packages WHERE id = N'single')
+        INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone, name_en, note_en, is_active)
+        VALUES (N'single', N'เรียน 1 ชั่วโมง', 1, 2500, N'฿2,500/ชม. · จองเวลาเรียนได้ทันที', NULL, N'pink',
+                N'1-hour lesson', N'฿2,500/hour · Book a lesson right away', N'Y')
+        ELSE
+        UPDATE dbo.packages SET
+            name = N'เรียน 1 ชั่วโมง',
+            name_en = N'1-hour lesson',
+            hours = 1,
+            price = 2500,
+            note = N'฿2,500/ชม. · จองเวลาเรียนได้ทันที',
+            note_en = N'฿2,500/hour · Book a lesson right away',
+            is_active = N'Y'
+        WHERE id = N'single'`);
 }
 
 export async function enrollStudent(input) {
@@ -684,27 +825,32 @@ export async function enrollStudent(input) {
     });
 }
 
-export async function createLessonBooking({ publicId, userId, dayIso, time, topic, topicEn, source, mode }) {
-    return withTransaction(async (run) => {
-        const pkgResult = await run(
-            `SELECT TOP 1 up.id, up.hours_total, up.hours_used
-             FROM dbo.user_packages up
-             WHERE up.user_id = @userId AND up.status = N'active' AND up.expires_at > SYSUTCDATETIME()
-             ORDER BY up.created_at DESC`,
-            { userId },
-        );
-        const pkg = pkgResult.recordset[0];
-        if (!pkg || Number(pkg.hours_total) - Number(pkg.hours_used) <= 0) {
-            throw new Error('ชั่วโมงคงเหลือไม่พอ — กรุณาสมัครเรียนหรือซื้อแพ็กเกจก่อนจอง');
-        }
-        const teacherResult = await run(
-            `SELECT TOP 1 id FROM dbo.users WHERE role = N'teacher' AND status = N'Y' ORDER BY id`,
-        );
-        const teacherId = teacherResult.recordset[0]?.id;
-        if (!teacherId) {
-            throw new Error('ยังไม่มีครูในระบบ');
-        }
-        const slotResult = await run(
+export function consecutiveSlotTimes(startTime, hours) {
+    const start = String(startTime);
+    const count = Number(hours);
+    const idx = SLOT_TIMES.indexOf(start);
+    if (idx < 0) {
+        throw new Error('เวลาเริ่มใช้ได้ 10:00–19:00 น. เท่านั้น');
+    }
+    if (!Number.isInteger(count) || count < 1) {
+        throw new Error('จำนวนชั่วโมงต้องเป็นจำนวนเต็มอย่างน้อย 1');
+    }
+    if (idx + count > SLOT_TIMES.length) {
+        throw new Error('ช่วงเวลานี้ยาวเกินเวลาทำการ');
+    }
+    return SLOT_TIMES.slice(idx, idx + count);
+}
+
+export function lessonEndTime(startTime, hours) {
+    const times = consecutiveSlotTimes(startTime, hours);
+    const lastHour = Number(times[times.length - 1].split(':')[0]) + 1;
+    return `${String(lastHour).padStart(2, '0')}:00`;
+}
+
+async function lockSlotsForBooking(run, { teacherId, dayIso, times }) {
+    const slots = [];
+    for (const time of times) {
+        let slotResult = await run(
             `SELECT id, status,
                     CONVERT(varchar(10), slot_date, 23) AS slot_iso,
                     CONVERT(varchar(5), slot_time, 108) AS slot_hhmm
@@ -714,15 +860,33 @@ export async function createLessonBooking({ publicId, userId, dayIso, time, topi
                AND CONVERT(varchar(5), slot_time, 108) = @time`,
             { teacherId, dayIso, time },
         );
-        const slot = slotResult.recordset[0];
+        let slot = slotResult.recordset[0];
+        if (!slot) {
+            await run(
+                `INSERT INTO dbo.teacher_availability (teacher_id, slot_date, slot_time, duration_min, status)
+                 VALUES (@teacherId, @dayIso, @time, 60, N'open')`,
+                { teacherId, dayIso, time },
+            );
+            slotResult = await run(
+                `SELECT id, status,
+                        CONVERT(varchar(10), slot_date, 23) AS slot_iso,
+                        CONVERT(varchar(5), slot_time, 108) AS slot_hhmm
+                 FROM dbo.teacher_availability WITH (UPDLOCK, ROWLOCK)
+                 WHERE teacher_id = @teacherId
+                   AND CONVERT(varchar(10), slot_date, 23) = @dayIso
+                   AND CONVERT(varchar(5), slot_time, 108) = @time`,
+                { teacherId, dayIso, time },
+            );
+            slot = slotResult.recordset[0];
+        }
         if (!slot) {
             throw new Error('ไม่พบสล็อตที่เลือก');
         }
         if (slot.status === 'closed') {
-            throw new Error('ครูปิดสล็อตนี้แล้ว');
+            throw new Error(`สล็อต ${time} ถูกปิดแล้ว`);
         }
         if (slot.status !== 'open') {
-            throw new Error('สล็อตนี้ถูกจองแล้ว');
+            throw new Error(`สล็อต ${time} ถูกจองแล้ว`);
         }
         const booked = await run(
             `UPDATE dbo.teacher_availability
@@ -731,46 +895,108 @@ export async function createLessonBooking({ publicId, userId, dayIso, time, topi
             { slotId: slot.id },
         );
         if (!booked.rowsAffected?.[0]) {
-            throw new Error('สล็อตนี้ถูกจองแล้ว');
+            throw new Error(`สล็อต ${time} ถูกจองแล้ว`);
         }
-        const bookingSource = source === 'line' ? 'line' : 'web';
+        slots.push(slot);
+    }
+    return slots;
+}
+
+export async function createLessonBooking({
+    publicId,
+    userId,
+    dayIso,
+    time,
+    topic,
+    topicEn,
+    source,
+    mode,
+    durationHours = 1,
+    teacherId: teacherIdInput = null,
+    createdByTeacher = false,
+}) {
+    const hours = Number(durationHours) || 1;
+    const times = consecutiveSlotTimes(time, hours);
+    const booking = await withTransaction(async (run) => {
+        const pkgResult = await run(
+            `SELECT TOP 1 up.id, up.hours_total, up.hours_used
+             FROM dbo.user_packages up
+             WHERE up.user_id = @userId AND up.status = N'active' AND up.expires_at > SYSUTCDATETIME()
+             ORDER BY up.created_at DESC`,
+            { userId },
+        );
+        const pkg = pkgResult.recordset[0];
+        const left = pkg ? Math.max(0, Number(pkg.hours_total) - Number(pkg.hours_used)) : 0;
+        if (!pkg || left < hours) {
+            throw new Error(createdByTeacher
+                ? 'ชั่วโมงคงเหลือของนักเรียนไม่พอสำหรับนัดนี้'
+                : 'ชั่วโมงคงเหลือไม่พอ — กรุณาสมัครเรียนหรือซื้อแพ็กเกจก่อนจอง');
+        }
+        let teacherId = teacherIdInput;
+        if (!teacherId) {
+            const teacherResult = await run(
+                `SELECT TOP 1 id FROM dbo.users WHERE role = N'teacher' AND status = N'Y' ORDER BY id`,
+            );
+            teacherId = teacherResult.recordset[0]?.id;
+        }
+        if (!teacherId) {
+            throw new Error('ยังไม่มีครูในระบบ');
+        }
+        const slots = await lockSlotsForBooking(run, { teacherId, dayIso, times });
+        const primary = slots[0];
+        const bookingSource = source === 'line' ? 'line' : source === 'teacher' ? 'teacher' : 'web';
         const bookingMode = mode === 'online' ? 'online' : 'studio';
-        const deadline = confirmDeadlineAt(slotStartAt(slot.slot_iso, slot.slot_hhmm), new Date());
-        await run(
-            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, user_package_id, status, topic, topic_en, source, mode, confirm_deadline, updated_at)
-             VALUES (@publicId, @userId, @slotId, @pkgId, N'pending', @topic, @topicEn, @source, @mode, @deadline, SYSUTCDATETIME())`,
+        const deadline = confirmDeadlineAt(slotStartAt(primary.slot_iso, primary.slot_hhmm), new Date());
+        const inserted = await run(
+            `INSERT INTO dbo.bookings (public_id, user_id, slot_id, user_package_id, status, topic, topic_en, source, mode, confirm_deadline, duration_hours, updated_at)
+             OUTPUT INSERTED.*
+             VALUES (@publicId, @userId, @slotId, @pkgId, N'pending', @topic, @topicEn, @source, @mode, @deadline, @hours, SYSUTCDATETIME())`,
             {
                 publicId,
                 userId,
-                slotId: slot.id,
+                slotId: primary.id,
                 pkgId: pkg.id,
                 topic,
                 topicEn,
                 source: bookingSource,
                 mode: bookingMode,
                 deadline,
+                hours,
             },
         );
-        const saved = await run(
-            `SELECT public_id, status, slot_id, user_id FROM dbo.bookings WHERE public_id = @publicId`,
-            { publicId },
-        );
-        const booking = saved.recordset[0];
+        const booking = inserted.recordset[0];
         if (!booking) {
             throw new Error('บันทึกการจองเรียนลงฐานข้อมูลไม่สำเร็จ');
         }
-        await run(
-            `INSERT INTO dbo.notifications (public_id, user_id, title, body, title_en, body_en, tone)
-             VALUES (CONCAT('N', REPLACE(CONVERT(varchar(36), NEWID()), '-', '')), @userId,
-                     N'จองเวลาเรียนสำเร็จ', @bodyTh, N'Booking confirmed', @bodyEn, N'blue')`,
-            {
-                userId,
-                bodyTh: `ล็อกสล็อตแล้ว — ระบบจะเตือนนัดก่อนเรียน 1 วัน`,
-                bodyEn: 'The slot is locked — you will get a reminder 1 day before class.',
-            },
-        );
+        for (const slot of slots) {
+            await run(
+                `INSERT INTO dbo.booking_slots (booking_id, slot_id) VALUES (@bookingId, @slotId)`,
+                { bookingId: booking.id, slotId: slot.id },
+            );
+        }
         return booking;
     });
+    if (createdByTeacher) {
+        await addNotification(
+            userId,
+            'ครูแอร์นัดเรียนให้แล้ว',
+            `นัด ${dayIso} ${time} · ${hours} ชม. — กรุณายืนยันการมาเรียนในแอป`,
+            'pink',
+            'Kru Air scheduled a lesson',
+            `Lesson on ${dayIso} ${time} · ${hours} hour(s) — please confirm attendance in the app.`,
+        );
+    }
+    else {
+        await addNotification(
+            userId,
+            'จองเวลาเรียนสำเร็จ',
+            `ล็อกสล็อต ${dayIso} ${time} แล้ว — ระบบจะเตือนนัดก่อนเรียน 1 วัน`,
+            'blue',
+            'Booking saved',
+            `Slot ${dayIso} ${time} is locked — you will get a reminder 1 day before class.`,
+        );
+    }
+    return booking;
 }
 
 export function discountForVoucher(voucher, price) {
@@ -892,6 +1118,223 @@ export async function createPackagePurchase({
     });
 }
 
+const SYSTEM_PACKAGE_IDS = new Set(['trial', 'offer']);
+
+export function mapStudentOffer(row, lang) {
+    return {
+        id: row.public_id,
+        title: pick(row, 'title', lang),
+        hours: Number(row.hours),
+        price: Number(row.price),
+        note: pick(row, 'note', lang) || null,
+        status: row.status,
+        createdAt: formatDate(new Date(row.created_at), lang),
+    };
+}
+
+export async function listStudentOffers(userId, { includeCancelled = false } = {}) {
+    const result = await query(
+        `SELECT * FROM dbo.student_offers
+         WHERE user_id = @userId
+           ${includeCancelled ? '' : "AND status <> N'cancelled'"}
+         ORDER BY created_at DESC`,
+        { userId },
+    );
+    return result.recordset;
+}
+
+export async function createStudentOffer({
+    publicId,
+    userId,
+    createdBy,
+    title,
+    titleEn,
+    hours,
+    price,
+    note,
+    noteEn,
+    grantNow,
+}) {
+    const created = await withTransaction(async (run) => {
+        const userResult = await run(`SELECT id, role, status FROM dbo.users WHERE id = @id`, { id: userId });
+        const student = userResult.recordset[0];
+        if (!student || student.role !== 'student') {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        if (!isYes(student.status)) {
+            throw new Error('บัญชีนักเรียนนี้ถูกระงับ');
+        }
+        const status = grantNow ? 'granted' : 'pending_payment';
+        let userPackageId = null;
+        if (grantNow) {
+            const pkgInsert = await run(
+                `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status)
+                 OUTPUT INSERTED.id
+                 VALUES (@userId, N'offer', @hours, 0, DATEADD(month, 6, SYSUTCDATETIME()), N'active')`,
+                { userId, hours },
+            );
+            userPackageId = pkgInsert.recordset[0]?.id ?? null;
+            if (!userPackageId) {
+                throw new Error('เพิ่มชั่วโมงไม่สำเร็จ');
+            }
+        }
+        const inserted = await run(
+            `INSERT INTO dbo.student_offers (public_id, user_id, title, title_en, hours, price, note, note_en, status, user_package_id, created_by)
+             OUTPUT INSERTED.*
+             VALUES (@publicId, @userId, @title, @titleEn, @hours, @price, @note, @noteEn, @status, @userPackageId, @createdBy)`,
+            {
+                publicId,
+                userId,
+                title,
+                titleEn: titleEn || null,
+                hours,
+                price,
+                note: note || null,
+                noteEn: noteEn || null,
+                status,
+                userPackageId,
+                createdBy,
+            },
+        );
+        return inserted.recordset[0];
+    });
+    if (grantNow) {
+        await addNotification(
+            userId,
+            'ได้รับชั่วโมงเรียนแล้ว',
+            `ครูแอร์เพิ่มคอร์ส "${title}" — ${hours} ชม. เข้าบัญชีแล้ว`,
+            'green',
+            'Hours added',
+            `Kru Air added "${titleEn || title}" — ${hours} hour(s) added to your account.`,
+        );
+    }
+    else {
+        await addNotification(
+            userId,
+            'มีคอร์สรอชำระ',
+            `ครูแอร์จัดคอร์ส "${title}" ให้ · ${hours} ชม. · ฿${Number(price).toLocaleString()} — ดูที่หน้าแพ็กเกจ`,
+            'amber',
+            'Course awaiting payment',
+            `Kru Air assigned "${titleEn || title}" · ${hours} hour(s) · ฿${Number(price).toLocaleString()} — see Packages.`,
+        );
+    }
+    return created;
+}
+
+export async function cancelStudentOffer(publicId) {
+    const found = await query(`SELECT * FROM dbo.student_offers WHERE public_id = @id`, { id: publicId });
+    const offer = found.recordset[0];
+    if (!offer) {
+        throw new Error('ไม่พบคอร์สที่เลือก');
+    }
+    if (offer.status !== 'pending_payment') {
+        throw new Error('ยกเลิกได้เฉพาะคอร์สที่รอชำระเท่านั้น');
+    }
+    await query(
+        `UPDATE dbo.student_offers SET status = N'cancelled', updated_at = SYSUTCDATETIME() WHERE public_id = @id`,
+        { id: publicId },
+    );
+}
+
+export async function listAdminPackages() {
+    return query(
+        `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
+         FROM dbo.packages
+         WHERE id NOT IN (N'trial', N'offer')
+         ORDER BY hours, id`,
+    );
+}
+
+export async function createStandardPackage(input) {
+    const id = String(input.id ?? `pkg-${Date.now().toString(36)}`);
+    if (SYSTEM_PACKAGE_IDS.has(id)) {
+        throw new Error('ไม่สามารถใช้รหัสแพ็กเกจนี้ได้');
+    }
+    const hours = Number(input.hours);
+    const price = Number(input.price);
+    if (!Number.isInteger(hours) || hours <= 0) {
+        throw new Error('กรุณากรอกจำนวนชั่วโมงให้ถูกต้อง');
+    }
+    if (!Number.isInteger(price) || price < 0) {
+        throw new Error('กรุณากรอกราคาให้ถูกต้อง');
+    }
+    const name = String(input.name ?? '').trim();
+    if (!name) {
+        throw new Error('กรุณากรอกชื่อแพ็กเกจ');
+    }
+    await query(
+        `INSERT INTO dbo.packages (id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active)
+         VALUES (@id, @name, @nameEn, @hours, @price, @note, @noteEn, @tag, @tagEn, @tone, @active)`,
+        {
+            id,
+            name,
+            nameEn: String(input.nameEn ?? name).trim(),
+            hours,
+            price,
+            note: String(input.note ?? '').trim() || null,
+            noteEn: String(input.noteEn ?? '').trim() || null,
+            tag: String(input.tag ?? '').trim() || null,
+            tagEn: String(input.tagEn ?? '').trim() || null,
+            tone: String(input.tone ?? 'pink').trim() || 'pink',
+            active: toYn(input.active !== false),
+        },
+    );
+    const created = await query(`SELECT * FROM dbo.packages WHERE id = @id`, { id });
+    return created.recordset[0];
+}
+
+export async function updateStandardPackage(id, input) {
+    if (SYSTEM_PACKAGE_IDS.has(id)) {
+        throw new Error('ไม่สามารถแก้ไขแพ็กเกจระบบนี้ได้');
+    }
+    const found = await query(`SELECT * FROM dbo.packages WHERE id = @id`, { id });
+    if (!found.recordset[0]) {
+        throw new Error('ไม่พบแพ็กเกจที่เลือก');
+    }
+    const row = found.recordset[0];
+    const hours = input.hours == null ? Number(row.hours) : Number(input.hours);
+    const price = input.price == null ? Number(row.price) : Number(input.price);
+    if (!Number.isInteger(hours) || hours <= 0) {
+        throw new Error('กรุณากรอกจำนวนชั่วโมงให้ถูกต้อง');
+    }
+    if (!Number.isInteger(price) || price < 0) {
+        throw new Error('กรุณากรอกราคาให้ถูกต้อง');
+    }
+    const name = input.name == null ? row.name : String(input.name).trim();
+    if (!name) {
+        throw new Error('กรุณากรอกชื่อแพ็กเกจ');
+    }
+    await query(
+        `UPDATE dbo.packages SET
+            name = @name,
+            name_en = @nameEn,
+            hours = @hours,
+            price = @price,
+            note = @note,
+            note_en = @noteEn,
+            tag = @tag,
+            tag_en = @tagEn,
+            tone = @tone,
+            is_active = @active
+         WHERE id = @id`,
+        {
+            id,
+            name,
+            nameEn: input.nameEn == null ? row.name_en : String(input.nameEn).trim(),
+            hours,
+            price,
+            note: input.note == null ? row.note : (String(input.note).trim() || null),
+            noteEn: input.noteEn == null ? row.note_en : (String(input.noteEn).trim() || null),
+            tag: input.tag == null ? row.tag : (String(input.tag).trim() || null),
+            tagEn: input.tagEn == null ? row.tag_en : (String(input.tagEn).trim() || null),
+            tone: input.tone == null ? row.tone : (String(input.tone).trim() || 'pink'),
+            active: input.active == null ? row.is_active : toYn(input.active),
+        },
+    );
+    const updated = await query(`SELECT * FROM dbo.packages WHERE id = @id`, { id });
+    return updated.recordset[0];
+}
+
 export async function ensureActiveBookingSlotIndex() {
     await query(`
         DECLARE @sql NVARCHAR(MAX) = N'';
@@ -965,10 +1408,18 @@ export async function cancelLessonBooking({ bookingRowId, reason, slotAfter = 'o
              WHERE booking_id = @id AND status = N'pending'`,
             { id: bookingRowId },
         );
-        await run(
-            `UPDATE dbo.teacher_availability SET status = @status WHERE id = @slotId`,
-            { status: slotAfter === 'closed' ? 'closed' : 'open', slotId: booking.slot_id },
-        );
+        const linked = await run(`SELECT slot_id FROM dbo.booking_slots WHERE booking_id = @id`, { id: bookingRowId });
+        const slotIds = linked.recordset.length
+            ? linked.recordset.map((row) => row.slot_id)
+            : [booking.slot_id];
+        const nextStatus = slotAfter === 'closed' ? 'closed' : 'open';
+        for (const slotId of slotIds) {
+            await run(
+                `UPDATE dbo.teacher_availability SET status = @status WHERE id = @slotId`,
+                { status: nextStatus, slotId },
+            );
+        }
+        await run(`DELETE FROM dbo.booking_slots WHERE booking_id = @id`, { id: bookingRowId });
         return booking;
     });
 }
@@ -1001,7 +1452,8 @@ export async function setTeacherSlotStatus({ slotId, action, teacherId }) {
                 CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
                 b.id AS booking_row_id, b.public_id AS booking_public_id, b.user_id, b.status AS booking_status
          FROM dbo.teacher_availability s
-         LEFT JOIN dbo.bookings b ON b.slot_id = s.id AND b.status IN (N'pending', N'confirmed', N'moved')
+         LEFT JOIN dbo.booking_slots bs ON bs.slot_id = s.id
+         LEFT JOIN dbo.bookings b ON b.id = bs.booking_id AND b.status IN (N'pending', N'confirmed', N'moved')
          WHERE s.id = @slotId AND s.teacher_id = @teacherId`,
         { slotId, teacherId },
     );
@@ -1063,9 +1515,12 @@ export async function listTeacherMonthSlots({ teacherId, start, end }) {
                 CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
                 s.status,
                 b.public_id AS booking_id, b.status AS booking_status, b.topic, b.topic_en,
+                COALESCE(b.duration_hours, 1) AS duration_hours,
+                CASE WHEN b.slot_id = s.id THEN 1 ELSE 0 END AS is_primary_slot,
                 u.nickname, u.nickname_en, u.name, u.name_en, u.id AS student_id
          FROM dbo.teacher_availability s
-         LEFT JOIN dbo.bookings b ON b.slot_id = s.id AND b.status IN (N'pending', N'confirmed', N'moved')
+         LEFT JOIN dbo.booking_slots bs ON bs.slot_id = s.id
+         LEFT JOIN dbo.bookings b ON b.id = bs.booking_id AND b.status IN (N'pending', N'confirmed', N'moved')
          LEFT JOIN dbo.users u ON u.id = b.user_id
          WHERE s.teacher_id = @teacherId AND s.slot_date >= @start AND s.slot_date <= @end
          ORDER BY s.slot_date, s.slot_time`,

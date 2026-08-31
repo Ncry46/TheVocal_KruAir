@@ -14,8 +14,8 @@ services:
       SQL_CLIENT: tedious
       PORT: "3000"
       SQL_SERVER: tvsdb2.thanvasupos.com,28914
-      FRONTEND_ORIGIN: https://kruair.thanvasupos.com
-      LINE_CALLBACK_URL: https://kruair.thanvasupos.com/api/auth/line/callback
+      FRONTEND_ORIGIN: http://localhost:3000
+      LINE_CALLBACK_URL: http://localhost:3000/api/auth/line/callback
     volumes:
       - ./backend/.env:/app/.env:ro
     ports:

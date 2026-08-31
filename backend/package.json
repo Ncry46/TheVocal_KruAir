@@ -9,7 +9,7 @@
     "seed": "node src/seed.js",
     "dev": "node src/index.js",
     "start": "node src/index.js",
-    "test": "node --test src/bookingPolicy.test.js src/yn.test.js src/lineIdentity.test.js src/lineLogin.test.js"
+    "test": "node --test src/bookingPolicy.test.js src/yn.test.js src/lineIdentity.test.js src/lineLogin.test.js src/packagePolicy.test.js src/lineMessaging.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

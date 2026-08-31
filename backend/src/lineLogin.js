@@ -12,8 +12,8 @@ export function getLineConfig(env = process.env) {
     const channelId = String(env.LINE_CHANNEL_ID || '').trim();
     const channelSecret = String(env.LINE_CHANNEL_SECRET || '').trim();
     const callbackUrl = String(env.LINE_CALLBACK_URL || '').trim()
-        || 'https://kruair.thanvasupos.com/api/auth/line/callback';
-    const frontendOrigin = String(env.FRONTEND_ORIGIN || 'https://kruair.thanvasupos.com').replace(/\/$/, '');
+        || 'http://localhost:3001/api/auth/line/callback';
+    const frontendOrigin = String(env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
     const scopes = String(env.LINE_LOGIN_SCOPES || 'profile openid').trim();
     return {
         configured: Boolean(channelId && channelSecret),

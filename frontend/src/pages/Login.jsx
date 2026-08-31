@@ -112,8 +112,7 @@ export default function Login() {
 
             <div className="demohint">
               <b>{t('auth.demo')}</b> {t('roles.student')} <code>mint@email.com</code> / <code>mint123</code><br />
-              {t('roles.teacher')} <code>kruaer@email.com</code> / <code>kruaer123</code><br />
-              {t('roles.admin')} <code>admin@kruaer.com</code> / <code>admin123</code>
+              {t('roles.teacher')} <code>kruaer@email.com</code> / <code>kruaer123</code>
             </div>
           </form>
         </div>

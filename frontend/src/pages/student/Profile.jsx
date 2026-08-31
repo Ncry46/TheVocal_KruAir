@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Field, Input } from '@components/ui';
 import { useApp } from '@app/context/AppContext';
 import { avatarSrc } from '@app/utils/avatar';
+import { api } from '@app/services/apiClient';
 import { beginLineLogin } from '@app/services/lineAuth';
 
 const EDUCATION_OPTIONS = [
@@ -39,6 +40,17 @@ export default function Profile() {
     const [genres, setGenres] = useState(user?.genres ?? []);
     const [reason, setReason] = useState(user?.reason ?? '');
     const [lineBusy, setLineBusy] = useState(false);
+    const [oaQrUrl, setOaQrUrl] = useState(null);
+    const [oaAddFriendUrl, setOaAddFriendUrl] = useState(null);
+
+    useEffect(() => {
+        api.getLineStatus()
+            .then((status) => {
+                setOaQrUrl(status.oaQrUrl || null);
+                setOaAddFriendUrl(status.oaAddFriendUrl || null);
+            })
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (searchParams.get('line') !== 'linked') {
@@ -222,6 +234,22 @@ export default function Profile() {
               >
                 {lineBusy ? t('auth.lineConnecting') : t('profile.lineConnect')}
               </Button>
+            )}
+            {oaQrUrl && (
+              <div style={{ marginTop: 18, textAlign: 'center' }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('profile.oaTitle')}</div>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>{t('profile.oaHint')}</div>
+                <img
+                  src={oaQrUrl}
+                  alt="LINE OA QR"
+                  style={{ width: 180, height: 180, background: '#fff', borderRadius: 12, padding: 8 }}
+                />
+                {oaAddFriendUrl && (
+                  <div style={{ marginTop: 10 }}>
+                    <a className="link" href={oaAddFriendUrl} target="_blank" rel="noreferrer">{t('profile.oaOpen')}</a>
+                  </div>
+                )}
+              </div>
             )}
           </Card>
         )}

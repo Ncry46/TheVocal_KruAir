@@ -58,16 +58,19 @@ async function seed() {
     const packages = loadJson('packages.json');
     for (const pkg of packages) {
         await query(
-            `INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone)
-             VALUES (@id, @name, @hours, @price, @note, @tag, @tone)`,
+            `INSERT INTO dbo.packages (id, name, name_en, hours, price, note, note_en, tag, tone, is_active)
+             VALUES (@id, @name, @nameEn, @hours, @price, @note, @noteEn, @tag, @tone, @isActive)`,
             {
                 id: pkg.id,
                 name: pkg.name,
+                nameEn: pkg.nameEn ?? pkg.name,
                 hours: pkg.hours,
                 price: pkg.price,
                 note: pkg.note,
+                noteEn: pkg.noteEn ?? pkg.note,
                 tag: pkg.tag,
                 tone: pkg.tone,
+                isActive: toYn(pkg.isActive !== false),
             },
         );
     }
