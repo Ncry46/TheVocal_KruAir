@@ -18,8 +18,8 @@ describe('getLineConfig', () => {
             LINE_CHANNEL_SECRET: 'secret',
         });
         assert.equal(config.configured, true);
-        assert.equal(config.callbackUrl, 'https://kruair.thanvasupos.com/api/auth/line/callback');
-        assert.equal(config.frontendOrigin, 'https://kruair.thanvasupos.com');
+        assert.equal(config.callbackUrl, 'http://localhost:3001/api/auth/line/callback');
+        assert.equal(config.frontendOrigin, 'http://localhost:5173');
     });
 });
 

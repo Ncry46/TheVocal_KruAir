@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Badge, Card, Kpi, Spinner } from '@components/ui';
+import { Badge, Button, Card, Field, Input, Kpi, Modal, Spinner } from '@components/ui';
 import { BellIcon, CalendarIcon, GraduationIcon, MicIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
+
+const EMPTY_PKG = {
+    nameTh: '',
+    nameEn: '',
+    hours: '',
+    price: '',
+    noteTh: '',
+    noteEn: '',
+    tagTh: '',
+    tagEn: '',
+    tone: 'pink',
+    active: true,
+};
 
 function Row({ k, v }) {
     return (
@@ -24,11 +37,19 @@ function Status({ on, onLabel, offLabel }) {
 export default function Settings() {
     const { language, t, toast } = useApp();
     const [data, setData] = useState(null);
+    const [packages, setPackages] = useState([]);
+    const [pkgOpen, setPkgOpen] = useState(false);
+    const [pkgForm, setPkgForm] = useState(EMPTY_PKG);
+    const [editingId, setEditingId] = useState(null);
+    const [pkgBusy, setPkgBusy] = useState(false);
+
+    const loadPackages = () => api.getAdminPackages().then(setPackages).catch(() => setPackages([]));
 
     useEffect(() => {
         api.getSettings()
             .then(setData)
             .catch((err) => toast(err instanceof Error ? err.message : t('settings.loadFailed')));
+        loadPackages();
     }, [language, t, toast]);
 
     if (!data) {
@@ -42,6 +63,80 @@ export default function Settings() {
     const paymentLabel = data.integrations.payment.mode === 'mock'
         ? t('settings.paymentMock')
         : t('settings.paymentLive');
+
+    const openPackageModal = (pkg = null) => {
+        if (pkg) {
+            setEditingId(pkg.id);
+            setPkgForm({
+                nameTh: pkg.nameTh ?? pkg.name,
+                nameEn: pkg.nameEn ?? '',
+                hours: String(pkg.hours),
+                price: String(pkg.price),
+                noteTh: pkg.noteTh ?? pkg.note ?? '',
+                noteEn: pkg.noteEn ?? '',
+                tagTh: pkg.tagTh ?? pkg.tag ?? '',
+                tagEn: pkg.tagEn ?? '',
+                tone: pkg.tone ?? 'pink',
+                active: pkg.active,
+            });
+        }
+        else {
+            setEditingId(null);
+            setPkgForm(EMPTY_PKG);
+        }
+        setPkgOpen(true);
+    };
+
+    const savePackage = async () => {
+        if (!pkgForm.nameTh.trim() || !pkgForm.hours || pkgForm.price === '') {
+            toast(t('offers.needFields'));
+            return;
+        }
+        setPkgBusy(true);
+        try {
+            const payload = {
+                name: pkgForm.nameTh.trim(),
+                nameEn: pkgForm.nameEn.trim() || pkgForm.nameTh.trim(),
+                hours: Number(pkgForm.hours),
+                price: Number(pkgForm.price),
+                note: pkgForm.noteTh.trim() || null,
+                noteEn: pkgForm.noteEn.trim() || null,
+                tag: pkgForm.tagTh.trim() || null,
+                tagEn: pkgForm.tagEn.trim() || null,
+                tone: pkgForm.tone,
+                active: pkgForm.active,
+            };
+            if (editingId) {
+                await api.updatePackage(editingId, payload);
+            }
+            else {
+                await api.createPackage(payload);
+            }
+            toast(t('settings.packageSaved'), 'ok');
+            setPkgOpen(false);
+            await loadPackages();
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('settings.packageFailed'));
+        }
+        finally {
+            setPkgBusy(false);
+        }
+    };
+
+    const togglePackage = async (pkg) => {
+        setPkgBusy(true);
+        try {
+            await api.updatePackage(pkg.id, { active: !pkg.active });
+            await loadPackages();
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('settings.packageFailed'));
+        }
+        finally {
+            setPkgBusy(false);
+        }
+    };
 
     return (
       <>
@@ -86,13 +181,28 @@ export default function Settings() {
             <div className="pagetip">{t('settings.schoolTip')}</div>
           </Card>
 
-          <Card title={t('settings.packages')}>
-            {data.packages.map((pkg) => (
-              <Row
-                key={pkg.id}
-                k={`${pkg.name} · ${pkg.hours} ${hoursUnit}`}
-                v={`฿${Number(pkg.price).toLocaleString()} · ${pkg.active ? t('settings.active') : t('settings.inactive')}`}
-              />
+          <Card
+            title={t('settings.packages')}
+            action={(
+              <Button pink size="sm" onClick={() => openPackageModal()}>
+                {t('settings.addPackage')}
+              </Button>
+            )}
+          >
+            {packages.map((pkg) => (
+              <div key={pkg.id} className="toggle-row">
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{pkg.name} · {pkg.hours} {hoursUnit}</div>
+                  <div className="muted" style={{ fontSize: 11 }}>฿{Number(pkg.price).toLocaleString()}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Badge tone={pkg.active ? 'green' : 'gray'}>{pkg.active ? t('settings.active') : t('settings.inactive')}</Badge>
+                  <Button size="sm" ghost onClick={() => openPackageModal(pkg)} disabled={pkgBusy}>{t('settings.editPackage')}</Button>
+                  <Button size="sm" ghost onClick={() => togglePackage(pkg)} disabled={pkgBusy}>
+                    {pkg.active ? t('settings.inactive') : t('settings.active')}
+                  </Button>
+                </div>
+              </div>
             ))}
             <div className="pagetip">{t('settings.packageTip')}</div>
           </Card>
@@ -122,9 +232,15 @@ export default function Settings() {
             <div className="toggle-row">
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.lineOa')}</div>
-                <div className="muted" style={{ fontSize: 11 }}>{t('settings.lineHint')}</div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {data.integrations.lineOa.connected ? t('settings.lineOaOn') : t('settings.lineOaOff')}
+                </div>
               </div>
-              <Status on={false} onLabel={t('settings.ready')} offLabel={t('settings.notConnected')}/>
+              <Status
+                on={data.integrations.lineOa.connected}
+                onLabel={t('settings.ready')}
+                offLabel={t('settings.notConnected')}
+              />
             </div>
             <div className="toggle-row">
               <div>
@@ -175,6 +291,36 @@ export default function Settings() {
             <Row k={t('settings.pdpa')} v={t('settings.pdpaVal')}/>
           </Card>
         </div>
+
+        <Modal open={pkgOpen} onClose={() => setPkgOpen(false)} title={editingId ? t('settings.editPackage') : t('settings.addPackage')}>
+          <Field label={t('settings.packageName')} required>
+            <Input value={pkgForm.nameTh} onChange={(e) => setPkgForm((current) => ({ ...current, nameTh: e.target.value }))}/>
+          </Field>
+          <Field label={t('settings.packageNameEn')}>
+            <Input value={pkgForm.nameEn} onChange={(e) => setPkgForm((current) => ({ ...current, nameEn: e.target.value }))}/>
+          </Field>
+          <div className="two-col">
+            <Field label={t('settings.packageHours')} required>
+              <Input type="number" min="1" value={pkgForm.hours} onChange={(e) => setPkgForm((current) => ({ ...current, hours: e.target.value }))}/>
+            </Field>
+            <Field label={t('settings.packagePrice')} required>
+              <Input type="number" min="0" value={pkgForm.price} onChange={(e) => setPkgForm((current) => ({ ...current, price: e.target.value }))}/>
+            </Field>
+          </div>
+          <Field label={t('settings.packageNote')}>
+            <Input value={pkgForm.noteTh} onChange={(e) => setPkgForm((current) => ({ ...current, noteTh: e.target.value }))}/>
+          </Field>
+          <Field label={t('settings.packageNoteEn')}>
+            <Input value={pkgForm.noteEn} onChange={(e) => setPkgForm((current) => ({ ...current, noteEn: e.target.value }))}/>
+          </Field>
+          <label className="check-row" style={{ marginBottom: 14 }}>
+            <input type="checkbox" checked={pkgForm.active} onChange={(e) => setPkgForm((current) => ({ ...current, active: e.target.checked }))}/>
+            {t('settings.enableSale')}
+          </label>
+          <Button pink style={{ width: '100%' }} onClick={savePackage} disabled={pkgBusy}>
+            {pkgBusy ? t('settings.savingPackage') : t('settings.savePackage')}
+          </Button>
+        </Modal>
       </>
     );
 }

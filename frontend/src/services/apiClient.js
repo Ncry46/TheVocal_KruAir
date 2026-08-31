@@ -86,6 +86,9 @@ export const api = {
     getPackages() {
         return request('/packages');
     },
+    getMyOffers() {
+        return request('/me/offers');
+    },
     getPackageStatus() {
         return request('/me/package-status');
     },
@@ -107,11 +110,17 @@ export const api = {
     createBooking(day, time, mode = 'studio') {
         return request('/bookings', { method: 'POST', body: JSON.stringify({ day, time, mode }) });
     },
+    createTeacherBooking(input) {
+        return request('/teacher/bookings', { method: 'POST', body: JSON.stringify(input) });
+    },
     getMyLessons() {
         return request('/me/lessons');
     },
     confirmLesson(id) {
         return request(`/me/lessons/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+    },
+    rejectLesson(id) {
+        return request(`/me/lessons/${encodeURIComponent(id)}/reject`, { method: 'POST' });
     },
     cancelLesson(id) {
         return request(`/me/lessons/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
@@ -194,6 +203,24 @@ export const api = {
     },
     getSettings() {
         return request('/admin/settings');
+    },
+    getAdminPackages() {
+        return request('/admin/packages');
+    },
+    createPackage(input) {
+        return request('/admin/packages', { method: 'POST', body: JSON.stringify(input) });
+    },
+    updatePackage(id, input) {
+        return request(`/admin/packages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+    },
+    getStudentOffers(studentId) {
+        return request(`/teacher/students/${encodeURIComponent(studentId)}/offers`);
+    },
+    createStudentOffer(studentId, input) {
+        return request(`/teacher/students/${encodeURIComponent(studentId)}/offers`, { method: 'POST', body: JSON.stringify(input) });
+    },
+    cancelStudentOffer(publicId) {
+        return request(`/teacher/offers/${encodeURIComponent(publicId)}`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) });
     },
     recordLesson(bookingId, outcome, note, feedbackAudioUrl = '') {
         return request(`/teacher/bookings/${encodeURIComponent(bookingId)}/log`, {

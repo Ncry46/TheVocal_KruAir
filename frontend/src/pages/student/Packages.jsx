@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, Field, Input, Spinner } from '@components/ui';
+import { Badge, Button, Card, Field, Input, Spinner } from '@components/ui';
 import { BankIcon, CardIcon, CheckIcon, CrownIcon, MusicNoteIcon, PhoneIcon, PinIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 
 const PKG_IMG = {
+    single: '/img/pkg-desk.jpg',
     beginner: '/img/pkg-desk.jpg',
     pro: '/img/pkg-stage.jpg',
     master: '/img/pkg-studio.jpg',
 };
+
+function packageImage(id) {
+    return PKG_IMG[id] || '/img/pkg-studio.jpg';
+}
 
 const PAY_METHODS = [
     {
@@ -40,7 +45,8 @@ export default function Packages() {
     const navigate = useNavigate();
     const [params] = useSearchParams();
     const [pkgs, setPkgs] = useState(null);
-    const [pkgId, setPkgId] = useState(params.get('pkg') || 'pro');
+    const [offers, setOffers] = useState([]);
+    const [pkgId, setPkgId] = useState(params.get('pkg') || 'single');
     const [code, setCode] = useState('');
     const [voucher, setVoucher] = useState('');
     const [discount, setDiscount] = useState(0);
@@ -49,6 +55,7 @@ export default function Packages() {
 
     useEffect(() => {
         api.getPackages().then(setPkgs).catch(() => setPkgs([]));
+        api.getMyOffers().then(setOffers).catch(() => setOffers([]));
     }, [language]);
 
     useEffect(() => {
@@ -114,6 +121,26 @@ export default function Packages() {
         }
     };
 
+    const offerLabel = (status) => {
+        if (status === 'granted') {
+            return t('offers.granted');
+        }
+        if (status === 'pending_payment') {
+            return t('offers.pending');
+        }
+        return t('offers.cancelled');
+    };
+
+    const offerTone = (status) => {
+        if (status === 'granted') {
+            return 'green';
+        }
+        if (status === 'pending_payment') {
+            return 'amber';
+        }
+        return 'gray';
+    };
+
     if (!pkgs) {
         return <Spinner />;
     }
@@ -126,7 +153,7 @@ export default function Packages() {
               <button
                 key={item.id}
                 type="button"
-                className={`pkg ${item.id === 'pro' ? 'popular' : ''} ${item.id === pkgId ? 'on' : ''}`}
+                className={`pkg ${item.id === pkgId ? 'on' : ''}`}
                 onClick={() => selectPackage(item.id)}
               >
                 {item.tag && (
@@ -135,7 +162,7 @@ export default function Packages() {
                   </div>
                 )}
                 <div className="top">
-                  <img src={PKG_IMG[item.id]} alt={item.name} loading="lazy"/>
+                  <img src={packageImage(item.id)} alt={item.name} loading="lazy"/>
                   <span className="top-em">
                     <MusicNoteIcon width={24} height={24}/>
                   </span>
@@ -154,6 +181,28 @@ export default function Packages() {
               </button>
             ))}
           </div>
+
+          {offers.length > 0 && (
+            <Card title={t('offers.title')} style={{ marginBottom: 16 }}>
+              {offers.map((offer) => (
+                <div key={offer.id} className="toggle-row">
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{offer.title}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>
+                      {offer.hours} {t('offers.hours')} · ฿{Number(offer.price).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Badge tone={offerTone(offer.status)}>{offerLabel(offer.status)}</Badge>
+                    {offer.status === 'pending_payment' && (
+                      <span className="muted" style={{ fontSize: 12 }}>{t('offers.paySoon')}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+
           <div className="termbox">
             <b>
               <PinIcon width={14} height={14}/> {t('checkout.termsTitle')}

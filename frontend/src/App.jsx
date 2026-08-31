@@ -39,7 +39,7 @@ export default function App() {
         <Route path="/login" element={<Login />}/>
         <Route path="/register" element={<Register />}/>
 
-        <Route element={<RequireAuth />}> 
+        <Route element={<RequireAuth />}>
           <Route path="/app" element={<AppLayout mode="student"/>}>
             <Route index element={<Home />}/>
             <Route path="packages" element={<Packages />}/>
@@ -54,21 +54,24 @@ export default function App() {
               <Route index element={<Schedule />}/>
               <Route path="requests" element={<Requests />}/>
               <Route path="students" element={<Students />}/>
-              <Route path="profile" element={<Profile />}/>
-            </Route>
-          </Route>
-
-          <Route element={<RequireAuth roles={['admin']}/>}>
-            <Route path="/admin" element={<AppLayout mode="admin"/>}>
-              <Route index element={<Sales />}/>
+              <Route path="sales" element={<Sales />}/>
               <Route path="users" element={<Users />}/>
-              <Route path="students" element={<Students />}/>
               <Route path="vouchers" element={<Vouchers />}/>
               <Route path="settings" element={<Settings />}/>
               <Route path="profile" element={<Profile />}/>
             </Route>
           </Route>
         </Route>
+
+        <Route path="/admin" element={<Navigate to="/teacher" replace/>}/>
+        <Route path="/admin/sales" element={<Navigate to="/teacher/sales" replace/>}/>
+        <Route path="/admin/requests" element={<Navigate to="/teacher/requests" replace/>}/>
+        <Route path="/admin/users" element={<Navigate to="/teacher/users" replace/>}/>
+        <Route path="/admin/students" element={<Navigate to="/teacher/students" replace/>}/>
+        <Route path="/admin/vouchers" element={<Navigate to="/teacher/vouchers" replace/>}/>
+        <Route path="/admin/settings" element={<Navigate to="/teacher/settings" replace/>}/>
+        <Route path="/admin/profile" element={<Navigate to="/teacher/profile" replace/>}/>
+        <Route path="/admin/*" element={<Navigate to="/teacher" replace/>}/>
 
         <Route path="*" element={<Navigate to="/" replace/>}/>
       </Routes>

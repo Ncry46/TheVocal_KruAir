@@ -89,9 +89,10 @@ export function monthYear(date, lang = 'th') {
     return `${TH_MONTHS[date.getMonth()]} ${date.getFullYear() + 543}`;
 }
 
-export function lessonTimeRange(time, lang = 'th') {
+export function lessonTimeRange(time, lang = 'th', hours = 1) {
     const hour = Number(String(time).slice(0, 2));
-    const end = `${String(hour + 1).padStart(2, '0')}:00`;
+    const span = Math.max(1, Number(hours) || 1);
+    const end = `${String(hour + span).padStart(2, '0')}:00`;
     return lang === 'en' ? `${time}–${end}` : `${time}–${end} น.`;
 }
 

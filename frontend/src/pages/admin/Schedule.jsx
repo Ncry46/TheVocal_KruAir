@@ -40,6 +40,10 @@ export default function Schedule() {
     const [bulkOpen, setBulkOpen] = useState(false);
     const [bulkFrom, setBulkFrom] = useState('');
     const [bulkTo, setBulkTo] = useState('');
+    const [bookOpen, setBookOpen] = useState(false);
+    const [students, setStudents] = useState([]);
+    const [bookForm, setBookForm] = useState({ studentId: '', time: '', hours: '1', topic: '' });
+    const [bookBusy, setBookBusy] = useState(false);
 
     const load = () => api.getTeacherSchedule(year, month + 1).then(setWeek);
 
@@ -80,7 +84,17 @@ export default function Schedule() {
     const slotTimes = week?.slotTimes ?? [];
     const dayLessons = useMemo(() => lessonsByDate[selectedIso] ?? [], [lessonsByDate, selectedIso]);
     const daySlots = useMemo(() => slotsByDate[selectedIso] ?? [], [slotsByDate, selectedIso]);
+    const displaySlots = useMemo(() => daySlots.filter((slot) => {
+        if (slot.status !== 'booked' || !slot.bookingId) {
+            return true;
+        }
+        return dayLessons.some((lesson) => lesson.bookingId === slot.bookingId && lesson.slotId === slot.id);
+    }), [daySlots, dayLessons]);
     const unusedTimes = slotTimes.filter((time) => !daySlots.some((slot) => slot.time === time));
+    const openTimes = slotTimes.filter((time) => {
+        const slot = daySlots.find((item) => item.time === time);
+        return !slot || slot.status === 'open';
+    });
 
     const prevMonth = () => {
         if (month === 0) {
@@ -221,6 +235,44 @@ export default function Schedule() {
         }
     };
 
+    const openBookModal = async () => {
+        setBookForm({ studentId: '', time: openTimes[0] || '', hours: '1', topic: '' });
+        setBookOpen(true);
+        try {
+            const rows = await api.getStudents();
+            setStudents(rows);
+        }
+        catch {
+            setStudents([]);
+        }
+    };
+
+    const submitBook = async () => {
+        if (!bookForm.studentId || !bookForm.time) {
+            toast(t('schedule.needStudent'));
+            return;
+        }
+        setBookBusy(true);
+        try {
+            await api.createTeacherBooking({
+                studentId: Number(bookForm.studentId),
+                day: selectedIso,
+                time: bookForm.time,
+                hours: Number(bookForm.hours) || 1,
+                topic: bookForm.topic.trim() || undefined,
+            });
+            toast(t('schedule.bookOk'), 'ok');
+            setBookOpen(false);
+            await load();
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('schedule.bookFailed'));
+        }
+        finally {
+            setBookBusy(false);
+        }
+    };
+
     if (!week) {
         return <Spinner />;
     }
@@ -279,14 +331,19 @@ export default function Schedule() {
           </div>
         </Card>
 
-        <Card title={selectedIso ? formatLongDate(selectedIso, language) : t('schedule.pickDay')}>
-          {daySlots.length === 0 ? (
+        <Card
+          title={selectedIso ? formatLongDate(selectedIso, language) : t('schedule.pickDay')}
+          action={<Button pink size="sm" onClick={openBookModal}>{t('schedule.bookStudent')}</Button>}
+        >
+          {displaySlots.length === 0 ? (
             <div className="empty">{t('schedule.emptySlots')}</div>
           ) : (
             <div className="sched-list">
-              {daySlots.map((slot) => {
+              {displaySlots.map((slot) => {
                   const lesson = dayLessons.find((item) => item.bookingId === slot.bookingId);
                   const active = selectedLesson?.bookingId && selectedLesson.bookingId === slot.bookingId;
+                  const timeLabel = lesson?.timeRange
+                      || `${slot.time}–${plus1(slot.time)}${language === 'en' ? '' : ' น.'}`;
                   return (
                     <button
                       key={slot.id}
@@ -294,9 +351,9 @@ export default function Schedule() {
                       className={`sched-lesson ${slot.status} ${active ? 'on' : ''}`}
                       onClick={() => setSelectedLesson(lesson || null)}
                     >
-                      <div className="sched-time">{slot.time}–{plus1(slot.time)}</div>
+                      <div className="sched-time">{timeLabel}</div>
                       <div className="sched-meta">
-                        <b>{lesson ? lesson.student : (slot.status === 'closed' ? t('schedule.slotClosed') : t('schedule.slotOpen'))}</b>
+                        <b>{lesson ? `${lesson.student}${lesson.hours > 1 ? ` · ${lesson.hours} ${language === 'en' ? 'hrs' : 'ชม.'}` : ''}` : (slot.status === 'closed' ? t('schedule.slotClosed') : t('schedule.slotOpen'))}</b>
                         <span>{lesson ? lesson.lesson : t('schedule.noStudent')}</span>
                       </div>
                       <span className={`dp-badge ${slot.status === 'booked' ? (lesson?.status || 'pending') : slot.status}`}>
@@ -358,7 +415,7 @@ export default function Schedule() {
         <div style={{ marginBottom: 16 }}>
           <div className="sumrow">
             <span className="muted">{t('schedule.when')}</span>
-            <b>{selectedIso ? formatLongDate(selectedIso, language) : ''} {selectedLesson?.time}–{selectedLesson ? plus1(selectedLesson.time) : ''}</b>
+            <b>{selectedLesson?.timeRange || (selectedLesson ? `${selectedLesson.time}–${plus1(selectedLesson.time)}` : '')}</b>
           </div>
           <div className="sumrow">
             <span className="muted">{t('schedule.student')}</span>
@@ -370,7 +427,7 @@ export default function Schedule() {
           </div>
           <div className="sumrow">
             <span className="muted">{t('schedule.hours')}</span>
-            <span className="disc">−1 {language === 'en' ? 'hr' : 'ชม.'}</span>
+            <span className="disc">−{selectedLesson?.hours || 1} {language === 'en' ? 'hr' : 'ชม.'}</span>
           </div>
         </div>
         <Field label={t('schedule.note')}>
@@ -400,6 +457,48 @@ export default function Schedule() {
           </Button>
           <Button ghost onClick={() => setBulkOpen(false)}>{t('schedule.cancel')}</Button>
         </div>
+      </Modal>
+
+      <Modal open={bookOpen} onClose={() => setBookOpen(false)} title={t('schedule.bookTitle')}>
+        <Field label={t('schedule.pickStudent')} required>
+          <select
+            className="input"
+            value={bookForm.studentId}
+            onChange={(e) => setBookForm((current) => ({ ...current, studentId: e.target.value }))}
+          >
+            <option value="">{t('schedule.pickStudent')}</option>
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.name} · {student.left} {language === 'en' ? 'hrs left' : 'ชม. เหลือ'}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t('schedule.pickTime')} required>
+          <select
+            className="input"
+            value={bookForm.time}
+            onChange={(e) => setBookForm((current) => ({ ...current, time: e.target.value }))}
+          >
+            <option value="">{t('schedule.pickTime')}</option>
+            {openTimes.map((time) => <option key={time} value={time}>{time}</option>)}
+          </select>
+        </Field>
+        <Field label={t('schedule.bookHours')} required>
+          <Input
+            type="number"
+            min="1"
+            max="10"
+            value={bookForm.hours}
+            onChange={(e) => setBookForm((current) => ({ ...current, hours: e.target.value }))}
+          />
+        </Field>
+        <Field label={t('schedule.bookTopic')}>
+          <Input value={bookForm.topic} onChange={(e) => setBookForm((current) => ({ ...current, topic: e.target.value }))}/>
+        </Field>
+        <Button pink style={{ width: '100%' }} onClick={submitBook} disabled={bookBusy}>
+          {bookBusy ? t('schedule.booking') : t('schedule.bookSubmit')}
+        </Button>
       </Modal>
     </>);
 }

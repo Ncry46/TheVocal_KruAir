@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, Field, Input, Modal, Spinner, Table } from '@components/ui';
+import { Badge, Button, Card, Input, Spinner, Table } from '@components/ui';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 import { avatarSrc } from '@app/utils/avatar';
 
-const FILTERS = ['all', 'student', 'teacher', 'admin'];
-const EMPTY_FORM = { name: '', nameEn: '', nickname: '', nicknameEn: '', email: '', password: '', phone: '' };
+const FILTERS = ['all', 'student', 'teacher'];
 
 export default function Users() {
     const { language, t, toast, user: me } = useApp();
     const [rows, setRows] = useState(null);
     const [q, setQ] = useState('');
     const [filter, setFilter] = useState('all');
-    const [open, setOpen] = useState(false);
-    const [form, setForm] = useState(EMPTY_FORM);
-    const [busy, setBusy] = useState(false);
 
     const load = () => api.getUsers().then(setRows);
 
@@ -26,7 +22,8 @@ export default function Users() {
         const list = rows ?? [];
         const needle = q.trim().toLowerCase();
         return list.filter((row) => {
-            if (filter !== 'all' && row.role !== filter) {
+            const roleKey = row.role === 'admin' ? 'teacher' : row.role;
+            if (filter !== 'all' && roleKey !== filter) {
                 return false;
             }
             if (!needle) {
@@ -37,52 +34,17 @@ export default function Users() {
     }, [rows, q, filter]);
 
     const roleLabel = (role) => {
-        if (role === 'teacher') {
+        if (role === 'teacher' || role === 'admin') {
             return t('roles.teacher');
-        }
-        if (role === 'admin') {
-            return t('roles.admin');
         }
         return t('roles.student');
     };
 
     const roleTone = (role) => {
-        if (role === 'teacher') {
+        if (role === 'teacher' || role === 'admin') {
             return 'pink';
         }
-        if (role === 'admin') {
-            return 'blue';
-        }
         return 'green';
-    };
-
-    const createTeacher = async () => {
-        if (!form.name.trim() || !form.nameEn.trim() || !form.nickname.trim() || !form.nicknameEn.trim() || !form.email.trim() || form.password.length < 6) {
-            return;
-        }
-        setBusy(true);
-        try {
-            await api.createUser({
-                role: 'teacher',
-                name: form.name.trim(),
-                nameEn: form.nameEn.trim(),
-                nickname: form.nickname.trim(),
-                nicknameEn: form.nicknameEn.trim(),
-                email: form.email.trim(),
-                password: form.password,
-                phone: form.phone.trim(),
-            });
-            setOpen(false);
-            setForm(EMPTY_FORM);
-            toast(t('users.createdOk'), 'ok');
-            await load();
-        }
-        catch (err) {
-            toast(err instanceof Error ? err.message : t('users.createFailed'));
-        }
-        finally {
-            setBusy(false);
-        }
     };
 
     const toggleStatus = async (row) => {
@@ -102,86 +64,54 @@ export default function Users() {
     }
 
     return (
-      <>
-        <Card
-          title={t('users.title')}
-          action={(
-            <div className="users-toolbar">
-              <Input placeholder={t('users.search')} value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220 }}/>
-              <Button pink size="sm" onClick={() => setOpen(true)}>{t('users.addTeacher')}</Button>
-            </div>
-          )}
-        >
-          <div className="chip-row" style={{ marginBottom: 14 }}>
-            {FILTERS.map((key) => (
-              <button key={key} type="button" className={`dchip ${filter === key ? 'on' : ''}`} onClick={() => setFilter(key)}>
-                {t(`users.filter.${key}`)}
-              </button>
-            ))}
+      <Card
+        title={t('users.title')}
+        action={(
+          <div className="users-toolbar">
+            <Input placeholder={t('users.search')} value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220 }}/>
           </div>
-          {filtered.length === 0 ? (
-            <div className="empty">{t('users.empty')}</div>
-          ) : (
-            <Table
-              heads={[t('users.userNo'), t('users.person'), t('users.email'), t('users.role'), t('users.package'), t('users.created'), t('users.status'), '']}
-              rows={filtered.map((row) => [
-                <b key="id">{row.id}</b>,
-                <div key="p" className="user-cell">
-                  <div className="ava">
-                    <img src={avatarSrc(row)} alt=""/>
-                  </div>
-                  <div>
-                    <b>{row.nickname}</b>
-                    <div className="muted" style={{ fontSize: 12 }}>{row.name}</div>
-                  </div>
-                </div>,
-                row.email,
-                <Badge key="r" tone={roleTone(row.role)}>{roleLabel(row.role)}</Badge>,
-                row.role === 'student' ? row.pkg : '—',
-                row.createdAt,
-                row.status === 'Y'
-                    ? <Badge key="s" tone="green">{t('users.active')}</Badge>
-                    : <Badge key="s" tone="gray">{t('users.disabled')}</Badge>,
-                row.id === me?.id ? (
-                    <span key="a" className="muted">{t('users.you')}</span>
-                ) : (
-                    <Button key="a" size="sm" danger={row.status === 'Y'} ghost={row.status !== 'Y'} onClick={() => toggleStatus(row)}>
-                      {row.status === 'Y' ? t('users.disable') : t('users.enable')}
-                    </Button>
-                ),
-              ])}
-            />
-          )}
-        </Card>
-
-        <Modal open={open} onClose={() => setOpen(false)} title={t('users.addTeacher')}>
-          <Field label={t('users.name')} required>
-            <Input value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}/>
-          </Field>
-          <Field label={t('users.nameEn')} required>
-            <Input placeholder={t('users.nameEnPlaceholder')} value={form.nameEn} onChange={(e) => setForm((current) => ({ ...current, nameEn: e.target.value }))}/>
-          </Field>
-          <div className="two-col">
-            <Field label={t('users.nickname')} required>
-              <Input value={form.nickname} onChange={(e) => setForm((current) => ({ ...current, nickname: e.target.value }))}/>
-            </Field>
-            <Field label={t('users.nicknameEn')} required>
-              <Input placeholder={t('users.nicknameEnPlaceholder')} value={form.nicknameEn} onChange={(e) => setForm((current) => ({ ...current, nicknameEn: e.target.value }))}/>
-            </Field>
-          </div>
-          <Field label={t('users.email')} required>
-            <Input type="email" placeholder="teacher@email.com" value={form.email} onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}/>
-          </Field>
-          <Field label={t('users.password')} required>
-            <Input type="password" placeholder="••••••••" value={form.password} onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}/>
-          </Field>
-          <Field label={t('users.phone')}>
-            <Input value={form.phone} onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}/>
-          </Field>
-          <Button pink style={{ width: '100%' }} onClick={createTeacher} disabled={busy}>
-            {busy ? t('users.creating') : t('users.create')}
-          </Button>
-        </Modal>
-      </>
+        )}
+      >
+        <div className="chip-row" style={{ marginBottom: 14 }}>
+          {FILTERS.map((key) => (
+            <button key={key} type="button" className={`dchip ${filter === key ? 'on' : ''}`} onClick={() => setFilter(key)}>
+              {t(`users.filter.${key}`)}
+            </button>
+          ))}
+        </div>
+        {filtered.length === 0 ? (
+          <div className="empty">{t('users.empty')}</div>
+        ) : (
+          <Table
+            heads={[t('users.userNo'), t('users.person'), t('users.email'), t('users.role'), t('users.package'), t('users.created'), t('users.status'), '']}
+            rows={filtered.map((row) => [
+              <b key="id">{row.id}</b>,
+              <div key="p" className="user-cell">
+                <div className="ava">
+                  <img src={avatarSrc(row)} alt=""/>
+                </div>
+                <div>
+                  <b>{row.nickname}</b>
+                  <div className="muted" style={{ fontSize: 12 }}>{row.name}</div>
+                </div>
+              </div>,
+              row.email,
+              <Badge key="r" tone={roleTone(row.role)}>{roleLabel(row.role)}</Badge>,
+              row.role === 'student' ? row.pkg : '—',
+              row.createdAt,
+              row.status === 'Y'
+                  ? <Badge key="s" tone="green">{t('users.active')}</Badge>
+                  : <Badge key="s" tone="gray">{t('users.disabled')}</Badge>,
+              row.id === me?.id ? (
+                  <span key="a" className="muted">{t('users.you')}</span>
+              ) : (
+                  <Button key="a" size="sm" danger={row.status === 'Y'} ghost={row.status !== 'Y'} onClick={() => toggleStatus(row)}>
+                    {row.status === 'Y' ? t('users.disable') : t('users.enable')}
+                  </Button>
+              ),
+            ])}
+          />
+        )}
+      </Card>
     );
 }

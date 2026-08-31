@@ -1,11 +1,12 @@
 import { chipLabel, lessonTimeRange } from './lang.js';
 import { parseIsoDate } from './dates.js';
 import { hoursUntilSlot, shouldExpirePending, shouldSendDayBeforeReminder } from './bookingPolicy.js';
+import { LOW_HOURS_THRESHOLD, packageHoursLeft } from './packagePolicy.js';
 import { addNotification, cancelLessonBooking, findUserById, notifySlotTeacher, query, studentLabel } from './store.js';
 
 export const jobState = {
     lastRunAt: null,
-    lastResult: { expired: 0, reminded: 0 },
+    lastResult: { expired: 0, reminded: 0, lowHours: 0 },
     enabled: true,
 };
 
@@ -99,10 +100,45 @@ export async function sendDayBeforeReminders(now = new Date()) {
     return reminded;
 }
 
+export async function sendLowHoursReminders() {
+    const result = await query(
+        `SELECT up.id, up.user_id, up.hours_total, up.hours_used
+         FROM dbo.user_packages up
+         JOIN dbo.users u ON u.id = up.user_id
+         WHERE up.status = N'active'
+           AND up.expires_at > SYSUTCDATETIME()
+           AND up.low_hours_notified_at IS NULL
+           AND (up.hours_total - up.hours_used) <= @threshold
+           AND (up.hours_total - up.hours_used) > 0
+           AND u.role = N'student'
+           AND u.status = N'Y'`,
+        { threshold: LOW_HOURS_THRESHOLD },
+    );
+    let notified = 0;
+    for (const row of result.recordset) {
+        const left = packageHoursLeft(row.hours_total, row.hours_used);
+        await addNotification(
+            row.user_id,
+            'ชั่วโมงเรียนใกล้หมด',
+            `เหลืออีก ${left} ชม. — ติดต่อครูแอร์เพื่อต่อคอร์สหรือซื้อแพ็กเกจ`,
+            'pink',
+            'Course hours running low',
+            `${left} hour(s) left — contact Kru Air to renew or buy a package.`,
+        );
+        await query(
+            `UPDATE dbo.user_packages SET low_hours_notified_at = SYSUTCDATETIME() WHERE id = @pkgId`,
+            { pkgId: row.id },
+        );
+        notified += 1;
+    }
+    return notified;
+}
+
 export async function runSchoolJobs(now = new Date()) {
     const expired = await expireUnconfirmedBookings(now);
     const reminded = await sendDayBeforeReminders(now);
+    const lowHours = await sendLowHoursReminders();
     jobState.lastRunAt = now.toISOString();
-    jobState.lastResult = { expired, reminded };
+    jobState.lastResult = { expired, reminded, lowHours };
     return jobState.lastResult;
 }

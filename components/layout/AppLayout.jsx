@@ -5,7 +5,7 @@ import { api } from '@app/services/apiClient';
 import { Logo } from '../Logo';
 import { ThemeToggle } from '../ThemeToggle';
 import { avatarSrc, profilePath } from '@app/utils/avatar';
-import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon, WrenchIcon, } from '../icons';
+import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon } from '../icons';
 const NAV = {
     student: [
         {
@@ -30,24 +30,24 @@ const NAV = {
             group: 'pages.scheduleTitle',
             items: [
                 { to: '/teacher', icon: <CalendarIcon width={18} height={18}/>, label: 'nav.schedule', end: true },
-                { to: '/teacher/requests', icon: <RefreshIcon width={18} height={18}/>, label: 'nav.requests', badge: 2 },
+                { to: '/teacher/requests', icon: <RefreshIcon width={18} height={18}/>, label: 'nav.requests' },
                 { to: '/teacher/students', icon: <GraduationIcon width={18} height={18}/>, label: 'nav.students' },
             ],
         },
-    ],
-    admin: [
         {
             group: 'nav.adminGroup',
             items: [
-                { to: '/admin', icon: <ChartIcon width={18} height={18}/>, label: 'nav.sales', end: true },
-                { to: '/admin/users', icon: <UserIcon width={18} height={18}/>, label: 'nav.manageUsers' },
-                { to: '/admin/students', icon: <GraduationIcon width={18} height={18}/>, label: 'nav.manageStudents' },
-                { to: '/admin/vouchers', icon: <TicketIcon width={18} height={18}/>, label: 'nav.vouchers' },
+                { to: '/teacher/sales', icon: <ChartIcon width={18} height={18}/>, label: 'nav.sales' },
+                { to: '/teacher/users', icon: <UserIcon width={18} height={18}/>, label: 'nav.manageUsers' },
+                { to: '/teacher/vouchers', icon: <TicketIcon width={18} height={18}/>, label: 'nav.vouchers' },
             ],
         },
         {
             group: 'nav.system',
-            items: [{ to: '/admin/settings', icon: <GearIcon width={18} height={18}/>, label: 'nav.settings' }],
+            items: [
+                { to: '/teacher/settings', icon: <GearIcon width={18} height={18}/>, label: 'nav.settings' },
+                { to: '/teacher/profile', icon: <UserIcon width={18} height={18}/>, label: 'nav.profile' },
+            ],
         },
     ],
 };
@@ -61,13 +61,11 @@ const PAGE_TITLES = {
     '/teacher': { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' },
     '/teacher/requests': { title: 'nav.requests', sub: 'pages.requestsSub' },
     '/teacher/students': { title: 'nav.students', sub: 'pages.studentsSub' },
+    '/teacher/sales': { title: 'nav.sales', sub: 'pages.salesSub' },
+    '/teacher/users': { title: 'nav.manageUsers', sub: 'pages.usersSub' },
+    '/teacher/vouchers': { title: 'nav.vouchers', sub: 'pages.vouchersSub' },
+    '/teacher/settings': { title: 'nav.settings', sub: 'pages.settingsSub' },
     '/teacher/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
-    '/admin': { title: 'nav.sales', sub: 'pages.salesSub' },
-    '/admin/users': { title: 'nav.manageUsers', sub: 'pages.usersSub' },
-    '/admin/students': { title: 'nav.manageStudents', sub: 'pages.manageStudentsSub' },
-    '/admin/vouchers': { title: 'nav.vouchers', sub: 'pages.vouchersSub' },
-    '/admin/settings': { title: 'nav.settings', sub: 'pages.settingsSub' },
-    '/admin/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
 };
 export function AppLayout({ mode }) {
     const { language, logout, setLanguage, t, user } = useApp();
@@ -77,8 +75,7 @@ export function AppLayout({ mode }) {
     const [bellOpen, setBellOpen] = useState(false);
     const [reqCount, setReqCount] = useState(0);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const isAdmin = mode === 'admin';
-    const pageInfo = PAGE_TITLES[location.pathname] ?? (isAdmin
+    const pageInfo = PAGE_TITLES[location.pathname] ?? (mode === 'teacher'
         ? { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' }
         : { title: 'nav.studentHome', sub: 'pages.studentHomeSub' });
     const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -88,7 +85,7 @@ export function AppLayout({ mode }) {
         const timer = setInterval(load, 20000);
         return () => clearInterval(timer);
     }, [language]);
-    const isStaff = mode === 'teacher' || mode === 'admin';
+    const isStaff = mode === 'teacher';
     useEffect(() => {
         if (!isStaff)
             return;
@@ -109,7 +106,6 @@ export function AppLayout({ mode }) {
         <div className="role-badge">
           {mode === 'student' && <><GraduationIcon width={16} height={16}/> {t('roles.student')}</>}
           {mode === 'teacher' && <><MicIcon width={16} height={16}/> {t('roles.teacherBadge')}</>}
-          {mode === 'admin' && <><WrenchIcon width={16} height={16}/> {t('roles.adminBadge')}</>}
         </div>
 
         <nav className="side-nav">
@@ -118,7 +114,7 @@ export function AppLayout({ mode }) {
               {g.items.map((item) => (<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={closeSidebar}>
                   <span className="ic">{item.icon}</span>
                   {t(item.label)}
-                  {(item.to === '/teacher/requests' || item.to === '/admin/requests') && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
+                  {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
                 </NavLink>))}
             </div>))}
         </nav>
@@ -184,7 +180,7 @@ export function AppLayout({ mode }) {
               </div>
               <div>
                 <div className="nm">{user?.nickname ?? user?.name ?? ''}</div>
-                <div className="rl">{mode === 'student' ? t('roles.student') : mode === 'teacher' ? t('roles.teacher') : t('roles.admin')}</div>
+                <div className="rl">{mode === 'student' ? t('roles.student') : t('roles.teacher')}</div>
               </div>
             </button>
           </div>

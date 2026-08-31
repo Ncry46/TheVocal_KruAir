@@ -1,29 +1,14 @@
 [
   {
-    "id": "beginner",
-    "name": "Package 10 ชั่วโมง",
-    "hours": 10,
-    "price": 22000,
-    "note": "เฉลี่ย 2,200 บาท/ชม. · เหมาะกับผู้เริ่มต้น",
+    "id": "single",
+    "name": "เรียน 1 ชั่วโมง",
+    "nameEn": "1-hour lesson",
+    "hours": 1,
+    "price": 2500,
+    "note": "฿2,500/ชม. · จองเวลาเรียนได้ทันที",
+    "noteEn": "฿2,500/hour · Book a lesson right away",
     "tag": null,
-    "tone": "pink"
-  },
-  {
-    "id": "pro",
-    "name": "Package 20 ชั่วโมง",
-    "hours": 20,
-    "price": 40000,
-    "note": "เฉลี่ย 2,000 บาท/ชม. · คุ้มค่าสำหรับสายจริงจัง",
-    "tag": "ยอดนิยม",
-    "tone": "navy"
-  },
-  {
-    "id": "master",
-    "name": "Package 30 ชั่วโมง",
-    "hours": 30,
-    "price": 56000,
-    "note": "เฉลี่ย 1,867 บาท/ชม.",
-    "tag": "คุ้มสุด",
-    "tone": "purple"
+    "tone": "pink",
+    "isActive": true
   }
 ]
