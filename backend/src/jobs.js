@@ -2,11 +2,11 @@ import { chipLabel, lessonTimeRange } from './lang.js';
 import { parseIsoDate } from './dates.js';
 import { hoursUntilSlot, shouldExpirePending, shouldSendDayBeforeReminder } from './bookingPolicy.js';
 import { LOW_HOURS_THRESHOLD, packageHoursLeft } from './packagePolicy.js';
+import { deliverDayBeforeReminder } from './lessonReminders.js';
 import { addNotification, cancelLessonBooking, findUserById, notifySlotTeacher, query, studentLabel } from './store.js';
-
 export const jobState = {
     lastRunAt: null,
-    lastResult: { expired: 0, reminded: 0, lowHours: 0 },
+    lastResult: { expired: 0, reminded: 0, lowHours: 0, expiry: 0 },
     enabled: true,
 };
 
@@ -14,7 +14,8 @@ async function loadActiveLessons() {
     const result = await query(
         `SELECT b.id, b.public_id, b.user_id, b.slot_id, b.status, b.confirm_deadline, b.reminder_sent_at,
                 CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
-                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                s.teacher_id
          FROM dbo.bookings b
          JOIN dbo.teacher_availability s ON s.id = b.slot_id
          WHERE b.status IN (N'pending', N'confirmed')`,
@@ -73,24 +74,7 @@ export async function sendDayBeforeReminders(now = new Date()) {
         })) {
             continue;
         }
-        const date = parseIsoDate(row.slot_iso);
-        await addNotification(
-            row.user_id,
-            'เตือนนัดเรียนพรุ่งนี้',
-            `นัด ${chipLabel(date, 'th')} ${lessonTimeRange(row.slot_hhmm, 'th')} — อย่าลืมมาเรียนนะครับ`,
-            'blue',
-            'Lesson reminder for tomorrow',
-            `Your lesson is ${chipLabel(date, 'en')} ${lessonTimeRange(row.slot_hhmm, 'en')} — see you there.`,
-        );
-        const student = await findUserById(row.user_id);
-        await notifySlotTeacher(
-            row.slot_id,
-            'เตือนคลาสพรุ่งนี้',
-            `พรุ่งนี้ ${studentLabel(student, 'th')} ${chipLabel(date, 'th')} ${lessonTimeRange(row.slot_hhmm, 'th')}`,
-            'blue',
-            'Lesson tomorrow',
-            `Tomorrow: ${studentLabel(student, 'en')} ${chipLabel(date, 'en')} ${lessonTimeRange(row.slot_hhmm, 'en')}`,
-        );
+        await deliverDayBeforeReminder(row);
         await query(
             `UPDATE dbo.bookings SET reminder_sent_at = SYSUTCDATETIME() WHERE id = @id AND reminder_sent_at IS NULL`,
             { id: row.id },
@@ -134,11 +118,51 @@ export async function sendLowHoursReminders() {
     return notified;
 }
 
+export async function sendPackageExpiryReminders(now = new Date()) {
+    const result = await query(
+        `SELECT up.id, up.user_id, up.expires_at,
+                p.name AS pkg_name, p.name_en AS pkg_name_en
+         FROM dbo.user_packages up
+         JOIN dbo.users u ON u.id = up.user_id
+         LEFT JOIN dbo.packages p ON p.id = up.package_id
+         WHERE up.status = N'active'
+           AND up.expiry_notified_at IS NULL
+           AND up.expires_at IS NOT NULL
+           AND up.expires_at > SYSUTCDATETIME()
+           AND up.expires_at <= DATEADD(day, 7, SYSUTCDATETIME())
+           AND (up.hours_total - up.hours_used) > 0
+           AND u.role = N'student'
+           AND u.status = N'Y'`,
+    );
+    let notified = 0;
+    for (const row of result.recordset) {
+        const expires = new Date(row.expires_at);
+        const daysLeft = Math.max(1, Math.ceil((expires.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+        const pkgNameTh = row.pkg_name || 'แพ็กเกจ';
+        const pkgNameEn = row.pkg_name_en || row.pkg_name || 'package';
+        await addNotification(
+            row.user_id,
+            'แพ็กเกจใกล้หมดอายุ',
+            `${pkgNameTh} จะหมดอายุใน ${daysLeft} วัน — ติดต่อครูแอร์หรือซื้อแพ็กเกจต่อ`,
+            'amber',
+            'Package expiring soon',
+            `Your ${pkgNameEn} expires in ${daysLeft} day(s) — contact Kru Air or renew.`,
+        );
+        await query(
+            `UPDATE dbo.user_packages SET expiry_notified_at = SYSUTCDATETIME() WHERE id = @pkgId`,
+            { pkgId: row.id },
+        );
+        notified += 1;
+    }
+    return notified;
+}
+
 export async function runSchoolJobs(now = new Date()) {
     const expired = await expireUnconfirmedBookings(now);
     const reminded = await sendDayBeforeReminders(now);
     const lowHours = await sendLowHoursReminders();
+    const expiry = await sendPackageExpiryReminders(now);
     jobState.lastRunAt = now.toISOString();
-    jobState.lastResult = { expired, reminded, lowHours };
+    jobState.lastResult = { expired, reminded, lowHours, expiry };
     return jobState.lastResult;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Field, Input, Kpi, Modal, Spinner } from '@components/ui';
 import { BellIcon, CalendarIcon, GraduationIcon, MicIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
@@ -36,23 +37,74 @@ function Status({ on, onLabel, offLabel }) {
 
 export default function Settings() {
     const { language, t, toast } = useApp();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [data, setData] = useState(null);
+    const [loadError, setLoadError] = useState('');
     const [packages, setPackages] = useState([]);
     const [pkgOpen, setPkgOpen] = useState(false);
     const [pkgForm, setPkgForm] = useState(EMPTY_PKG);
     const [editingId, setEditingId] = useState(null);
     const [pkgBusy, setPkgBusy] = useState(false);
+    const [paymentForm, setPaymentForm] = useState({
+        promptpayId: '',
+        bankName: '',
+        bankAccount: '',
+        accountName: '',
+        qrImageUrl: '',
+    });
+    const [paymentBusy, setPaymentBusy] = useState(false);
+    const [lineMenuBusy, setLineMenuBusy] = useState(false);
+
+    useEffect(() => {
+        const google = searchParams.get('google');
+        if (google === 'connected') {
+            toast(t('settings.googleConnected'), 'ok');
+            searchParams.delete('google');
+            setSearchParams(searchParams, { replace: true });
+        }
+        if (google === 'error') {
+            toast(searchParams.get('msg') || t('settings.loadFailed'));
+            searchParams.delete('google');
+            searchParams.delete('msg');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams, t, toast]);
 
     const loadPackages = () => api.getAdminPackages().then(setPackages).catch(() => setPackages([]));
 
     useEffect(() => {
+        setLoadError('');
         api.getSettings()
-            .then(setData)
-            .catch((err) => toast(err instanceof Error ? err.message : t('settings.loadFailed')));
+            .then((settings) => {
+                setData(settings);
+                const payment = settings.integrations?.payment ?? {};
+                setPaymentForm({
+                    promptpayId: payment.promptpayId || '',
+                    bankName: payment.bankName || '',
+                    bankAccount: payment.bankAccount || '',
+                    accountName: payment.accountName || '',
+                    qrImageUrl: payment.qrImageUrl || '',
+                });
+            })
+            .catch((err) => {
+                const message = err instanceof Error ? err.message : t('settings.loadFailed');
+                setLoadError(message);
+                toast(message);
+            });
         loadPackages();
     }, [language, t, toast]);
 
     if (!data) {
+        if (loadError) {
+            return (
+              <Card title={t('nav.settings')}>
+                <div className="empty">{loadError}</div>
+                <Button pink style={{ marginTop: 12 }} onClick={() => window.location.reload()}>
+                  {language === 'en' ? 'Retry' : 'ลองใหม่'}
+                </Button>
+              </Card>
+            );
+        }
         return <Spinner />;
     }
 
@@ -60,9 +112,11 @@ export default function Settings() {
         ? new Date(data.jobs.lastRunAt).toLocaleString(language === 'en' ? 'en-GB' : 'th-TH')
         : t('settings.neverRun');
     const hoursUnit = language === 'en' ? 'hrs' : 'ชม.';
-    const paymentLabel = data.integrations.payment.mode === 'mock'
-        ? t('settings.paymentMock')
-        : t('settings.paymentLive');
+    const paymentLabel = data.integrations.payment.mode === 'transfer'
+        ? t('settings.paymentTransfer')
+        : data.integrations.payment.mode === 'mock'
+            ? t('settings.paymentMock')
+            : t('settings.paymentUnconfigured');
 
     const openPackageModal = (pkg = null) => {
         if (pkg) {
@@ -135,6 +189,22 @@ export default function Settings() {
         }
         finally {
             setPkgBusy(false);
+        }
+    };
+
+    const savePayment = async () => {
+        setPaymentBusy(true);
+        try {
+            await api.updatePaymentSettings(paymentForm);
+            toast(t('settings.paymentSaved'), 'ok');
+            const settings = await api.getSettings();
+            setData(settings);
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('settings.paymentFailed'));
+        }
+        finally {
+            setPaymentBusy(false);
         }
     };
 
@@ -215,6 +285,30 @@ export default function Settings() {
             <div className="pagetip">{t('settings.slotTip')}</div>
           </Card>
 
+          <Card title={t('settings.paymentSetup')}>
+            <Field label={t('settings.promptpayId')}>
+              <Input value={paymentForm.promptpayId} onChange={(e) => setPaymentForm((current) => ({ ...current, promptpayId: e.target.value }))}/>
+            </Field>
+            <Field label={t('settings.bankName')}>
+              <Input value={paymentForm.bankName} onChange={(e) => setPaymentForm((current) => ({ ...current, bankName: e.target.value }))}/>
+            </Field>
+            <div className="two-col">
+              <Field label={t('settings.bankAccount')}>
+                <Input value={paymentForm.bankAccount} onChange={(e) => setPaymentForm((current) => ({ ...current, bankAccount: e.target.value }))}/>
+              </Field>
+              <Field label={t('settings.accountName')}>
+                <Input value={paymentForm.accountName} onChange={(e) => setPaymentForm((current) => ({ ...current, accountName: e.target.value }))}/>
+              </Field>
+            </div>
+            <Field label={t('settings.qrImageUrl')}>
+              <Input value={paymentForm.qrImageUrl} onChange={(e) => setPaymentForm((current) => ({ ...current, qrImageUrl: e.target.value }))}/>
+            </Field>
+            <Button pink style={{ width: '100%' }} onClick={savePayment} disabled={paymentBusy}>
+              {paymentBusy ? t('settings.savingPayment') : t('settings.savePayment')}
+            </Button>
+            <div className="pagetip">{t('settings.paymentSetupTip')}</div>
+          </Card>
+
           <Card title={t('settings.integrations')}>
             <div className="toggle-row">
               <div>
@@ -242,12 +336,60 @@ export default function Settings() {
                 offLabel={t('settings.notConnected')}
               />
             </div>
+            <Row k={t('settings.lineWebhook')} v={data.integrations.lineOa.webhookUrl || '—'}/>
+            <Row k={t('settings.liffId')} v={data.integrations.lineOa.liffId || t('settings.notConnected')}/>
+            <Button
+              pink
+              size="sm"
+              style={{ width: '100%', marginTop: 8 }}
+              disabled={lineMenuBusy || !data.integrations.lineOa.connected || !data.integrations.lineOa.liffConfigured}
+              onClick={() => {
+                setLineMenuBusy(true);
+                api.publishLineRichMenu()
+                  .then((result) => {
+                    toast(t('settings.lineRichMenuOk').replace('{id}', result.menuId || ''), 'ok');
+                  })
+                  .catch((err) => toast(err instanceof Error ? err.message : t('settings.loadFailed')))
+                  .finally(() => setLineMenuBusy(false));
+              }}
+            >
+              {lineMenuBusy ? t('settings.lineRichMenuBusy') : t('settings.lineRichMenuPublish')}
+            </Button>
+            <div className="pagetip">{t('settings.lineRichMenuTip')}</div>
             <div className="toggle-row">
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.payment')}</div>
                 <div className="muted" style={{ fontSize: 11 }}>{paymentLabel}</div>
               </div>
-              <Badge tone="amber">{t('settings.sandbox')}</Badge>
+              <Badge tone={data.integrations.payment.mode === 'transfer' ? 'green' : 'amber'}>
+                {data.integrations.payment.mode === 'transfer' ? t('settings.ready') : t('settings.notConnected')}
+              </Badge>
+            </div>
+            <div className="toggle-row">
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.googleCalendar')}</div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {data.integrations.googleCalendar?.configured
+                    ? (data.integrations.googleCalendar?.connected ? t('settings.googleConnected') : t('settings.googleCalendarHint'))
+                    : t('settings.googleNotConfigured')}
+                </div>
+              </div>
+              {data.integrations.googleCalendar?.configured ? (
+                data.integrations.googleCalendar?.connected ? (
+                  <Button ghost size="sm" onClick={() => api.disconnectGoogleCalendar().then(() => {
+                      toast(language === 'en' ? 'Disconnected' : 'ยกเลิกการเชื่อมต่อแล้ว', 'ok');
+                      api.getSettings().then(setData);
+                  }).catch((err) => toast(err instanceof Error ? err.message : t('settings.loadFailed')))}>
+                    {t('settings.googleDisconnect')}
+                  </Button>
+                ) : (
+                  <Button pink size="sm" onClick={() => api.connectGoogleCalendar().catch((err) => toast(err instanceof Error ? err.message : t('settings.loadFailed')))}>
+                    {t('settings.googleConnect')}
+                  </Button>
+                )
+              ) : (
+                <Badge tone="gray">{t('settings.notConnected')}</Badge>
+              )}
             </div>
             <div className="pagetip">{t('settings.integrationTip')}</div>
           </Card>
@@ -272,11 +414,12 @@ export default function Settings() {
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{t('settings.expiry')}</div>
                 <div className="muted" style={{ fontSize: 11 }}>{t('settings.expiryHint')}</div>
               </div>
-              <Status on={false} onLabel={t('settings.on')} offLabel={t('settings.off')}/>
+              <Status on={data.jobs.packageExpiry?.enabled ?? false} onLabel={t('settings.on')} offLabel={t('settings.off')}/>
             </div>
             <Row k={t('settings.lastJob')} v={lastRun}/>
             <Row k={t('settings.lastExpired')} v={String(data.jobs.lastExpired ?? 0)}/>
             <Row k={t('settings.lastReminded')} v={String(data.jobs.lastReminded ?? 0)}/>
+            <Row k={t('settings.lastExpiry')} v={String(data.jobs.lastExpiry ?? 0)}/>
           </Card>
 
           <Card title={t('settings.security')}>

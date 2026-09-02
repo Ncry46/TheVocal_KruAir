@@ -40,6 +40,8 @@ export default function Profile() {
     const [genres, setGenres] = useState(user?.genres ?? []);
     const [reason, setReason] = useState(user?.reason ?? '');
     const [lineBusy, setLineBusy] = useState(false);
+    const [googleBusy, setGoogleBusy] = useState(false);
+    const [googleStatus, setGoogleStatus] = useState(null);
     const [oaQrUrl, setOaQrUrl] = useState(null);
     const [oaAddFriendUrl, setOaAddFriendUrl] = useState(null);
 
@@ -50,6 +52,9 @@ export default function Profile() {
                 setOaAddFriendUrl(status.oaAddFriendUrl || null);
             })
             .catch(() => {});
+        api.getStudentGoogleCalendarStatus()
+            .then(setGoogleStatus)
+            .catch(() => setGoogleStatus(null));
     }, []);
 
     useEffect(() => {
@@ -60,6 +65,25 @@ export default function Profile() {
         const next = new URLSearchParams(searchParams);
         next.delete('line');
         setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams, t, toast]);
+
+    useEffect(() => {
+        const google = searchParams.get('google');
+        if (google === 'connected') {
+            toast(t('profile.googleConnectedToast'), 'ok');
+            api.getStudentGoogleCalendarStatus().then(setGoogleStatus).catch(() => {});
+            const next = new URLSearchParams(searchParams);
+            next.delete('google');
+            setSearchParams(next, { replace: true });
+            return;
+        }
+        if (google === 'error') {
+            toast(searchParams.get('msg') || t('profile.googleNotConfigured'));
+            const next = new URLSearchParams(searchParams);
+            next.delete('google');
+            next.delete('msg');
+            setSearchParams(next, { replace: true });
+        }
     }, [searchParams, setSearchParams, t, toast]);
 
     const startEdit = () => {
@@ -235,6 +259,49 @@ export default function Profile() {
                 {lineBusy ? t('auth.lineConnecting') : t('profile.lineConnect')}
               </Button>
             )}
+            <div className="line-banner" style={{ marginTop: 16, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{t('profile.googleCalendar')}</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {googleStatus?.configured
+                    ? (googleStatus?.connected ? t('profile.googleConnected') : t('profile.googleCalendarHint'))
+                    : t('profile.googleNotConfigured')}
+                </div>
+              </div>
+              {googleStatus?.configured && (
+                googleStatus?.connected ? (
+                  <Button ghost size="sm" disabled={googleBusy} onClick={async () => {
+                      setGoogleBusy(true);
+                      try {
+                          await api.disconnectStudentGoogleCalendar();
+                          setGoogleStatus((prev) => ({ ...prev, connected: false }));
+                          toast(t('profile.googleDisconnect'), 'ok');
+                      }
+                      catch (err) {
+                          toast(err instanceof Error ? err.message : t('profile.googleNotConfigured'));
+                      }
+                      finally {
+                          setGoogleBusy(false);
+                      }
+                  }}>
+                    {t('profile.googleDisconnect')}
+                  </Button>
+                ) : (
+                  <Button pink size="sm" disabled={googleBusy} onClick={async () => {
+                      setGoogleBusy(true);
+                      try {
+                          await api.connectStudentGoogleCalendar();
+                      }
+                      catch (err) {
+                          toast(err instanceof Error ? err.message : t('profile.googleNotConfigured'));
+                          setGoogleBusy(false);
+                      }
+                  }}>
+                    {t('profile.googleConnect')}
+                  </Button>
+                )
+              )}
+            </div>
             {oaQrUrl && (
               <div style={{ marginTop: 18, textAlign: 'center' }}>
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('profile.oaTitle')}</div>

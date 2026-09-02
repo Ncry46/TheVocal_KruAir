@@ -145,7 +145,9 @@ export function paymentStatus(status, lang = 'th') {
     const key = String(status ?? '');
     const map = {
         pending: lang === 'en' ? 'Pending' : 'รอชำระ',
+        awaiting_confirm: lang === 'en' ? 'Awaiting confirmation' : 'รอครูยืนยัน',
         success: lang === 'en' ? 'Paid' : 'สำเร็จ',
+        cancelled: lang === 'en' ? 'Cancelled' : 'ยกเลิก',
         failed: lang === 'en' ? 'Failed' : 'ไม่สำเร็จ',
         expired: lang === 'en' ? 'Expired' : 'หมดอายุ',
         refunded: lang === 'en' ? 'Refunded' : 'คืนเงินแล้ว',

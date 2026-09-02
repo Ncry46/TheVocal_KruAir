@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Field, Input, Spinner } from '@components/ui';
-import { BankIcon, CardIcon, CheckIcon, CrownIcon, MusicNoteIcon, PhoneIcon, PinIcon } from '@components/icons';
+import { CheckIcon, CrownIcon, MusicNoteIcon, PhoneIcon, PinIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 
@@ -16,46 +16,23 @@ function packageImage(id) {
     return PKG_IMG[id] || '/img/pkg-studio.jpg';
 }
 
-const PAY_METHODS = [
-    {
-        id: 'card',
-        icon: CardIcon,
-        method: 'บัตรเครดิต',
-        label: 'checkout.creditCard',
-        hint: 'checkout.creditHint',
-    },
-    {
-        id: 'kbank',
-        icon: BankIcon,
-        method: 'KBank',
-        label: 'checkout.kbank',
-        hint: 'checkout.kbankHint',
-    },
-    {
-        id: 'promptpay',
-        icon: PhoneIcon,
-        method: 'พร้อมเพย์',
-        label: 'checkout.promptpay',
-        hint: 'checkout.promptpayHint',
-    },
-];
-
 export default function Packages() {
     const { language, t, toast } = useApp();
     const navigate = useNavigate();
     const [params] = useSearchParams();
     const [pkgs, setPkgs] = useState(null);
     const [offers, setOffers] = useState([]);
+    const [links, setLinks] = useState([]);
     const [pkgId, setPkgId] = useState(params.get('pkg') || 'single');
     const [code, setCode] = useState('');
     const [voucher, setVoucher] = useState('');
     const [discount, setDiscount] = useState(0);
-    const [methodId, setMethodId] = useState('');
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         api.getPackages().then(setPkgs).catch(() => setPkgs([]));
         api.getMyOffers().then(setOffers).catch(() => setOffers([]));
+        api.getMyPaymentLinks().then(setLinks).catch(() => setLinks([]));
     }, [language]);
 
     useEffect(() => {
@@ -69,7 +46,6 @@ export default function Packages() {
 
     const pkg = pkgs?.find((item) => item.id === pkgId);
     const total = pkg ? Math.max(0, pkg.price - discount) : 0;
-    const selectedMethod = PAY_METHODS.find((item) => item.id === methodId);
 
     const selectPackage = (id) => {
         setPkgId(id);
@@ -99,19 +75,31 @@ export default function Packages() {
         }
     };
 
-    const pay = async () => {
-        if (!pkg || busy) {
+    const startCheckout = async ({ offerId = '' } = {}) => {
+        if (busy) {
             return;
         }
-        if (!selectedMethod) {
-            toast(t('checkout.pickMethod'));
+        if (!offerId && !pkg) {
             return;
         }
         setBusy(true);
         try {
-            await api.purchase(pkg.id, voucher, selectedMethod.method);
-            toast(`${t('checkout.paid')} · ${selectedMethod.method}`, 'ok');
-            navigate('/app/receipts');
+            const result = await api.purchase(offerId ? '' : pkg.id, voucher, offerId);
+            navigate(`/app/pay/${result.refNo}`);
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('checkout.paymentError'));
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+
+    const openLink = async (token) => {
+        setBusy(true);
+        try {
+            const result = await api.startPaymentLink(token);
+            navigate(`/app/pay/${result.refNo}`);
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('checkout.paymentError'));
@@ -148,7 +136,14 @@ export default function Packages() {
     return (
       <div className="checkout-layout">
         <div>
-          <div className="grid cols-3" style={{ marginBottom: 16 }}>
+          <div
+            className={
+              pkgs.length === 1 ? 'pkg-showcase'
+                : pkgs.length === 2 ? 'pkg-grid-duo'
+                  : 'grid cols-3'
+            }
+            style={{ marginBottom: 16 }}
+          >
             {pkgs.map((item) => (
               <button
                 key={item.id}
@@ -182,6 +177,27 @@ export default function Packages() {
             ))}
           </div>
 
+          {links.length > 0 && (
+            <Card title={t('paymentLinks.title')} style={{ marginBottom: 16 }}>
+              {links.map((link) => (
+                <div key={link.id} className="toggle-row">
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{link.title}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>
+                      {link.hours} {t('offers.hours')} · ฿{Number(link.totalAmount).toLocaleString()}
+                      {link.installmentCount > 1 && ` · ${link.installmentsPaid}/${link.installmentCount} ${t('paymentLinks.installments')}`}
+                    </div>
+                  </div>
+                  <Button size="sm" pink disabled={busy || !link.nextAmount} onClick={() => openLink(link.id)}>
+                    {link.nextInstallment
+                      ? `${t('paymentLinks.payInstallment')} ${link.nextInstallment}/${link.installmentCount}`
+                      : t('paymentLinks.payNow')}
+                  </Button>
+                </div>
+              ))}
+            </Card>
+          )}
+
           {offers.length > 0 && (
             <Card title={t('offers.title')} style={{ marginBottom: 16 }}>
               {offers.map((offer) => (
@@ -195,7 +211,9 @@ export default function Packages() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <Badge tone={offerTone(offer.status)}>{offerLabel(offer.status)}</Badge>
                     {offer.status === 'pending_payment' && (
-                      <span className="muted" style={{ fontSize: 12 }}>{t('offers.paySoon')}</span>
+                      <Button size="sm" pink disabled={busy} onClick={() => startCheckout({ offerId: offer.id })}>
+                        {t('offers.payNow')}
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -253,28 +271,14 @@ export default function Packages() {
             </div>
           </div>
 
-          <Field label={t('checkout.payment')}>
-            <div className="pay-methods">
-              {PAY_METHODS.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`pay-opt ${methodId === item.id ? 'on' : ''}`}
-                      onClick={() => setMethodId(item.id)}
-                    >
-                      <b>
-                        <Icon width={17} height={17}/> {t(item.label)}
-                      </b>
-                      <small>{t(item.hint)}</small>
-                    </button>
-                  );
-              })}
+          <div className="pay-methods">
+            <div className="pay-opt on">
+              <b><PhoneIcon width={17} height={17}/> {t('checkout.transferTitle')}</b>
+              <small>{t('checkout.transferHint')}</small>
             </div>
-          </Field>
+          </div>
 
-          <Button pink style={{ width: '100%', marginTop: 16 }} onClick={pay} disabled={busy}>
+          <Button pink style={{ width: '100%', marginTop: 16 }} onClick={() => startCheckout()} disabled={busy || !pkg}>
             {busy ? t('checkout.paying') : `${t('checkout.payNow')} · ฿${total.toLocaleString()}`}
           </Button>
           <div className="termbox" style={{ marginTop: 12 }}>

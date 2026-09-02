@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PublicLayout } from '@components/layout/PublicLayout';
-import { Button, Field, Input, Spinner } from '@components/ui';
-import { BellIcon, BookIcon, CalendarIcon, CartIcon, CardIcon, ChartIcon, ChatIcon, ClockIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PhoneIcon, PinIcon, TargetIcon, UserIcon } from '@components/icons';
+import { Button, Spinner } from '@components/ui';
+import { BellIcon, BookIcon, CalendarIcon, CartIcon, CardIcon, ChartIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PinIcon, TargetIcon, UserIcon } from '@components/icons';
+import { SectionDivider } from '@components/SectionDivider';
 import { api } from '../services/apiClient';
 import { useApp } from '../context/AppContext';
-import { homePath } from '@app/utils/avatar';
+import { dashboardPath } from '@app/utils/avatar';
 import reviews from '@data/reviews.json';
 const PKG_IMG = {
     beginner: '/img/pkg-desk.jpg',
     pro: '/img/pkg-stage.jpg',
     master: '/img/pkg-studio.jpg',
+    single: '/img/pkg-studio.jpg',
 };
+function packageImage(id) {
+    return PKG_IMG[id] || '/img/pkg-studio.jpg';
+}
 function localized(value, language) {
     if (value && typeof value === 'object') {
         return value[language] ?? value.th ?? value.en ?? '';
@@ -49,7 +54,7 @@ function CountStat({ end, suffix = '', decimals = 0, label }) {
 }
 export default function Landing() {
     const navigate = useNavigate();
-    const { language, t, toast, user } = useApp();
+    const { language, t, user } = useApp();
     const [pkgs, setPkgs] = useState(null);
     useEffect(() => {
         api.getPackages().then(setPkgs).catch(() => setPkgs([]));
@@ -142,41 +147,67 @@ export default function Landing() {
           <MusicNoteIcon className="sn s2"/>
           <MusicNoteIcon className="sn s3"/>
         </div>
-        <div className="wrap hero-center reveal">
-          <div className="hero-orn" aria-hidden="true">
-            <i />
-            <svg viewBox="0 0 24 24" width={11} height={11} fill="currentColor">
-              <path d="M12 2l10 10-10 10L2 12z"/>
-            </svg>
-            <i />
+        <div className="wrap hero-split reveal">
+          <div className="hero-copy">
+            <div className="hero-brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 64 64" width={28} height={28} fill="none">
+                <path fill="currentColor" d="M32 4 36.8 22.4 55.2 17.6 40.8 32 55.2 46.4 36.8 41.6 32 60 27.2 41.6 8.8 46.4 23.2 32 8.8 17.6 27.2 22.4z"/>
+              </svg>
+            </div>
+            <div className="tagline">{t('landing.tagline')}</div>
+            <h1>
+              <span className="hero-display">{t('brand.name')}</span>
+              <span className="hero-lead">{t('landing.heroLine1')}</span>
+              <span className="hero-lead accent">{t('landing.heroLine2')}</span>
+            </h1>
+            <p>{t('landing.heroBody')}</p>
+            <div className="cta">
+              <Button pink onClick={() => navigate(user?.role === 'student' ? '/app/booking' : user ? dashboardPath(user) : '/register')}>
+                <MicIcon width={17} height={17}/> {user?.role === 'student' ? t('nav.booking') : t('landing.startNow')}
+              </Button>
+              <Button ghost onClick={() => document.getElementById('pkg')?.scrollIntoView({ behavior: 'smooth' })}>
+                {t('landing.viewPackages')}
+              </Button>
+            </div>
+            <div className="stats">
+              <CountStat end={120} suffix="+" label={t('landing.students')}/>
+              <i className="stats-line" aria-hidden="true"/>
+              <CountStat end={2400} suffix="+" label={t('landing.hoursTaught')}/>
+              <i className="stats-line" aria-hidden="true"/>
+              <CountStat end={5} decimals={1} suffix=" ★" label={t('landing.reviewScore')}/>
+            </div>
           </div>
-          <div className="tagline">{t('landing.tagline')}</div>
-          <h1>
-            {t('landing.heroBefore')} <em>{t('landing.heroName')}</em>
-            <br />
-            {t('landing.heroAfter')}
-          </h1>
-          <p>{t('landing.heroBody')}</p>
-          <div className="cta">
-            <Button pink onClick={() => navigate(user?.role === 'student' ? '/app/booking' : user ? homePath(user) : '/register')}>
-              <MicIcon width={17} height={17}/> {user?.role === 'student' ? t('nav.booking') : t('landing.startNow')}
-            </Button>
-            <Button ghost onClick={() => document.getElementById('pkg')?.scrollIntoView({ behavior: 'smooth' })}>
-              {t('landing.viewPackages')}
-            </Button>
-          </div>
-          <div className="stats">
-            <CountStat end={120} suffix="+" label={t('landing.students')}/>
-            <i className="stats-line" aria-hidden="true"/>
-            <CountStat end={2400} suffix="+" label={t('landing.hoursTaught')}/>
-            <i className="stats-line" aria-hidden="true"/>
-            <CountStat end={5} decimals={1} suffix=" ★" label={t('landing.reviewScore')}/>
+          <div className="hero-visual reveal d2">
+            <div className="hero-frame">
+              <img src="/img/hero-stage.jpg" alt={t('landing.heroImageAlt')} loading="eager"/>
+              <div className="hero-caption">
+                <MusicNoteIcon width={14} height={14}/>
+                {t('landing.heroCaption')}
+              </div>
+              <div className="hero-frame-glow" aria-hidden="true"/>
+            </div>
           </div>
         </div>
       </section>
 
+      <div className="trust-strip" aria-hidden="true">
+        <div className="trust-track">
+          {[...(Array.isArray(t('landing.trustStrip')) ? t('landing.trustStrip') : []), ...(Array.isArray(t('landing.trustStrip')) ? t('landing.trustStrip') : [])].map((item, index) => (
+            <span key={`${item}-${index}`} className="trust-item">
+              <svg viewBox="0 0 64 64" width={10} height={10} fill="none" aria-hidden="true">
+                <path fill="currentColor" d="M32 4 36.8 22.4 55.2 17.6 40.8 32 55.2 46.4 36.8 41.6 32 60 27.2 41.6 8.8 46.4 23.2 32 8.8 17.6 27.2 22.4z"/>
+              </svg>
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <SectionDivider />
+
       {/* ===== แพ็กเกจ ===== */}
-      <section className="sec" id="pkg">
+      <section className="sec sec-pkg" id="pkg">
+        <div className="sec-bg-deco" aria-hidden="true"/>
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">PACKAGES</span>
@@ -184,13 +215,21 @@ export default function Landing() {
             <p>{t('landing.packagesSub')}</p>
           </div>
 
-          {pkgs === null ? (<Spinner />) : (<div className="grid cols-3" style={{ marginBottom: 18 }}>
+          {pkgs === null ? (<Spinner />) : (
+            <div
+              className={
+                pkgs.length === 1 ? 'pkg-showcase'
+                  : pkgs.length === 2 ? 'pkg-grid-duo'
+                    : 'grid cols-3'
+              }
+              style={{ marginBottom: 18 }}
+            >
               {pkgs.map((p, i) => (<div key={p.id} className={`pkg reveal d${i + 1} ${p.id === 'pro' ? 'popular' : ''}`}>
                   {p.tag && (<div className="crown">
                       <CrownIcon width={13} height={13}/> {p.tag}
                     </div>)}
                   <div className="top">
-                    <img src={PKG_IMG[p.id]} alt={p.name} loading="lazy"/>
+                    <img src={packageImage(p.id)} alt={p.name} loading="lazy"/>
                     <span className="top-em">
                       <MusicNoteIcon width={24} height={24}/>
                     </span>
@@ -218,14 +257,17 @@ export default function Landing() {
         </div>
       </section>
 
+      <SectionDivider />
+
       {/* ===== วิธีเรียน ===== */}
-      <section className="sec alt" id="how">
+      <section className="sec alt sec-how" id="how">
+        <div className="sec-bg-deco reverse" aria-hidden="true"/>
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">HOW IT WORKS</span>
             <h2>{t('landing.howTitle')}</h2>
           </div>
-          <div className="grid cols-4">
+          <div className="step-track grid cols-4">
             {[
             ['1', t('landing.step1Title'), t('landing.step1Body')],
             ['2', t('landing.step2Title'), t('landing.step2Body')],
@@ -240,8 +282,10 @@ export default function Landing() {
         </div>
       </section>
 
+      <SectionDivider />
+
       {/* ===== ทำไมต้องเรา ===== */}
-      <section className="sec" id="why">
+      <section className="sec sec-why" id="why">
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">WHY US</span>
@@ -256,6 +300,7 @@ export default function Landing() {
             [<BellIcon key="b"/>, t('landing.why5Title'), t('landing.why5Body')],
             [<ChartIcon key="ch"/>, t('landing.why6Title'), t('landing.why6Body')],
         ].map(([ic, title, d], i) => (<div className={`card feat reveal d${i + 1}`} key={i}>
+                <span className="feat-num">{String(i + 1).padStart(2, '0')}</span>
                 <div className="ic">{ic}</div>
                 <div>
                   <h4>{title}</h4>
@@ -266,8 +311,10 @@ export default function Landing() {
         </div>
       </section>
 
+      <SectionDivider />
+
       {/* ===== พบกับครูแอร์ ===== */}
-      <section className="sec teacher" id="teacher">
+      <section className="sec alt teacher" id="teacher">
         <div className="wrap teacher-grid">
           <div className="teacher-photo reveal d1">
             <img src="/img/teacher-studio.jpg" alt="สตูดิโอของครูแอร์" loading="lazy"/>
@@ -292,8 +339,10 @@ export default function Landing() {
         </div>
       </section>
 
+      <SectionDivider />
+
       {/* ===== รีวิว ===== */}
-      <section className="sec alt" id="rev">
+      <section className="sec sec-reviews" id="rev">
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">REVIEWS</span>
@@ -317,8 +366,10 @@ export default function Landing() {
         </div>
       </section>
 
+      <SectionDivider />
+
       {/* ===== ฟังก์ชันหลักของระบบ ===== */}
-      <section className="sec alt" id="features">
+      <section className="sec alt sec-features" id="features">
         <div className="wrap">
           <div className="sec-h reveal">
             <span className="k">SYSTEM FEATURES</span>
@@ -333,97 +384,14 @@ export default function Landing() {
             [<CalendarIcon key="ca"/>, t('landing.feat4Title'), t('landing.feat4Body')],
             [<BellIcon key="b"/>, t('landing.feat5Title'), t('landing.feat5Body')],
             [<BookIcon key="bk"/>, t('landing.feat6Title'), t('landing.feat6Body')],
-        ].map(([ic, title, d], i) => (<div className={`card feat reveal d${i + 1}`} key={i}>
+        ].map(([ic, title, d], i) => (<div className={`card feat feat-system reveal d${i + 1}`} key={i}>
+                <span className="feat-num">{String(i + 1).padStart(2, '0')}</span>
                 <div className="ic">{ic}</div>
                 <div>
                   <h4>{title}</h4>
                   <p>{d}</p>
                 </div>
               </div>))}
-          </div>
-        </div>
-      </section>
-
-
-
-
-      {/* ===== ติดต่อ ===== */}
-      <section className="sec contact-section" id="contact">
-        <div className="wrap">
-          <div className="sec-h reveal">
-            <span className="k">CONTACT</span>
-            <h2>{t('landing.contactTitle')}</h2>
-            <p>{t('landing.contactSub')}</p>
-          </div>
-
-          {/* Big CTA cards */}
-          <div className="contact-cards reveal">
-            <div className="cc-item" onClick={() => toast(t('landing.toastLine'))}>
-              <div className="cc-icon green">
-                <ChatIcon width={28} height={28}/>
-              </div>
-              <div className="cc-info">
-                <b>LINE Official</b>
-                <span>@kruaersinging</span>
-              </div>
-              <div className="cc-arrow">→</div>
-            </div>
-
-            <div className="cc-item" onClick={() => window.open('tel:09X-XXX-XXXX')}>
-              <div className="cc-icon pink">
-                <PhoneIcon width={28} height={28}/>
-              </div>
-              <div className="cc-info">
-                <b>{t('landing.phone')}</b>
-                <span>09X-XXX-XXXX</span>
-              </div>
-              <div className="cc-arrow">→</div>
-            </div>
-
-            <div className="cc-item" onClick={() => toast(t('landing.toastMaps'))}>
-              <div className="cc-icon wine">
-                <PinIcon width={28} height={28}/>
-              </div>
-              <div className="cc-info">
-                <b>{t('landing.studio')}</b>
-                <span>{t('landing.studioAddr')}</span>
-              </div>
-              <div className="cc-arrow">→</div>
-            </div>
-
-            <div className="cc-item">
-              <div className="cc-icon violet">
-                <ClockIcon width={28} height={28}/>
-              </div>
-              <div className="cc-info">
-                <b>{t('landing.hours')}</b>
-                <span>{t('landing.hoursValue')}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact form */}
-          <div className="contact-form-card reveal d2">
-            <div className="cf-header">
-              <h3>{t('landing.formTitle')}</h3>
-              <p>{t('landing.formSub')}</p>
-            </div>
-            <div className="cf-form">
-              <div className="two-col">
-                <Field label={t('landing.formName')}>
-                  <Input placeholder={t('landing.formNamePh')}/>
-                </Field>
-                <Field label={t('landing.formContact')}>
-                  <Input placeholder={t('landing.formContactPh')}/>
-                </Field>
-              </div>
-              <Field label={t('landing.formMessage')}>
-                <textarea className="input" rows={3} placeholder={t('landing.formMessagePh')}/>
-              </Field>
-              <Button pink style={{ width: '100%', padding: '14px 28px' }} onClick={() => toast(t('landing.toastSent'), 'ok')}>
-                <ChatIcon width={16} height={16}/> {t('landing.sendMessage')}
-              </Button>
-            </div>
           </div>
         </div>
       </section>

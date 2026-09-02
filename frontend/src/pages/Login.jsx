@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Field, Input } from '@components/ui';
-import { LogoMark } from '@components/Logo';
-import { PublicLayout } from '@components/layout/PublicLayout';
 import { useApp } from '../context/AppContext';
 import { homePath } from '@app/utils/avatar';
 import { beginLineLogin } from '../services/lineAuth';
@@ -60,7 +58,7 @@ export default function Login() {
         setBusy(true);
         try {
             const session = await login({ id, password });
-            navigate(homePath(session));
+            navigate(homePath(session), { replace: true });
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('auth.loginFailed'));
@@ -83,12 +81,12 @@ export default function Login() {
     };
 
     return (
-      <PublicLayout footer={false}>
-        <div className="authwrap">
           <form className="authcard" onSubmit={submit}>
-            <LogoMark size={64}/>
-            <h2>{t('auth.welcome')}</h2>
-            <div className="sub">{t('auth.welcomeSub')}</div>
+            <header className="authcard-head">
+              <span className="auth-eyebrow">{t('common.login')}</span>
+              <h2>{t('auth.welcome')}</h2>
+              <p className="auth-sub">{t('auth.welcomeSub')}</p>
+            </header>
 
             <Field label={t('auth.idLabel')} required>
               <Input placeholder={t('auth.idPlaceholder')} value={id} onChange={(e) => setId(e.target.value)}/>
@@ -106,16 +104,9 @@ export default function Login() {
               {lineBusy ? t('auth.lineConnecting') : t('auth.lineLogin')}
             </Button>
 
-            <div className="authlink">
+            <p className="authlink">
               {t('auth.noAccount')} <Link to="/register">{t('common.register')}</Link>
-            </div>
-
-            <div className="demohint">
-              <b>{t('auth.demo')}</b> {t('roles.student')} <code>mint@email.com</code> / <code>mint123</code><br />
-              {t('roles.teacher')} <code>kruaer@email.com</code> / <code>kruaer123</code>
-            </div>
+            </p>
           </form>
-        </div>
-      </PublicLayout>
     );
 }

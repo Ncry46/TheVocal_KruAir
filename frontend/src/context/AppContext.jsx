@@ -22,7 +22,13 @@ function lookup(dict, key) {
         return undefined;
     }
     const value = key.split('.').reduce((node, part) => (node == null ? undefined : node[part]), dict);
-    return typeof value === 'string' ? value : undefined;
+    if (value == null) {
+        return undefined;
+    }
+    if (typeof value === 'string' || Array.isArray(value)) {
+        return value;
+    }
+    return undefined;
 }
 function loadPreference(key, fallback) {
     try {
@@ -34,6 +40,7 @@ function loadPreference(key, fallback) {
 }
 export function AppProvider({ children }) {
     const [user, setUser] = useState(loadUser);
+    const [liffBooting, setLiffBooting] = useState(false);
     const [toastState, setToastState] = useState(null);
     const [language, setLanguageState] = useState(() => {
         const saved = loadPreference(LANGUAGE_KEY, 'th');
@@ -138,21 +145,25 @@ export function AppProvider({ children }) {
     const login = useCallback(async (input) => {
         const s = await api.login(input);
         setSession(s);
-        toast(language === 'en' ? `Welcome back, ${s.nickname}` : `ยินดีต้อนรับกลับค่า น้อง${s.nickname}`, 'ok');
+        const name = s.nickname || s.name || '';
+        toast(t('auth.loginSuccess').replace('{name}', name), 'ok');
         return s;
-    }, [language, setSession, toast]);
+    }, [setSession, toast, t]);
     const completeLineSession = useCallback(async (token, options = {}) => {
         const s = await api.completeLineLogin(token);
         setSession(s);
         if (!options.silent) {
-            toast(language === 'en' ? `Welcome back, ${s.nickname}` : `ยินดีต้อนรับกลับค่า น้อง${s.nickname}`, 'ok');
+            const name = s.nickname || s.name || '';
+            toast(t('auth.loginSuccess').replace('{name}', name), 'ok');
         }
         return s;
-    }, [language, setSession, toast]);
+    }, [setSession, toast, t]);
     const register = useCallback(async (input) => {
         const s = await api.register(input);
         setSession(s);
-        toast(language === 'en' ? `Enrolled. Let’s book a lesson, ${s.nickname}` : `สมัครเรียนสำเร็จแล้ว น้อง${s.nickname} — ไปจองเวลาได้เลย`, 'ok');
+        toast(language === 'en'
+            ? `Welcome, ${s.nickname} — buy the trial package to book your first lesson`
+            : `สมัครเรียนสำเร็จแล้ว น้อง${s.nickname} — ซื้อแพ็กเกจทดลองเรียนเพื่อจองเวลาได้เลย`, 'ok');
         return s;
     }, [language, setSession, toast]);
     const updateProfile = useCallback(async (input) => {
@@ -176,8 +187,8 @@ export function AppProvider({ children }) {
         toast(language === 'en' ? 'Logged out — back to website' : 'ออกจากระบบแล้ว — กลับสู่หน้าเว็บไซต์');
     }, [language, setSession, toast]);
     const value = useMemo(
-        () => ({ user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t }),
-        [user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t],
+        () => ({ user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t, liffBooting, setLiffBooting }),
+        [user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t, liffBooting],
     );
     return (<AppContext.Provider value={value}>
       {children}

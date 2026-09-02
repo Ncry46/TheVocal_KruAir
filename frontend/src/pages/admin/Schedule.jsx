@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Card, Field, Input, Modal, Spinner } from '@components/ui';
 import { BellIcon, CheckIcon } from '@components/icons';
+import { SignaturePreviewModal } from '@components/admin/SignaturePreviewModal';
+import { daysInMonth as countDaysInMonth, filterSignaturesByDate, signatureYears as collectSignatureYears } from './signatureFilter';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 
@@ -24,7 +27,8 @@ function formatLongDate(iso, language) {
 }
 
 export default function Schedule() {
-    const { language, t, toast } = useApp();
+    const { language, t, toast, user } = useApp();
+    const navigate = useNavigate();
     const today = new Date();
     const [year, setYear] = useState(today.getFullYear());
     const [month, setMonth] = useState(today.getMonth());
@@ -44,8 +48,20 @@ export default function Schedule() {
     const [students, setStudents] = useState([]);
     const [bookForm, setBookForm] = useState({ studentId: '', time: '', hours: '1', topic: '' });
     const [bookBusy, setBookBusy] = useState(false);
+    const [homeworkSubmissions, setHomeworkSubmissions] = useState([]);
+    const [signatureRows, setSignatureRows] = useState({ pending: [], signed: [] });
+    const [signatureBookingId, setSignatureBookingId] = useState(null);
+    const [sigFilterYear, setSigFilterYear] = useState(String(today.getFullYear()));
+    const [sigFilterMonth, setSigFilterMonth] = useState('');
+    const [sigFilterDay, setSigFilterDay] = useState('');
+    const [teachers, setTeachers] = useState([]);
+    const [teacherFilter, setTeacherFilter] = useState('');
+    const [moveOpen, setMoveOpen] = useState(false);
+    const [moveDay, setMoveDay] = useState('');
+    const [moveTime, setMoveTime] = useState('');
+    const [moveBusy, setMoveBusy] = useState(false);
 
-    const load = () => api.getTeacherSchedule(year, month + 1).then(setWeek);
+    const load = () => api.getTeacherSchedule(year, month + 1, user?.role === 'admin' ? teacherFilter : '').then(setWeek);
 
     useEffect(() => {
         const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -59,7 +75,30 @@ export default function Schedule() {
 
     useEffect(() => {
         load();
-    }, [language, year, month]);
+    }, [language, year, month, teacherFilter]);
+
+    useEffect(() => {
+        if (user?.role !== 'admin') {
+            return;
+        }
+        api.getTeachers().then((rows) => {
+            setTeachers(rows);
+            if (rows.length && !teacherFilter) {
+                setTeacherFilter(String(rows[0].id));
+            }
+        }).catch(() => setTeachers([]));
+    }, [language, user?.role]);
+
+    const loadSignatures = () => api.getTeacherSignatures()
+        .then(setSignatureRows)
+        .catch(() => setSignatureRows({ pending: [], signed: [] }));
+
+    useEffect(() => {
+        api.getTeacherHomeworkSubmissions()
+            .then(setHomeworkSubmissions)
+            .catch(() => setHomeworkSubmissions([]));
+        loadSignatures();
+    }, [language]);
 
     useEffect(() => {
         const lessons = week?.lessonsByDate?.[selectedIso] ?? [];
@@ -72,7 +111,7 @@ export default function Schedule() {
         });
     }, [week, selectedIso]);
 
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const calendarDayCount = new Date(year, month + 1, 0).getDate();
     const firstWeekday = new Date(year, month, 1).getDay();
     const monthLabel = language === 'en'
         ? `${EN_MONTHS[month]} ${year}`
@@ -95,6 +134,44 @@ export default function Schedule() {
         const slot = daySlots.find((item) => item.time === time);
         return !slot || slot.status === 'open';
     });
+
+    const signatureYearOptions = useMemo(
+        () => collectSignatureYears([...signatureRows.pending, ...signatureRows.signed], today.getFullYear()),
+        [signatureRows, today],
+    );
+    const signatureFilter = useMemo(() => ({
+        year: sigFilterYear,
+        month: sigFilterMonth,
+        day: sigFilterDay,
+    }), [sigFilterYear, sigFilterMonth, sigFilterDay]);
+    const filteredPendingSignatures = useMemo(
+        () => filterSignaturesByDate(signatureRows.pending, signatureFilter),
+        [signatureRows.pending, signatureFilter],
+    );
+    const filteredSignedSignatures = useMemo(
+        () => filterSignaturesByDate(signatureRows.signed, signatureFilter),
+        [signatureRows.signed, signatureFilter],
+    );
+    const signatureDayOptions = useMemo(() => {
+        if (!sigFilterYear || !sigFilterMonth) {
+            return [];
+        }
+        return Array.from({ length: countDaysInMonth(sigFilterYear, sigFilterMonth) }, (_, index) => String(index + 1));
+    }, [sigFilterYear, sigFilterMonth]);
+    const monthLabels = language === 'en' ? EN_MONTHS : TH_MONTHS;
+    const resetSignatureFilter = () => {
+        setSigFilterYear(String(today.getFullYear()));
+        setSigFilterMonth('');
+        setSigFilterDay('');
+    };
+    const onSignatureMonthChange = (value) => {
+        setSigFilterMonth(value);
+        setSigFilterDay('');
+    };
+    const onSignatureYearChange = (value) => {
+        setSigFilterYear(value);
+        setSigFilterDay('');
+    };
 
     const prevMonth = () => {
         if (month === 0) {
@@ -125,7 +202,7 @@ export default function Schedule() {
                 : t('schedule.logOk'), 'ok');
             setLogOpen(false);
             setSelectedLesson(null);
-            await load();
+            await Promise.all([load(), loadSignatures()]);
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('schedule.logFailed'));
@@ -273,6 +350,26 @@ export default function Schedule() {
         }
     };
 
+    const submitMove = async () => {
+        if (!selectedLesson?.bookingId || !moveDay || !moveTime) {
+            toast(language === 'en' ? 'Pick a new date and time' : 'เลือกวันและเวลาใหม่');
+            return;
+        }
+        setMoveBusy(true);
+        try {
+            await api.rescheduleTeacherLesson(selectedLesson.bookingId, moveDay, moveTime);
+            toast(language === 'en' ? 'Lesson rescheduled' : 'เลื่อนนัดแล้ว', 'ok');
+            setMoveOpen(false);
+            await load();
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not reschedule' : 'เลื่อนนัดไม่สำเร็จ'));
+        }
+        finally {
+            setMoveBusy(false);
+        }
+    };
+
     if (!week) {
         return <Spinner />;
     }
@@ -280,6 +377,13 @@ export default function Schedule() {
     return (<>
       <div className="alertbar">
         <BellIcon width={16} height={16}/> <b>{week.pendingCount} {t('schedule.pending')}</b>
+        {user?.role === 'admin' && teachers.length > 1 && (
+          <select className="input" style={{ width: 'auto', minWidth: 180, marginLeft: 12 }} value={teacherFilter} onChange={(e) => setTeacherFilter(e.target.value)}>
+            {teachers.map((teacher) => (
+              <option key={teacher.id} value={teacher.id}>{teacher.nickname} · {teacher.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="sched-layout">
@@ -294,7 +398,7 @@ export default function Schedule() {
           </div>
           <div className="cal-grid">
             {Array.from({ length: firstWeekday }).map((_, index) => <div key={`e${index}`} className="cal-empty"/>)}
-            {Array.from({ length: daysInMonth }).map((_, index) => {
+            {Array.from({ length: calendarDayCount }).map((_, index) => {
                 const day = index + 1;
                 const iso = toIso(year, month, day);
                 const count = lessonsByDate[iso]?.length ?? 0;
@@ -389,6 +493,9 @@ export default function Schedule() {
                   {t('schedule.remind')}
                 </Button>
               )}
+              <Button ghost onClick={() => { setMoveDay(selectedIso); setMoveTime(selectedLesson.time); setMoveOpen(true); }} disabled={slotBusy}>
+                {language === 'en' ? 'Reschedule' : 'เลื่อนนัด'}
+              </Button>
               <Button danger onClick={cancelLesson} disabled={slotBusy}>{t('schedule.cancelLesson')}</Button>
             </div>
           )}
@@ -500,5 +607,119 @@ export default function Schedule() {
           {bookBusy ? t('schedule.booking') : t('schedule.bookSubmit')}
         </Button>
       </Modal>
+
+      <Modal open={moveOpen} onClose={() => setMoveOpen(false)} title={language === 'en' ? 'Reschedule lesson' : 'เลื่อนนัดเรียน'}>
+        <Field label={language === 'en' ? 'New date' : 'วันใหม่'} required>
+          <Input type="date" value={moveDay} onChange={(e) => setMoveDay(e.target.value)}/>
+        </Field>
+        <Field label={language === 'en' ? 'New time' : 'เวลาใหม่'} required>
+          <select className="input" value={moveTime} onChange={(e) => setMoveTime(e.target.value)}>
+            <option value="">{language === 'en' ? 'Select time' : 'เลือกเวลา'}</option>
+            {(week.slotTimes || []).map((time) => <option key={time} value={time}>{time}</option>)}
+          </select>
+        </Field>
+        <Button pink style={{ width: '100%' }} disabled={moveBusy} onClick={submitMove}>
+          {moveBusy ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : (language === 'en' ? 'Confirm reschedule' : 'ยืนยันเลื่อนนัด')}
+        </Button>
+      </Modal>
+
+      {homeworkSubmissions.length > 0 && (
+        <Card title={language === 'en' ? 'Student homework audio' : 'เสียงการบ้านจากนักเรียน'} style={{ marginTop: 16 }}>
+          {homeworkSubmissions.slice(0, 8).map((row) => (
+            <div key={row.id} className="toggle-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{row.student} · {row.date}</div>
+              <div className="muted" style={{ fontSize: 12 }}>{row.lesson}</div>
+              <a href={row.audioUrl} target="_blank" rel="noreferrer" className="link" style={{ fontSize: 12 }}>
+                {language === 'en' ? 'Listen' : 'ฟังเสียง'}
+              </a>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Card
+        title={t('teacherSignature.title')}
+        action={filteredPendingSignatures.length > 0
+            ? <span className="badge amber">{filteredPendingSignatures.length} {t('teacherSignature.pending')}</span>
+            : <span className="badge green">{t('teacherSignature.nonePending')}</span>}
+        style={{ marginTop: 16 }}
+      >
+        <div className="signature-filter-row">
+          <label className="signature-filter-field">
+            <span className="muted">{t('teacherSignature.filterYear')}</span>
+            <select className="input sales-filter" value={sigFilterYear} onChange={(e) => onSignatureYearChange(e.target.value)}>
+              {signatureYearOptions.map((item) => (
+                <option key={item} value={item}>{language === 'en' ? item : Number(item) + 543}</option>
+              ))}
+            </select>
+          </label>
+          <label className="signature-filter-field">
+            <span className="muted">{t('teacherSignature.filterMonth')}</span>
+            <select className="input sales-filter" value={sigFilterMonth} onChange={(e) => onSignatureMonthChange(e.target.value)}>
+              <option value="">{t('teacherSignature.allMonths')}</option>
+              {monthLabels.map((label, index) => (
+                <option key={label} value={String(index + 1)}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="signature-filter-field">
+            <span className="muted">{t('teacherSignature.filterDay')}</span>
+            <select
+              className="input sales-filter"
+              value={sigFilterDay}
+              disabled={!sigFilterMonth}
+              onChange={(e) => setSigFilterDay(e.target.value)}
+            >
+              <option value="">{t('teacherSignature.allDays')}</option>
+              {signatureDayOptions.map((day) => (
+                <option key={day} value={day}>{day}</option>
+              ))}
+            </select>
+          </label>
+          <Button ghost size="sm" type="button" onClick={resetSignatureFilter}>{t('teacherSignature.resetFilter')}</Button>
+        </div>
+
+        {filteredPendingSignatures.length === 0 && filteredSignedSignatures.length === 0 ? (
+          <div className="empty">{t('teacherSignature.noResults')}</div>
+        ) : (
+          <>
+            {filteredPendingSignatures.map((row) => (
+              <div key={row.bookingId} className="toggle-row">
+                <div>
+                  <div style={{ fontWeight: 600 }}>{row.student} · {row.date} · {row.time}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>{row.lesson}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className="badge amber">{t('teacherSignature.pending')}</span>
+                  <Button ghost size="sm" onClick={() => navigate(`/teacher/students/${row.studentId}`)}>
+                    {language === 'en' ? 'Profile' : 'โปรไฟล์'}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {filteredSignedSignatures.map((row) => (
+              <div key={row.bookingId} className="toggle-row">
+                <div>
+                  <div style={{ fontWeight: 600 }}>{row.student} · {row.date} · {row.time}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>{row.lesson}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className="badge green">{t('teacherSignature.signed')}</span>
+                  <Button ghost size="sm" onClick={() => setSignatureBookingId(row.bookingId)}>
+                    {t('teacherSignature.view')}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </Card>
+
+      <SignaturePreviewModal
+        open={Boolean(signatureBookingId)}
+        onClose={() => setSignatureBookingId(null)}
+        bookingId={signatureBookingId}
+        language={language}
+      />
     </>);
 }

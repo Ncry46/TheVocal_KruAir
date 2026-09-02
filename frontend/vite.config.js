@@ -28,6 +28,7 @@ export default defineConfig({
         allowedHosts: 'all',
         proxy: {
             '/api': 'http://localhost:3001',
+            '/uploads': 'http://localhost:3001',
         },
         fs: {
             allow: [repoRoot],

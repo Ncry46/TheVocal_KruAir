@@ -12,6 +12,16 @@ export function homePath(user) {
     if (user?.role === 'teacher' || user?.role === 'admin') {
         return '/teacher';
     }
+    if (user?.role === 'student') {
+        return '/app';
+    }
+    return '/';
+}
+
+export function dashboardPath(user) {
+    if (user?.role === 'teacher' || user?.role === 'admin') {
+        return '/teacher';
+    }
     return '/app';
 }
 

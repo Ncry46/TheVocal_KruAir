@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Modal, Spinner, Table } from '@components/ui';
-import { LogoMark } from '@components/Logo';
+import { BrandLogo } from '@components/BrandLogo';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 export default function Receipts() {
@@ -28,8 +28,7 @@ export default function Receipts() {
       <Modal open={selected !== null} onClose={() => setSelected(null)} title="ใบเสร็จอิเล็กทรอนิกส์">
         {selected && (<>
             <div style={{ textAlign: 'center' }}>
-              <LogoMark size={54} style={{ margin: '0 auto' }}/>
-              <div style={{ fontWeight: 800, fontSize: 16, marginTop: 6 }}>ครูแอร์ Singing School</div>
+              <BrandLogo stacked size={64} style={{ margin: '0 auto 10px' }}/>
               <div className="muted" style={{ fontSize: 11.5 }}>ใบเสร็จรับเงิน · เลขที่ {selected.id}</div>
             </div>
             <div className="receipt-body">
