@@ -1,44 +1,85 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Spinner } from '@components/ui';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
+import { daysInMonth, filterSignaturesByDate, signatureYears } from '../admin/signatureFilter.js';
 
-function SignaturePad({ clearLabel, onChange }) {
+const TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function SignaturePad({ clearLabel, onChange, hint }) {
     const canvasRef = useRef(null);
+    const wrapRef = useRef(null);
     const drawing = useRef(false);
+    const last = useRef(null);
 
-    useEffect(() => {
+    const paintBlank = (canvas) => {
+        const ctx = canvas.getContext('2d');
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = canvas.width / dpr;
+        const height = canvas.height / dpr;
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.restore();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    };
+
+    const syncCanvasSize = () => {
         const canvas = canvasRef.current;
-        if (!canvas) {
+        const wrap = wrapRef.current;
+        if (!canvas || !wrap) {
             return;
         }
+        const cssWidth = Math.min(wrap.clientWidth || 320, 360);
+        const cssHeight = 140;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.style.width = `${cssWidth}px`;
+        canvas.style.height = `${cssHeight}px`;
+        canvas.width = Math.round(cssWidth * dpr);
+        canvas.height = Math.round(cssHeight * dpr);
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        paintBlank(canvas);
+        onChange('');
+    };
+
+    useEffect(() => {
+        syncCanvasSize();
+        const onResize = () => {
+            const hadInk = Boolean(canvasRef.current?.dataset.hasInk === '1');
+            if (!hadInk) {
+                syncCanvasSize();
+            }
+        };
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const pos = (event) => {
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
-        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-        const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+        const point = event.touches ? event.touches[0] : event;
         return {
-            x: (clientX - rect.left) * (canvas.width / rect.width),
-            y: (clientY - rect.top) * (canvas.height / rect.height),
+            x: point.clientX - rect.left,
+            y: point.clientY - rect.top,
         };
     };
 
     const start = (event) => {
         drawing.current = true;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        const { x, y } = pos(event);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
+        last.current = pos(event);
         event.preventDefault();
     };
 
@@ -48,41 +89,51 @@ function SignaturePad({ clearLabel, onChange }) {
         }
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
-        const { x, y } = pos(event);
-        ctx.lineTo(x, y);
+        const next = pos(event);
+        const prev = last.current || next;
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(next.x, next.y);
         ctx.stroke();
+        last.current = next;
+        canvas.dataset.hasInk = '1';
         onChange(canvas.toDataURL('image/png'));
         event.preventDefault();
     };
 
     const end = () => {
         drawing.current = false;
+        last.current = null;
     };
 
     const clear = () => {
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (!canvas) {
+            return;
+        }
+        paintBlank(canvas);
+        canvas.dataset.hasInk = '0';
         onChange('');
     };
 
     return (
-      <div>
-        <canvas
-          ref={canvasRef}
-          width={480}
-          height={160}
-          className="signature-canvas"
-          onMouseDown={start}
-          onMouseMove={move}
-          onMouseUp={end}
-          onMouseLeave={end}
-          onTouchStart={start}
-          onTouchMove={move}
-          onTouchEnd={end}
-        />
-        <Button ghost size="sm" style={{ marginTop: 8 }} onClick={clear}>
+      <div className="signature-pad" ref={wrapRef}>
+        {hint && <div className="signature-pad-hint muted">{hint}</div>}
+        <div className="signature-pad-frame">
+          <canvas
+            ref={canvasRef}
+            className="signature-canvas"
+            onMouseDown={start}
+            onMouseMove={move}
+            onMouseUp={end}
+            onMouseLeave={end}
+            onTouchStart={start}
+            onTouchMove={move}
+            onTouchEnd={end}
+          />
+          <div className="signature-pad-line" aria-hidden="true"/>
+        </div>
+        <Button ghost size="sm" type="button" onClick={clear}>
           {clearLabel}
         </Button>
       </div>
@@ -223,6 +274,19 @@ export default function Homework() {
     const [pendingSign, setPendingSign] = useState([]);
     const [signatures, setSignatures] = useState({});
     const [busyId, setBusyId] = useState('');
+    const todayParts = useMemo(() => {
+        const iso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+        const [year, month, day] = iso.split('-');
+        return {
+            iso,
+            year,
+            month: String(Number(month)),
+            day: String(Number(day)),
+        };
+    }, []);
+    const [filterYear, setFilterYear] = useState(todayParts.year);
+    const [filterMonth, setFilterMonth] = useState(todayParts.month);
+    const [filterDay, setFilterDay] = useState(todayParts.day);
 
     const load = async () => {
         const [homework, signRows] = await Promise.all([
@@ -236,6 +300,32 @@ export default function Homework() {
     useEffect(() => {
         load().catch(() => setItems([]));
     }, [language]);
+
+    const yearOptions = useMemo(
+        () => signatureYears(pendingSign, Number(todayParts.year)),
+        [pendingSign, todayParts.year],
+    );
+    const dateFilter = useMemo(
+        () => ({ year: filterYear, month: filterMonth, day: filterDay }),
+        [filterYear, filterMonth, filterDay],
+    );
+    const filteredPending = useMemo(
+        () => filterSignaturesByDate(pendingSign, dateFilter),
+        [pendingSign, dateFilter],
+    );
+    const dayOptions = useMemo(() => {
+        if (!filterYear || !filterMonth) {
+            return [];
+        }
+        return Array.from({ length: daysInMonth(filterYear, filterMonth) }, (_, index) => String(index + 1));
+    }, [filterYear, filterMonth]);
+    const monthLabels = language === 'en' ? EN_MONTHS : TH_MONTHS;
+
+    const resetFilter = () => {
+        setFilterYear(todayParts.year);
+        setFilterMonth(todayParts.month);
+        setFilterDay(todayParts.day);
+    };
 
     const submitSign = async (bookingId) => {
         const data = signatures[bookingId];
@@ -261,18 +351,78 @@ export default function Homework() {
         return <Spinner />;
     }
 
+    const showSignatureCard = pendingSign.length > 0;
+
     return (
       <div className="grid" style={{ gap: 16 }}>
-        {pendingSign.length > 0 && (
-          <Card title={t('signature.title')} action={<span className="badge amber">{pendingSign.length}</span>}>
-            {pendingSign.map((row) => (
-              <div key={row.bookingId} className="toggle-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 12 }}>
-                <div>
+        {showSignatureCard && (
+          <Card title={t('signature.title')} action={<span className="badge amber">{filteredPending.length}</span>}>
+            <div className="signature-filter-row">
+              <label className="signature-filter-field">
+                <span className="muted">{t('signature.filterYear')}</span>
+                <select
+                  className="input sales-filter"
+                  value={filterYear}
+                  onChange={(e) => {
+                      setFilterYear(e.target.value);
+                      setFilterDay('');
+                  }}
+                >
+                  {yearOptions.map((item) => (
+                    <option key={item} value={item}>{language === 'en' ? item : Number(item) + 543}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="signature-filter-field">
+                <span className="muted">{t('signature.filterMonth')}</span>
+                <select
+                  className="input sales-filter"
+                  value={filterMonth}
+                  onChange={(e) => {
+                      const nextMonth = e.target.value;
+                      setFilterMonth(nextMonth);
+                      if (!nextMonth) {
+                          setFilterDay('');
+                          return;
+                      }
+                      const isTodayMonth = nextMonth === todayParts.month && filterYear === todayParts.year;
+                      setFilterDay(isTodayMonth ? todayParts.day : '1');
+                  }}
+                >
+                  <option value="">{t('signature.allMonths')}</option>
+                  {monthLabels.map((label, index) => (
+                    <option key={label} value={String(index + 1)}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="signature-filter-field">
+                <span className="muted">{t('signature.filterDay')}</span>
+                <select
+                  className="input sales-filter"
+                  value={filterDay}
+                  disabled={!filterMonth}
+                  onChange={(e) => setFilterDay(e.target.value)}
+                >
+                  <option value="">{t('signature.allDays')}</option>
+                  {dayOptions.map((day) => (
+                    <option key={day} value={day}>{day}</option>
+                  ))}
+                </select>
+              </label>
+              <Button ghost size="sm" type="button" onClick={resetFilter}>{t('signature.resetFilter')}</Button>
+            </div>
+
+            {filteredPending.length === 0 ? (
+              <div className="empty">{t('signature.noResults')}</div>
+            ) : filteredPending.map((row) => (
+              <div key={row.bookingId} className="signature-item">
+                <div className="signature-item-meta">
                   <div style={{ fontWeight: 600 }}>{row.date} · {row.time}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{row.lesson}</div>
                 </div>
                 <SignaturePad
                   clearLabel={t('signature.clear')}
+                  hint={t('signature.hint')}
                   onChange={(value) => setSignatures((current) => ({ ...current, [row.bookingId]: value }))}
                 />
                 <Button pink disabled={busyId === row.bookingId} onClick={() => submitSign(row.bookingId)}>

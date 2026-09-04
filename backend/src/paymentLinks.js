@@ -1,5 +1,6 @@
 import { pick } from './lang.js';
 import { buildPaymentPresentation } from './payments.js';
+import { nextInvoiceRef } from './invoiceRef.js';
 import { addNotification, query, withTransaction } from './store.js';
 
 export async function ensurePaymentLinksSchema() {
@@ -222,8 +223,7 @@ export async function startPaymentFromLink(publicId, userId, paymentPublicId) {
 
     const amount = installmentAmount(link.total_amount, count, paid);
     return withTransaction(async (run) => {
-        const txCount = await run(`SELECT COUNT(*) AS n FROM dbo.transactions`);
-        const refNo = `INV-${new Date().getFullYear()}-${8800 + Number(txCount.recordset[0].n) + 1}`;
+        const refNo = await nextInvoiceRef(run);
         const payMethod = 'พร้อมเพย์ / โอน';
         const label = count > 1
             ? `${link.title} (งวด ${paid + 1}/${count})`

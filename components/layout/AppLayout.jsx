@@ -76,6 +76,17 @@ const PAGE_TITLES = {
     '/teacher/settings': { title: 'nav.settings', sub: 'pages.settingsSub' },
     '/teacher/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
 };
+function pathMatchesNavItem(pathname, item) {
+    if (item.end) {
+        return pathname === item.to;
+    }
+    return pathname === item.to || pathname.startsWith(`${item.to}/`);
+}
+
+function groupContainsPath(group, pathname) {
+    return group.items.some((item) => pathMatchesNavItem(pathname, item));
+}
+
 export function AppLayout({ mode }) {
     const { language, logout, setLanguage, t, user } = useApp();
     const navigate = useNavigate();
@@ -84,12 +95,22 @@ export function AppLayout({ mode }) {
     const [bellOpen, setBellOpen] = useState(false);
     const [reqCount, setReqCount] = useState(0);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const navGroups = NAV[mode];
+    const activeGroupKey = navGroups.find((group) => groupContainsPath(group, location.pathname))?.group
+        ?? navGroups[0]?.group
+        ?? '';
+    const [openGroup, setOpenGroup] = useState(activeGroupKey);
     const pageInfo = PAGE_TITLES[location.pathname]
         ?? (location.pathname.startsWith('/teacher/students/') ? { title: 'nav.students', sub: 'pages.studentProfileSub' } : null)
         ?? (mode === 'teacher'
             ? { title: 'nav.today', sub: 'pages.todaySub' }
             : { title: 'nav.studentHome', sub: 'pages.studentHomeSub' });
     const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+    useEffect(() => {
+        setOpenGroup(activeGroupKey);
+    }, [activeGroupKey]);
+
     useEffect(() => {
         const load = () => api.getNotifications().then(setNotifs).catch(() => {});
         load();
@@ -118,6 +139,9 @@ export function AppLayout({ mode }) {
         setBellOpen(false);
         navigate(link);
     };
+    const toggleGroup = (groupKey) => {
+        setOpenGroup((current) => (current === groupKey ? '' : groupKey));
+    };
     return (<div className="app">
       <aside className={`side ${sidebarOpen ? 'open' : ''}`}>
         <div className="side-brand">
@@ -130,14 +154,44 @@ export function AppLayout({ mode }) {
         </div>
 
         <nav className="side-nav">
-          {NAV[mode].map((g, gi) => (<div key={gi}>
-              <div className="grp">{t(g.group)}</div>
-              {g.items.map((item) => (<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={closeSidebar}>
-                  <span className="ic">{item.icon}</span>
-                  {t(item.label)}
-                  {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
-                </NavLink>))}
-            </div>))}
+          {navGroups.map((group) => {
+              const isOpen = openGroup === group.group;
+              const isActiveGroup = groupContainsPath(group, location.pathname);
+              const groupBadge = group.items.some((item) => item.to === '/teacher/requests') && reqCount > 0
+                  ? reqCount
+                  : 0;
+              return (
+                <div key={group.group} className={`side-nav-group${isOpen ? ' open' : ''}${isActiveGroup ? ' active' : ''}`}>
+                  <button
+                    type="button"
+                    className="grp"
+                    aria-expanded={isOpen}
+                    onClick={() => toggleGroup(group.group)}
+                  >
+                    <span className="grp-label">{t(group.group)}</span>
+                    {groupBadge > 0 && !isOpen && <span className="nav-badge">{groupBadge}</span>}
+                    <span className="grp-chevron" aria-hidden="true"/>
+                  </button>
+                  {isOpen && (
+                    <div className="side-nav-items">
+                      {group.items.map((item) => (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          end={item.end}
+                          className={({ isActive }) => (isActive ? 'on' : '')}
+                          onClick={closeSidebar}
+                        >
+                          <span className="ic">{item.icon}</span>
+                          {t(item.label)}
+                          {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+          })}
         </nav>
 
         <div className="foot">

@@ -4,7 +4,18 @@ import { Button, Card, Spinner } from '@components/ui';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 
-const plus1 = (t) => String(Number(t.split(':')[0]) + 1).padStart(2, '0') + ':00';
+const plusN = (t, hours = 1) => String(Number(t.split(':')[0]) + Math.max(1, Number(hours) || 1)).padStart(2, '0') + ':00';
+const SLOT_ORDER = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
+
+function consecutiveOpen(slots, startTime, hours) {
+    const count = Math.max(1, Number(hours) || 1);
+    const idx = SLOT_ORDER.indexOf(startTime);
+    if (idx < 0 || idx + count > SLOT_ORDER.length) {
+        return false;
+    }
+    const needed = SLOT_ORDER.slice(idx, idx + count);
+    return needed.every((time) => slots?.some((slot) => slot.time === time && !slot.full));
+}
 const THAI_DAYS = ['อา', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
@@ -32,6 +43,7 @@ export default function Booking() {
     const [slots, setSlots] = useState(null);
     const [selectedTime, setSelectedTime] = useState('');
     const [mode, setMode] = useState('studio');
+    const [hours, setHours] = useState(1);
     const [summary, setSummary] = useState(null);
     const [busy, setBusy] = useState(false);
     const [teachers, setTeachers] = useState([]);
@@ -66,6 +78,7 @@ export default function Booking() {
         setSlots(null);
         setSelectedTime('');
         setSummary(null);
+        setHours(1);
         api.getSlots(selectedDayStr, teacherId).then(setSlots);
     }, [selectedDayStr, teacherId, language]);
 
@@ -74,8 +87,17 @@ export default function Booking() {
             setSummary(null);
             return;
         }
-        api.getBookingSummary(selectedDayStr, selectedTime, teacherId).then(setSummary);
-    }, [selectedDayStr, selectedTime, teacherId, language]);
+        api.getBookingSummary(selectedDayStr, selectedTime, teacherId, hours).then(setSummary);
+    }, [selectedDayStr, selectedTime, teacherId, hours, language]);
+
+    useEffect(() => {
+        if (!slots || !selectedTime) {
+            return;
+        }
+        if (!consecutiveOpen(slots, selectedTime, hours)) {
+            setSelectedTime('');
+        }
+    }, [hours, slots, selectedTime]);
 
     const months = language === 'en'
         ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -89,26 +111,27 @@ export default function Booking() {
     };
 
     const hoursLeft = summary?.leftHours ?? pkg?.left ?? 0;
-    const canBook = hoursLeft > 0;
+    const maxBookHours = Math.max(1, Math.min(10, Number(hoursLeft) || 1));
+    const canBook = hoursLeft >= hours && consecutiveOpen(slots, selectedTime, hours);
     const selectedTeacher = teachers.find((row) => String(row.id) === String(teacherId));
 
     const confirm = async () => {
         if (!selectedDayStr || !selectedTime || busy) {
             return;
         }
-        if (!canBook) {
+        if (hoursLeft < hours) {
             toast(t('booking.noHours'));
             return;
         }
         setBusy(true);
         try {
-            await api.createBooking(selectedDayStr, selectedTime, mode, teacherId);
+            await api.createBooking(selectedDayStr, selectedTime, mode, teacherId, hours);
             toast(t('booking.success'), 'ok');
             navigate('/app');
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('booking.failed'));
-            api.getSlots(selectedDayStr).then(setSlots);
+            api.getSlots(selectedDayStr, teacherId).then(setSlots);
             loadDays();
         }
         finally {
@@ -285,25 +308,44 @@ export default function Booking() {
                 <p className="booking-selected-date">
                   {formatDay(selectedDay, calMonth, calYear)}
                 </p>
+                <div className="booking-hours-pick">
+                  <label htmlFor="booking-hours">{t('booking.duration')}</label>
+                  <select
+                    id="booking-hours"
+                    className="input"
+                    value={hours}
+                    onChange={(e) => setHours(Number(e.target.value) || 1)}
+                  >
+                    {Array.from({ length: maxBookHours }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {n} {t('booking.hoursUnit')}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>{t('booking.durationHint')}</p>
+                </div>
                 {slots === null ? (
                   <Spinner />
                 ) : slots.length === 0 ? (
                   <div className="empty">{t('booking.empty')}</div>
                 ) : (
                   <div className="time-slots-grid">
-                    {slots.map((slot) => (
+                    {slots.map((slot) => {
+                        const fits = !slot.full && consecutiveOpen(slots, slot.time, hours);
+                        return (
                       <button
                         key={slot.time}
                         type="button"
-                        disabled={slot.full}
-                        className={`time-slot ${selectedTime === slot.time ? 'on' : ''} ${slot.full ? 'full' : ''}`}
+                        disabled={!fits}
+                        className={`time-slot ${selectedTime === slot.time ? 'on' : ''} ${!fits ? 'full' : ''}`}
                         onClick={() => setSelectedTime(slot.time)}
                       >
                         <span className="ts-time">{slot.time}</span>
-                        <span className="ts-end">–{plus1(slot.time)}</span>
-                        {slot.full && <span className="ts-full">{t('booking.full')}</span>}
+                        <span className="ts-end">–{plusN(slot.time, hours)}</span>
+                        {!fits && <span className="ts-full">{slot.full ? t('booking.full') : t('booking.tooShort')}</span>}
                       </button>
-                    ))}
+                        );
+                    })}
                   </div>
                 )}
               </Card>
@@ -314,7 +356,11 @@ export default function Booking() {
                 <div className="booking-summary-panel">
                   <div className="sumrow">
                     <span className="muted">{t('booking.datetime')}</span>
-                    <b>{formatDay(selectedDay, calMonth, calYear)} · {selectedTime}–{plus1(selectedTime)}</b>
+                    <b>{formatDay(selectedDay, calMonth, calYear)} · {selectedTime}–{plusN(selectedTime, hours)}</b>
+                  </div>
+                  <div className="sumrow">
+                    <span className="muted">{t('booking.duration')}</span>
+                    <b>{hours} {t('booking.hoursUnit')}</b>
                   </div>
                   <div className="sumrow">
                     <span className="muted">{t('booking.teacher')}</span>
@@ -341,7 +387,7 @@ export default function Booking() {
                   </div>
                   <div className="sumrow">
                     <span className="muted">{t('booking.deduct')}</span>
-                    <span>{t('booking.deductValue')}</span>
+                    <span>{t('booking.deductValueMulti').replace('{hours}', String(hours))}</span>
                   </div>
                   <div className="sumrow total">
                     <span>{t('booking.hoursLeft')}</span>

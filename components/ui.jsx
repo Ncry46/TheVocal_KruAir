@@ -45,7 +45,7 @@ export function Field({ label, required, children }) {
     </div>);
 }
 /* ---------- Modal ---------- */
-export function Modal({ open, onClose, title, children, className = '', backdropClassName = '' }) {
+export function Modal({ open, onClose, title, children, className = '', backdropClassName = '', headerActions = null }) {
     useEffect(() => {
         if (!open) {
             return undefined;
@@ -79,9 +79,12 @@ export function Modal({ open, onClose, title, children, className = '', backdrop
         <div className={`modal ${className}`.trim()} onClick={(event) => event.stopPropagation()}>
           <div className="mh">
             <b>{title}</b>
-            <button type="button" className="x" onClick={onClose} aria-label="ปิด">
-              ✕
-            </button>
+            <div className="mh-actions">
+              {headerActions}
+              <button type="button" className="x" onClick={onClose} aria-label="ปิด">
+                ✕
+              </button>
+            </div>
           </div>
           <div className="mb">{children}</div>
         </div>

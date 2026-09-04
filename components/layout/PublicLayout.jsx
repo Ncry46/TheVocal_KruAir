@@ -47,7 +47,6 @@ export function PublicLayout({ children, footer = true }) {
         { label: t('nav.packages'), action: goPackages },
         { label: t('nav.how'), action: () => go('how') },
         { label: t('nav.why'), action: () => go('why') },
-        { label: t('nav.reviews'), action: () => go('rev') },
     ];
     return (<>
       <div className="scroll-progress" aria-hidden="true"/>
@@ -131,7 +130,7 @@ export function PublicLayout({ children, footer = true }) {
             <h5>{t('public.menu')}</h5>
             <a onClick={goPackages}>{t('nav.packages')}</a>
             <a onClick={() => go('how')}>{t('nav.how')}</a>
-            <a onClick={() => go('rev')}>{t('nav.reviews')}</a>
+            <a onClick={() => go('why')}>{t('nav.why')}</a>
           </div>
           <div>
             <h5>{t('public.account')}</h5>
@@ -152,8 +151,8 @@ export function PublicLayout({ children, footer = true }) {
           <div>
             <h5>{t('nav.system')}</h5>
             <a onClick={() => navigate('/login')}>{t('public.lineOfficial')}</a>
-            <a>{t('public.pdpa')}</a>
-            <a>{t('public.terms')}</a>
+            <a onClick={() => navigate('/privacy')}>{t('public.pdpa')}</a>
+            <a onClick={() => navigate('/terms')}>{t('public.terms')}</a>
           </div>
         </div>
         <div className="wrap">

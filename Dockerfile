@@ -34,6 +34,7 @@ ENV SQL_ENCRYPT=Yes
 ENV SQL_TRUST_CERT=Yes
 ENV FRONTEND_ORIGIN=https://kruair.thanvasupos.com
 ENV LINE_CALLBACK_URL=https://kruair.thanvasupos.com/api/auth/line/callback
+ENV GOOGLE_REDIRECT_URI=https://kruair.thanvasupos.com/api/teacher/google/callback
 
 EXPOSE 3000
 

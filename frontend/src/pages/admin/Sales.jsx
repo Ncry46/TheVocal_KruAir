@@ -53,7 +53,7 @@ export default function Sales() {
           title={latestSalesTitle}
           action={(
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Button ghost size="sm" type="button" onClick={() => api.downloadSalesCsv().catch(() => toast(language === 'en' ? 'Export failed' : 'Export ไม่สำเร็จ'))}>
+              <Button ghost size="sm" type="button" onClick={() => api.downloadSalesCsv(language).catch(() => toast(language === 'en' ? 'Export failed' : 'Export ไม่สำเร็จ'))}>
                 {language === 'en' ? 'Export CSV' : 'Export CSV'}
               </Button>
               <select className="input sales-filter" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value)} aria-label={latestSalesTitle}>

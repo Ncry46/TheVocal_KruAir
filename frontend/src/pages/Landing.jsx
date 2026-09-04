@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PublicLayout } from '@components/layout/PublicLayout';
 import { Button, Spinner } from '@components/ui';
-import { BellIcon, BookIcon, CalendarIcon, CartIcon, CardIcon, ChartIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PinIcon, TargetIcon, UserIcon } from '@components/icons';
+import { BellIcon, CalendarIcon, CardIcon, ChartIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PinIcon, TargetIcon } from '@components/icons';
 import { SectionDivider } from '@components/SectionDivider';
 import { api } from '../services/apiClient';
 import { useApp } from '../context/AppContext';
 import { dashboardPath } from '@app/utils/avatar';
-import reviews from '@data/reviews.json';
 const PKG_IMG = {
     beginner: '/img/pkg-desk.jpg',
     pro: '/img/pkg-stage.jpg',
@@ -16,12 +15,6 @@ const PKG_IMG = {
 };
 function packageImage(id) {
     return PKG_IMG[id] || '/img/pkg-studio.jpg';
-}
-function localized(value, language) {
-    if (value && typeof value === 'object') {
-        return value[language] ?? value.th ?? value.en ?? '';
-    }
-    return value ?? '';
 }
 function CountStat({ end, suffix = '', decimals = 0, label }) {
     const [value, setValue] = useState(0);
@@ -335,63 +328,6 @@ export default function Landing() {
               <div>{t('landing.teacher4')}</div>
             </div>
             <Button pink onClick={() => navigate('/register')}>{t('landing.startWithTeacher')}</Button>
-          </div>
-        </div>
-      </section>
-
-      <SectionDivider />
-
-      {/* ===== รีวิว ===== */}
-      <section className="sec sec-reviews" id="rev">
-        <div className="wrap">
-          <div className="sec-h reveal">
-            <span className="k">REVIEWS</span>
-            <h2>{t('landing.reviewsTitle')}</h2>
-          </div>
-          <div className="grid cols-3">
-            {reviews.map((review, i) => (<div className={`card rev reveal d${i + 1}`} key={review.name}>
-                <div className="stars">★★★★★</div>
-                <p>"{localized(review.quote, language)}"</p>
-                <div className="who">
-                  <div className="ava">
-                    <img src={review.photo} alt={review.name} loading="lazy"/>
-                  </div>
-                  <div>
-                    <b>{review.name}</b>
-                    <span>{localized(review.detail, language)}</span>
-                  </div>
-                </div>
-              </div>))}
-          </div>
-        </div>
-      </section>
-
-      <SectionDivider />
-
-      {/* ===== ฟังก์ชันหลักของระบบ ===== */}
-      <section className="sec alt sec-features" id="features">
-        <div className="wrap">
-          <div className="sec-h reveal">
-            <span className="k">SYSTEM FEATURES</span>
-            <h2>{t('landing.featuresTitle')}</h2>
-            <p>{t('landing.featuresSub')}</p>
-          </div>
-          <div className="grid cols-3">
-            {[
-            [<UserIcon key="u"/>, t('landing.feat1Title'), t('landing.feat1Body')],
-            [<CartIcon key="c"/>, t('landing.feat2Title'), t('landing.feat2Body')],
-            [<CardIcon key="cd"/>, t('landing.feat3Title'), t('landing.feat3Body')],
-            [<CalendarIcon key="ca"/>, t('landing.feat4Title'), t('landing.feat4Body')],
-            [<BellIcon key="b"/>, t('landing.feat5Title'), t('landing.feat5Body')],
-            [<BookIcon key="bk"/>, t('landing.feat6Title'), t('landing.feat6Body')],
-        ].map(([ic, title, d], i) => (<div className={`card feat feat-system reveal d${i + 1}`} key={i}>
-                <span className="feat-num">{String(i + 1).padStart(2, '0')}</span>
-                <div className="ic">{ic}</div>
-                <div>
-                  <h4>{title}</h4>
-                  <p>{d}</p>
-                </div>
-              </div>))}
           </div>
         </div>
       </section>

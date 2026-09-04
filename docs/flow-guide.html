@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>คู่มือ Flow การทำงาน — VOCALITY ACADEMY BY KRU AIR</title>
+  <style>
+    @page { size: A4; margin: 16mm 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Sarabun", "Noto Sans Thai", "Segoe UI", Tahoma, sans-serif;
+      color: #1b1148;
+      line-height: 1.55;
+      font-size: 11.5pt;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      font-size: 22pt;
+      margin: 0 0 6px;
+      color: #110a2e;
+    }
+    h2 {
+      font-size: 14pt;
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #bfa46e;
+      color: #1b1148;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 12pt;
+      margin: 14px 0 6px;
+      color: #2a1d6e;
+      page-break-after: avoid;
+    }
+    p, li { margin: 4px 0; }
+    .cover {
+      text-align: center;
+      padding: 48px 20px 28px;
+      border: 1px solid #e8e0d4;
+      border-radius: 16px;
+      background: linear-gradient(160deg, #fdfcfa, #f3f0eb);
+      margin-bottom: 24px;
+    }
+    .cover .sub { color: #5a5278; font-size: 11pt; margin-top: 8px; }
+    .badge {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: #1b1148;
+      color: #fff;
+      font-size: 10pt;
+    }
+    .muted { color: #5a5278; }
+    .box {
+      border: 1px solid #ddd5e8;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 8px 0 12px;
+      background: #faf8f5;
+      page-break-inside: avoid;
+    }
+    .box.gold { background: #fbf6ea; border-color: #e2d2a8; }
+    .box.blue { background: #f4f2fa; border-color: #d5cee8; }
+    .flow {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9.5pt;
+      white-space: pre-wrap;
+      background: #1b1148;
+      color: #f4f1ec;
+      padding: 12px 14px;
+      border-radius: 10px;
+      line-height: 1.45;
+      page-break-inside: avoid;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 14px;
+      font-size: 10.5pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #d8d0e4;
+      padding: 6px 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #1b1148;
+      color: #fff;
+      font-weight: 600;
+    }
+    tr:nth-child(even) td { background: #faf8f5; }
+    .toc a { color: #1b1148; text-decoration: none; }
+    .toc li { margin: 3px 0; }
+    .page-break { page-break-before: always; }
+    ul { padding-left: 18px; margin: 6px 0; }
+    .tag {
+      display: inline-block;
+      font-size: 9pt;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: #ede8f4;
+      color: #2a1d6e;
+      margin-right: 4px;
+    }
+    footer.note {
+      margin-top: 28px;
+      padding-top: 10px;
+      border-top: 1px solid #ddd;
+      font-size: 9.5pt;
+      color: #5a5278;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="cover">
+    <div class="muted" style="letter-spacing:0.12em;font-size:10pt;font-weight:700;">USER FLOW GUIDE</div>
+    <h1>คู่มือ Flow การทำงานของระบบ</h1>
+    <div style="font-size:14pt;font-weight:700;color:#2a1d6e;">VOCALITY ACADEMY BY KRU AIR</div>
+    <p class="sub">สรุปว่านักเรียนและครู/แอดมิน กดอะไรแล้วระบบทำอะไร<br/>อ้างอิงจากโค้ดจริงของเว็บแอป (เวอร์ชันปัจจุบัน)</p>
+    <span class="badge">ฝั่งนักเรียน + ฝั่งครู/แอดมิน</span>
+  </div>
+
+  <h2>สารบัญ</h2>
+  <ol class="toc">
+    <li>ภาพรวมระบบ</li>
+    <li>Flow หลักแบบสั้น (End-to-End)</li>
+    <li>ฝั่งนักเรียน — เมนูและผลของการกด</li>
+    <li>ฝั่งครู/แอดมิน — เมนูและผลของการกด</li>
+    <li>การหักชั่วโมง / แจ้งเตือนอัตโนมัติ</li>
+    <li>ตาราง Route สรุป</li>
+  </ol>
+
+  <h2>1) ภาพรวมระบบ</h2>
+  <div class="box blue">
+    <b>หลักการสำคัญ</b>
+    <ul>
+      <li>เว็บเป็นช่องทางหลัก · LINE OA เป็นช่องทางแจ้งเตือนเสริม</li>
+      <li><b>จองแล้วยังไม่หักชั่วโมง</b> — หักเมื่อนักเรียนลงชื่อหลังเรียน (หรือครูบันทึก No-show)</li>
+      <li>ซื้อแพ็กเกจแล้ว <b>ยังไม่ได้ชั่วโมงทันที</b> — ต้องโอน → แนบสลิป → ครูยืนยัน</li>
+      <li>แพ็กเกจอายุ <b>6 เดือน</b> นับจากวันที่ยืนยันรับเงิน</li>
+    </ul>
+  </div>
+
+  <h2>2) Flow หลักแบบสั้น (End-to-End)</h2>
+  <div class="flow">สมัครสมาชิก
+   → ซื้อแพ็กเกจ / รับลิงก์ชำระเงิน
+   → โอน PromptPay + แนบสลิป
+   → ครูยืนยันรับเงิน (ได้ชั่วโมง)
+   → จองวัน–เวลาเรียน
+   → ระบบเตือนก่อนเรียน ~1 วัน
+   → นักเรียนยืนยันมาเรียน
+   → เข้าเรียน
+   → ครูบันทึกคลาส + การบ้าน
+   → นักเรียนลงชื่อหลังเรียน (หักชั่วโมง)
+   → ดูประวัติ / ใบเสร็จ</div>
+
+  <div class="page-break"></div>
+  <h2>3) ฝั่งนักเรียน</h2>
+
+  <h3>3.1 เมนูที่นักเรียนใช้</h3>
+  <table>
+    <tr><th>เมนู</th><th>หน้า (Route)</th><th>ใช้ทำอะไร</th></tr>
+    <tr><td>หน้าแรก</td><td>/app</td><td>ดูนัดถัดไป · ยืนยัน/เลื่อน/ยกเลิก · ชม.คงเหลือ</td></tr>
+    <tr><td>ซื้อแพ็กเกจ</td><td>/app/packages</td><td>เลือกแพ็ก · ใส่วอเชอร์ · เริ่มชำระ</td></tr>
+    <tr><td>ชำระเงิน</td><td>/app/pay/:ref</td><td>ดู QR · แนบสลิป · แจ้งโอน</td></tr>
+    <tr><td>จองเวลาเรียน</td><td>/app/booking</td><td>เลือกวัน/เวลา/โหมดเรียน · ยืนยันจอง</td></tr>
+    <tr><td>ประวัติการเรียน</td><td>/app/history</td><td>ดูบันทึกจากครู</td></tr>
+    <tr><td>การบ้าน / ลงชื่อ</td><td>/app/homework</td><td>ลงลายเซ็นหลังเรียน · ส่งเสียงการบ้าน</td></tr>
+    <tr><td>ใบเสร็จ / การซื้อ</td><td>/app/receipts</td><td>ดูประวัติการชำระ</td></tr>
+    <tr><td>โปรไฟล์</td><td>/app/profile</td><td>แก้ข้อมูล · เชื่อม LINE · เชื่อม Google Calendar</td></tr>
+  </table>
+
+  <h3>3.2 สมัคร / เข้าสู่ระบบ</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>สมัครด้วยอีเมล+รหัสผ่าน</td><td>สร้างบัญชีนักเรียน · แจ้งต้อนรับ · พาไปหน้าซื้อแพ็กเกจ</td></tr>
+    <tr><td>สมัคร / เข้าสู่ระบบด้วย LINE</td><td>OAuth LINE · ผูกบัญชี · เข้าหน้านักเรียน</td></tr>
+    <tr><td>เข้าสู่ระบบอีเมล/เบอร์</td><td>ได้ session · ไป /app</td></tr>
+  </table>
+
+  <h3>3.3 ซื้อแพ็กเกจ + ชำระเงิน</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>เลือกแพ็กเกจ → ชำระเลย</td><td>สร้างออเดอร์สถานะ <b>รอโอน</b> · ยังไม่เติมชั่วโมง · แจ้งเตือนในแอป</td></tr>
+    <tr><td>ใช้โค้ดวอเชอร์</td><td>ตรวจโค้ด · ลดราคาก่อนสร้างออเดอร์</td></tr>
+    <tr><td>ชำระจากลิงก์/ผ่อนที่ครูสร้าง</td><td>สร้างออเดอร์จากลิงก์นั้น · ไปหน้าชำระ</td></tr>
+    <tr><td>แนบสลิป + แจ้งโอนแล้ว</td><td>สถานะ <b>รอครูยืนยัน</b> · แจ้งครูทุกคนที่กระดิ่ง/LINE</td></tr>
+    <tr><td>ครูยืนยันรับเงิน (ฝั่งครู)</td><td>สถานะสำเร็จ · <b>เติมชั่วโมง</b> · แพ็กอายุ 6 เดือน · แจ้งนักเรียน</td></tr>
+    <tr><td>ครูปฏิเสธสลิป</td><td>ออเดอร์ยกเลิก · แจ้งนักเรียน · ไม่ได้ชั่วโมง</td></tr>
+  </table>
+
+  <h3>3.4 จองเรียน / ยืนยัน / เลื่อน / ยกเลิก</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th><th>หักชม.?</th></tr>
+    <tr><td>จองวัน–เวลา + ยืนยันการจอง</td><td>สร้างนัดสถานะ <b>รอคอนเฟิร์ม</b> · ล็อกสล็อต · แจ้งครู · sync Google Calendar (ถ้าเชื่อม)</td><td>ไม่</td></tr>
+    <tr><td>ยืนยันการมาเรียน (หน้าแรก)</td><td>นัดเป็น <b>ยืนยันแล้ว</b> · แจ้งครู</td><td>ไม่</td></tr>
+    <tr><td>ปฏิเสธนัด (ยังไม่ยืนยัน)</td><td>ยกเลิกนัด · สล็อตว่าง</td><td>ไม่</td></tr>
+    <tr><td>ขอเลื่อนนัด</td><td>สร้างคำขอเลื่อน · รอครูอนุมัติ ≤24 ชม.</td><td>ไม่</td></tr>
+    <tr><td>ยกเลิกนัด (≥24 ชม.ก่อนเรียน)</td><td>ยกเลิก · สล็อตว่าง · แจ้งครู</td><td>ไม่</td></tr>
+    <tr><td>ปุ่ม Google Calendar บนหน้าแรก</td><td>เปิดลิงก์เพิ่มลงปฏิทินด้วยมือ</td><td>—</td></tr>
+  </table>
+
+  <div class="box gold">
+    <b>กติกาสำคัญตอนจอง</b>
+    <ul>
+      <li>ต้องมีชั่วโมงคงเหลือก่อนจองได้</li>
+      <li>ถ้าไม่ยืนยันภายในกำหนด ระบบยกเลิกนัดอัตโนมัติ (สล็อตว่าง)</li>
+      <li>ก่อนเรียนประมาณ 1 วัน ระบบส่งแจ้งเตือนในแอป + LINE (ถ้าผูก) + เตือนครู</li>
+    </ul>
+  </div>
+
+  <h3>3.5 หลังเรียน — ลงชื่อ / การบ้าน</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>ครูบันทึกคลาส “มาเรียน”</td><td>สร้างบันทึกคลาส · แจ้งนักเรียนให้ลงชื่อ · มีการบ้านถ้าครูใส่โน้ต/เสียง</td></tr>
+    <tr><td>นักเรียนลงลายเซ็นหลังเรียน</td><td><b>หักชั่วโมง</b> ตามระยะเวลาคลาส (ปกติ 1 ชม.)</td></tr>
+    <tr><td>ครูบันทึก No-show</td><td><b>หักชั่วโมงทันที</b> · แจ้งนักเรียน</td></tr>
+    <tr><td>อัปโหลด/อัดเสียงการบ้าน</td><td>บันทึกไฟล์เสียง · ครูฟังได้ในปฏิทิน</td></tr>
+  </table>
+
+  <h3>3.6 โปรไฟล์นักเรียน</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>แก้ไขข้อมูลส่วนตัว</td><td>อัปเดตโปรไฟล์</td></tr>
+    <tr><td>เชื่อมต่อ LINE</td><td>ผูกบัญชีเพื่อรับแจ้งเตือน Push</td></tr>
+    <tr><td>เชื่อมต่อ Google Calendar</td><td>sync นัดเรียน + เตือนล่วงหน้า 1 วันในปฏิทิน Google</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+  <h2>4) ฝั่งครู / แอดมิน</h2>
+
+  <h3>4.1 เมนูที่ครูใช้</h3>
+  <table>
+    <tr><th>เมนู</th><th>หน้า (Route)</th><th>ใช้ทำอะไร</th></tr>
+    <tr><td>วันนี้</td><td>/teacher</td><td>สรุปงานวันนี้ · KPI · ทางลัด</td></tr>
+    <tr><td>ตารางสอน</td><td>/teacher/calendar</td><td>เปิด/ปิดสล็อต · จองให้นักเรียน · บันทึกคลาส</td></tr>
+    <tr><td>คำขอเลื่อนนัด</td><td>/teacher/requests</td><td>อนุมัติ/ปฏิเสธคำขอเลื่อน</td></tr>
+    <tr><td>ข้อมูลนักเรียน</td><td>/teacher/students</td><td>ดูรายชื่อ · โปรไฟล์ · สร้างคอร์ส/offer</td></tr>
+    <tr><td>รายงาน / ยอดขาย</td><td>/teacher/sales</td><td>ดูยอดขาย · Export CSV</td></tr>
+    <tr><td>ยืนยันรับเงิน</td><td>/teacher/payments</td><td>ดูสลิป · ยืนยัน/ปฏิเสธการโอน</td></tr>
+    <tr><td>ลิงก์ชำระเงิน</td><td>/teacher/payment-links</td><td>สร้างลิงก์ชำระ/ผ่อนให้นักเรียน</td></tr>
+    <tr><td>จัดการผู้ใช้</td><td>/teacher/users</td><td>ระงับ/เปิดใช้บัญชี</td></tr>
+    <tr><td>วอเชอร์</td><td>/teacher/vouchers</td><td>สร้าง/เปิด-ปิดโค้ดส่วนลด</td></tr>
+    <tr><td>ตั้งค่าระบบ</td><td>/teacher/settings</td><td>แพ็กเกจ · PromptPay · LINE · Google Calendar · Jobs</td></tr>
+  </table>
+
+  <h3>4.2 วันนี้ + ปฏิทิน</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>เพิ่มสล็อต / เปิดสล็อต</td><td>วัน-เวลานั้นว่างให้นักเรียนจองได้</td></tr>
+    <tr><td>ปิดสล็อต / ปิดช่วงวัน</td><td>ไม่ให้จองช่วงนั้น (ถ้ามีนัดอยู่ต้องยืนยันก่อน)</td></tr>
+    <tr><td>จองให้นักเรียน</td><td>สร้างนัดแทนนักเรียน · แจ้งนักเรียน · sync ปฏิทิน</td></tr>
+    <tr><td>เลื่อนนัดโดยครู</td><td>ย้ายสล็อต · แจ้งนักเรียน · sync ปฏิทิน</td></tr>
+    <tr><td>ยกเลิกนัด</td><td>สล็อตว่าง · แจ้งนักเรียน · <b>ไม่หักชั่วโมง</b></td></tr>
+    <tr><td>ทวงถาม</td><td>ส่งแจ้งเตือนให้นักเรียนไปยืนยันนัด</td></tr>
+    <tr><td>บันทึกคลาส (มาเรียน)</td><td>สถานะ done · รอลงชื่อจากนักเรียน · สร้างการบ้านถ้ามีโน้ต</td></tr>
+    <tr><td>ไม่มาเรียน (No-show)</td><td>หักชั่วโมงทันที · แจ้งนักเรียน</td></tr>
+    <tr><td>ดูลายเซ็น / ฟังเสียงการบ้าน</td><td>เปิดไฟล์ที่นักเรียนส่งไว้</td></tr>
+  </table>
+
+  <h3>4.3 คำขอเลื่อนนัด</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>อนุมัติ</td><td>สล็อตเดิมว่าง · สล็อตใหม่ถูกจอง · นัดเป็นยืนยันแล้ว · แจ้งนักเรียน · sync Calendar</td></tr>
+    <tr><td>ปฏิเสธ</td><td>นัดกลับไปใช้เวลาเดิม · แจ้งนักเรียน</td></tr>
+  </table>
+
+  <h3>4.4 ยืนยันรับเงิน (สำคัญมาก)</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>ดูสลิป</td><td>เปิดรูปสลิปที่นักเรียนอัปโหลด</td></tr>
+    <tr><td>ยืนยัน</td><td>ออเดอร์สำเร็จ · เติมชั่วโมง (งวดสุดท้าย) · แจ้งนักเรียน</td></tr>
+    <tr><td>ปฏิเสธ</td><td>ออเดอร์ยกเลิก · แจ้งนักเรียน · ไม่เติมชั่วโมง</td></tr>
+  </table>
+  <p class="muted">หมายเหตุ: ถ้าเป็นลิงก์ผ่อนหลายงวด — งวดกลางยืนยันแล้วอาจยังไม่เติมชั่วโมงจนกว่างวดสุดท้าย</p>
+
+  <h3>4.5 นักเรียน / ลิงก์ชำระ / วอเชอร์ / ผู้ใช้</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>เพิ่มคอร์ส / ให้ชั่วโมงทันที</td><td>เติมชั่วโมงให้นักเรียนทันที (ไม่ต้องโอน)</td></tr>
+    <tr><td>สร้าง offer รอชำระ</td><td>นักเรียนเห็นรายการรอชำระในหน้าแพ็กเกจ</td></tr>
+    <tr><td>สร้างลิงก์ชำระเงิน/ผ่อน</td><td>ได้ลิงก์ส่งนักเรียน · เมื่อโอนแล้วเข้าคิวตรวจสลิป</td></tr>
+    <tr><td>สร้างวอเชอร์</td><td>นักเรียนใส่โค้ดตอนซื้อแพ็กเกจได้</td></tr>
+    <tr><td>ระงับผู้ใช้</td><td>บัญชีนั้นเข้าสู่ระบบไม่ได้</td></tr>
+  </table>
+
+  <h3>4.6 ตั้งค่า + Google Calendar + LINE</h3>
+  <table>
+    <tr><th>กดอะไร</th><th>ผลในระบบ</th></tr>
+    <tr><td>บันทึกช่องทางรับเงิน</td><td>อัปเดต PromptPay / บัญชีธนาคารที่หน้าชำระเงิน</td></tr>
+    <tr><td>เพิ่ม/แก้แพ็กเกจขาย</td><td>อัปเดตแพ็กเกจบนหน้า Landing และหน้าซื้อ</td></tr>
+    <tr><td>เชื่อมต่อ Google Calendar (ครู)</td><td>นัดเรียน sync เข้าปฏิทินครูอัตโนมัติ</td></tr>
+    <tr><td>Publish Rich Menu</td><td>อัปเดตเมนู LINE OA</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+  <h2>5) การหักชั่วโมงและแจ้งเตือนอัตโนมัติ</h2>
+
+  <h3>5.1 เมื่อไหร่หักชั่วโมง?</h3>
+  <table>
+    <tr><th>จังหวะ</th><th>หักหรือไม่</th></tr>
+    <tr><td>จอง / ยืนยันมาเรียน / ยกเลิก / เลื่อน</td><td><b>ไม่หัก</b></td></tr>
+    <tr><td>ครูบันทึกคลาส “มาเรียน”</td><td>ยังไม่หัก — รอนักเรียนลงชื่อ</td></tr>
+    <tr><td>นักเรียนลงลายเซ็นหลังเรียน</td><td><b>หัก</b></td></tr>
+    <tr><td>ครูบันทึก No-show</td><td><b>หักทันที</b></td></tr>
+  </table>
+
+  <h3>5.2 งานอัตโนมัติของระบบ (ทุก ~5 นาที)</h3>
+  <table>
+    <tr><th>งาน</th><th>ผล</th></tr>
+    <tr><td>เตือนก่อนเรียน ~1 วัน</td><td>แจ้งนักเรียนในแอป + LINE Flex · แจ้งครูที่กระดิ่ง</td></tr>
+    <tr><td>หมดเวลายืนยันนัด</td><td>ยกเลิกนัดอัตโนมัติ · สล็อตว่าง · แจ้งทั้งสองฝ่าย</td></tr>
+    <tr><td>ชั่วโมงใกล้หมด (≤2 ชม.)</td><td>แจ้งนักเรียน</td></tr>
+    <tr><td>แพ็กเกจใกล้หมดอายุ (≤7 วัน)</td><td>แจ้งนักเรียน</td></tr>
+  </table>
+
+  <h3>5.3 กระดิ่งแจ้งเตือน</h3>
+  <ul>
+    <li>โหลดรายการใหม่เป็นระยะ · มีตัวเลขจำนวนที่ยังไม่อ่าน</li>
+    <li>เปิดกระดิ่งแล้วถือว่าอ่านทั้งหมด</li>
+    <li>คลิกรายการแล้วพาไปหน้าที่เกี่ยวข้อง (เช่น สลิป, นัด, การบ้าน)</li>
+    <li>ถ้าผูก LINE แล้ว ข้อความสำคัญมักถูกส่งเข้า LINE OA ด้วย</li>
+  </ul>
+
+  <h2>6) ตาราง Route สรุป</h2>
+  <div class="flow">สาธารณะ
+  /                 Landing
+  /login            เข้าสู่ระบบ
+  /register         สมัครเรียน
+
+นักเรียน
+  /app              หน้าแรก
+  /app/packages     ซื้อแพ็กเกจ
+  /app/pay/:ref     ชำระเงิน
+  /app/booking      จองเวลาเรียน
+  /app/history      ประวัติการเรียน
+  /app/homework     การบ้าน / ลงชื่อ
+  /app/receipts     ใบเสร็จ
+  /app/profile      โปรไฟล์
+
+ครู / แอดมิน
+  /teacher                  วันนี้
+  /teacher/calendar         ตารางสอน
+  /teacher/requests         คำขอเลื่อนนัด
+  /teacher/students         นักเรียน
+  /teacher/sales            ยอดขาย
+  /teacher/payments         ยืนยันรับเงิน
+  /teacher/payment-links    ลิงก์ชำระเงิน
+  /teacher/users            ผู้ใช้
+  /teacher/vouchers         วอเชอร์
+  /teacher/settings         ตั้งค่า
+  /teacher/profile          โปรไฟล์</div>
+
+  <footer class="note">
+    เอกสารนี้สรุปพฤติกรรมจากโค้ดปัจจุบันของโปรเจกต์ TheVocal_KruAir
+    · เหมาะใช้เป็นคู่มือภายในสำหรับครูแอร์ / แอดมิน / ทีมพัฒนา
+    · หาก UI หรือนโยบายเปลี่ยน ควรอัปเดตเอกสารนี้ให้ตรงกับระบบ
+  </footer>
+
+</body>
+</html>

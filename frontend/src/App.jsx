@@ -4,6 +4,8 @@ import { useApp } from './context/AppContext';
 import { AppLayout } from '@components/layout/AppLayout';
 import { AuthLayout } from '@components/layout/AuthLayout';
 const Landing = lazy(() => import('./pages/Landing'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const Terms = lazy(() => import('./pages/Terms'));
 const Home = lazy(() => import('./pages/student/Home'));
 const Packages = lazy(() => import('./pages/student/Packages'));
 const Payment = lazy(() => import('./pages/student/Payment'));
@@ -52,6 +54,8 @@ export default function App() {
     return (<Suspense fallback={<RouteFallback />}>
     <Routes>
         <Route path="/" element={<Landing />}/>
+        <Route path="/privacy" element={<Privacy />}/>
+        <Route path="/terms" element={<Terms />}/>
         <Route element={<GuestOnly><AuthLayout /></GuestOnly>}>
           <Route path="/login"/>
           <Route path="/register"/>

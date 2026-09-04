@@ -1,10 +1,11 @@
 import { getPool, sql } from './db.js';
-import { confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, SLOT_TIMES, slotStartAt } from './bookingPolicy.js';
+import { canSignLesson, confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, SLOT_TIMES, slotStartAt } from './bookingPolicy.js';
 import { parseIsoDate, toIsoDate } from './dates.js';
 import { chipLabel, educationEn, formatDate, genresEn, methodEn, moveStatus, pick, relativeTime } from './lang.js';
 import { isYes, toYn } from './yn.js';
 import { formatLineNotifyMessage, findLineUserIdForAppUser, pushLineText } from './lineMessaging.js';
 import { isHomeworkNote, packageHoursLeft, shouldNotifyLowHours } from './packagePolicy.js';
+import { nextInvoiceRef } from './invoiceRef.js';
 
 export async function query(text, params = {}) {
     const pool = await getPool();
@@ -947,6 +948,11 @@ async function ensureCatalogMigration() {
         VALUES (N'offer', N'คอร์สพิเศษ', 0, 0, N'แพ็กเกจระบบสำหรับคอร์สที่ครูจัดให้', NULL, N'pink',
                 N'Custom offer', N'System package for teacher-assigned courses', N'N')`);
     await query(`
+        IF NOT EXISTS (SELECT 1 FROM dbo.packages WHERE id = N'link')
+        INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone, name_en, note_en, is_active)
+        VALUES (N'link', N'ลิงก์ชำระเงิน', 0, 0, N'แพ็กเกจระบบสำหรับลิงก์ชำระ / ผ่อนชำระ', NULL, N'pink',
+                N'Payment link', N'System package for payment / installment links', N'N')`);
+    await query(`
         IF NOT EXISTS (SELECT 1 FROM dbo.packages WHERE id = N'single')
         INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone, name_en, note_en, is_active)
         VALUES (N'single', N'เรียน 1 ชั่วโมง', 1, 2500, N'฿2,500/ชม. · จองเวลาเรียนได้ทันที', NULL, N'pink',
@@ -1046,24 +1052,89 @@ export function ageFromBirthDate(birthDate) {
 export async function signLessonAndDeductHours({ bookingPublicId, userId, signature }) {
     return withTransaction(async (run) => {
         const found = await run(
-            `SELECT cl.id, cl.hours_deducted, cl.hours_charged_at, cl.outcome,
-                    b.user_package_id, b.user_id AS booking_user_id
-             FROM dbo.class_logs cl
-             JOIN dbo.bookings b ON b.id = cl.booking_id
-             WHERE b.public_id = @bookingId AND cl.user_id = @userId AND cl.student_signature IS NULL`,
+            `SELECT b.id AS booking_id, b.user_package_id, b.user_id AS booking_user_id,
+                    b.topic, b.topic_en, b.status AS booking_status,
+                    COALESCE(b.duration_hours, 1) AS duration_hours,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                    cl.id AS log_id, cl.hours_deducted, cl.hours_charged_at, cl.outcome,
+                    cl.student_signature
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             LEFT JOIN dbo.class_logs cl ON cl.booking_id = b.id
+             WHERE b.public_id = @bookingId AND b.user_id = @userId`,
             { bookingId: bookingPublicId, userId },
         );
         const row = found.recordset[0];
         if (!row) {
             throw new Error('ไม่พบคลาสที่ต้องลงชื่อ');
         }
-        await run(
-            `UPDATE dbo.class_logs SET student_signature = @sig, signed_at = SYSUTCDATETIME() WHERE id = @id`,
-            { id: row.id, sig: signature.slice(0, 200000) },
-        );
+        if (row.student_signature) {
+            throw new Error('ลงลายเซ็นคลาสนี้แล้ว');
+        }
+        if (row.outcome === 'no_show') {
+            throw new Error('คลาสนี้ถูกบันทึกว่าไม่มาเรียน');
+        }
+        if (!canSignLesson({ slotIso: row.slot_iso })) {
+            throw new Error('เซ็นได้เฉพาะวันที่มีคลาสเท่านั้น');
+        }
+        const allowedStatus = ['confirmed', 'moved', 'done'];
+        if (!row.log_id && !allowedStatus.includes(row.booking_status)) {
+            throw new Error('ยังไม่สามารถลงชื่อได้ จนกว่าจะยืนยันนัดเรียน');
+        }
+
+        const deductHours = Math.max(1, Number(row.hours_deducted) || Number(row.duration_hours) || 1);
+        let logId = row.log_id;
+        let hoursChargedAt = row.hours_charged_at;
+
+        if (!logId) {
+            const title = row.topic || 'เทคนิคการหายใจ + สเกลพื้นฐาน';
+            const titleEn = row.topic_en || 'Breathing technique + basic scales';
+            const inserted = await run(
+                `INSERT INTO dbo.class_logs
+                    (booking_id, user_id, lesson_title, lesson_title_en, note, note_en,
+                     hours_deducted, hours_charged_at, outcome, student_signature, signed_at)
+                 OUTPUT INSERTED.id
+                 VALUES (@bookingId, @userId, @title, @titleEn, N'ยืนยันโดยลายเซ็นนักเรียน', N'Confirmed by student signature',
+                         @hours, NULL, N'done', @sig, SYSUTCDATETIME())`,
+                {
+                    bookingId: row.booking_id,
+                    userId,
+                    title,
+                    titleEn,
+                    hours: deductHours,
+                    sig: signature.slice(0, 200000),
+                },
+            );
+            logId = inserted.recordset[0]?.id;
+            if (!logId) {
+                throw new Error('บันทึกลายเซ็นไม่สำเร็จ');
+            }
+            await run(
+                `UPDATE dbo.bookings SET status = N'done', updated_at = SYSUTCDATETIME() WHERE id = @bookingId;
+                 DELETE FROM dbo.booking_slots WHERE booking_id = @bookingId;`,
+                { bookingId: row.booking_id },
+            );
+        }
+        else {
+            await run(
+                `UPDATE dbo.class_logs
+                 SET student_signature = @sig, signed_at = SYSUTCDATETIME(),
+                     outcome = N'done',
+                     hours_deducted = CASE WHEN hours_deducted IS NULL OR hours_deducted < 1 THEN @hours ELSE hours_deducted END
+                 WHERE id = @id;
+                 UPDATE dbo.bookings SET status = N'done', updated_at = SYSUTCDATETIME() WHERE id = @bookingId;`,
+                {
+                    id: logId,
+                    bookingId: row.booking_id,
+                    sig: signature.slice(0, 200000),
+                    hours: deductHours,
+                },
+            );
+        }
+
         let hoursDeducted = 0;
-        if (row.outcome === 'done' && !row.hours_charged_at && Number(row.hours_deducted) > 0) {
-            const deductHours = Math.max(1, Number(row.hours_deducted) || 1);
+        if (!hoursChargedAt) {
             let pkg = null;
             if (row.user_package_id) {
                 const pkgResult = await run(
@@ -1090,7 +1161,7 @@ export async function signLessonAndDeductHours({ bookingPublicId, userId, signat
                 );
                 await run(
                     `UPDATE dbo.class_logs SET hours_charged_at = SYSUTCDATETIME() WHERE id = @id`,
-                    { id: row.id },
+                    { id: logId },
                 );
                 const hoursAfter = Math.max(0, hoursBefore - deductHours);
                 await maybeNotifyPackageHours(row.booking_user_id, pkg.id, hoursBefore, hoursAfter);
@@ -1316,8 +1387,7 @@ export async function createPackagePurchase({
             discount = Math.min(discountForVoucher(voucher, pkg.price), Number(pkg.price));
         }
         const net = Number(pkg.price) - discount;
-        const count = await run(`SELECT COUNT(*) AS n FROM dbo.transactions`);
-        const refNo = `INV-${new Date().getFullYear()}-${8800 + Number(count.recordset[0].n) + 1}`;
+        const refNo = await nextInvoiceRef(run);
         const payMethod = String(method ?? 'บัตรเครดิต').split(' (')[0];
         const gateway = gatewayFromMethod(payMethod);
         const tx = await run(
@@ -1394,7 +1464,7 @@ export async function createPackagePurchase({
     });
 }
 
-const SYSTEM_PACKAGE_IDS = new Set(['trial', 'offer']);
+const SYSTEM_PACKAGE_IDS = new Set(['trial', 'offer', 'link']);
 
 export function mapStudentOffer(row, lang) {
     return {
@@ -1516,7 +1586,7 @@ export async function listAdminPackages() {
     return query(
         `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
          FROM dbo.packages
-         WHERE id NOT IN (N'trial', N'offer')
+         WHERE id NOT IN (N'trial', N'offer', N'link')
          ORDER BY hours, id`,
     );
 }

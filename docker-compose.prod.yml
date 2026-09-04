@@ -16,6 +16,7 @@ services:
       SQL_SERVER: tvsdb2.thanvasupos.com,28914
       FRONTEND_ORIGIN: https://kruair.thanvasupos.com
       LINE_CALLBACK_URL: https://kruair.thanvasupos.com/api/auth/line/callback
+      GOOGLE_REDIRECT_URI: https://kruair.thanvasupos.com/api/teacher/google/callback
     volumes:
       - ./backend/.env:/app/.env:ro
     ports:

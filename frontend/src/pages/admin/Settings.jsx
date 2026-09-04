@@ -373,6 +373,14 @@ export default function Settings() {
                     ? (data.integrations.googleCalendar?.connected ? t('settings.googleConnected') : t('settings.googleCalendarHint'))
                     : t('settings.googleNotConfigured')}
                 </div>
+                {data.integrations.googleCalendar?.configured && data.integrations.googleCalendar?.redirectUri && (
+                  <div style={{ marginTop: 8, fontSize: 11, wordBreak: 'break-all' }}>
+                    <div className="muted">{t('settings.googleRedirectHint')}</div>
+                    <code style={{ display: 'block', marginTop: 4, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-soft)', color: 'var(--ink)' }}>
+                      {data.integrations.googleCalendar.redirectUri}
+                    </code>
+                  </div>
+                )}
               </div>
               {data.integrations.googleCalendar?.configured ? (
                 data.integrations.googleCalendar?.connected ? (

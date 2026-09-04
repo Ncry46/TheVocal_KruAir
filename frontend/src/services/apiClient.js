@@ -41,7 +41,10 @@ async function request(path, options = {}) {
     const response = await fetch(`/api${path}`, { ...options, headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-        throw new Error(data.error || 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์');
+        const fallback = response.status === 404
+            ? `ไม่พบ API (${path})`
+            : 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์';
+        throw new Error(data.error || fallback);
     }
     return data;
 }
@@ -89,6 +92,9 @@ export const api = {
     updateMe(input) {
         return request('/me', { method: 'PATCH', body: JSON.stringify(input) });
     },
+    updateMeAvatar(avatar) {
+        return request('/me/avatar', { method: 'PATCH', body: JSON.stringify({ avatar }) });
+    },
     getPackages() {
         return request('/packages');
     },
@@ -115,15 +121,24 @@ export const api = {
         }
         return request(`/slots?${params.toString()}`);
     },
-    getBookingSummary(day, time, teacherId = '') {
-        const params = new URLSearchParams({ day, time });
+    getBookingSummary(day, time, teacherId = '', hours = 1) {
+        const params = new URLSearchParams({ day, time, hours: String(hours || 1) });
         if (teacherId) {
             params.set('teacherId', String(teacherId));
         }
         return request(`/booking-summary?${params.toString()}`);
     },
-    createBooking(day, time, mode = 'studio', teacherId = '') {
-        return request('/bookings', { method: 'POST', body: JSON.stringify({ day, time, mode, teacherId: teacherId || undefined }) });
+    createBooking(day, time, mode = 'studio', teacherId = '', hours = 1) {
+        return request('/bookings', {
+            method: 'POST',
+            body: JSON.stringify({
+                day,
+                time,
+                mode,
+                teacherId: teacherId || undefined,
+                hours: Number(hours) || 1,
+            }),
+        });
     },
     getTeachers() {
         return request('/teachers');
@@ -254,8 +269,8 @@ export const api = {
     exportSalesCsv() {
         return '/api/admin/sales/export.csv';
     },
-    async downloadSalesCsv() {
-        const headers = { 'X-Lang': 'th' };
+    async downloadSalesCsv(language = 'th') {
+        const headers = { 'X-Lang': language === 'en' ? 'en' : 'th' };
         const token = getToken();
         if (token) {
             headers.Authorization = `Bearer ${token}`;
@@ -266,9 +281,15 @@ export const api = {
         }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
+        const filename = utfMatch
+            ? decodeURIComponent(utfMatch[1])
+            : (plainMatch?.[1] || (language === 'en' ? 'sales-report.csv' : 'รายงานยอดขาย.csv'));
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = 'sales-export.csv';
+        anchor.download = filename;
         anchor.click();
         URL.revokeObjectURL(url);
     },
@@ -353,6 +374,26 @@ export const api = {
     },
     createStudentOffer(studentId, input) {
         return request(`/teacher/students/${encodeURIComponent(studentId)}/offers`, { method: 'POST', body: JSON.stringify(input) });
+    },
+    getStudentRecurring(studentId) {
+        return request(`/teacher/students/${encodeURIComponent(studentId)}/recurring`);
+    },
+    createStudentRecurring(studentId, input) {
+        return request(`/teacher/students/${encodeURIComponent(studentId)}/recurring`, {
+            method: 'POST',
+            body: JSON.stringify(input),
+        });
+    },
+    deleteStudentRecurring(studentId, ruleId) {
+        return request(`/teacher/students/${encodeURIComponent(studentId)}/recurring/${encodeURIComponent(ruleId)}`, {
+            method: 'DELETE',
+        });
+    },
+    generateStudentRecurring(studentId, weeks = 4) {
+        return request(`/teacher/students/${encodeURIComponent(studentId)}/recurring/generate`, {
+            method: 'POST',
+            body: JSON.stringify({ weeks }),
+        });
     },
     cancelStudentOffer(publicId) {
         return request(`/teacher/offers/${encodeURIComponent(publicId)}`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) });

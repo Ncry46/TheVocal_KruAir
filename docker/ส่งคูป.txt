@@ -19,6 +19,7 @@ SQL:         tvsdb2.thanvasupos.com,28914 (ห้าม localhost)
     -e SQL_SERVER=tvsdb2.thanvasupos.com,28914 ^
     -e FRONTEND_ORIGIN=https://kruair.thanvasupos.com ^
     -e LINE_CALLBACK_URL=https://kruair.thanvasupos.com/api/auth/line/callback ^
+    -e GOOGLE_REDIRECT_URI=https://kruair.thanvasupos.com/api/teacher/google/callback ^
     -v /opt/kruair/.env:/app/.env:ro ^
     thanvasu/web-kruair:latest
 
@@ -27,3 +28,4 @@ SQL:         tvsdb2.thanvasupos.com,28914 (ห้าม localhost)
 
 Reverse proxy ของบริษัทชี้ kruair.thanvasupos.com มาที่พอร์ต 3000
 LINE Callback: https://kruair.thanvasupos.com/api/auth/line/callback
+Google Calendar redirect: https://kruair.thanvasupos.com/api/teacher/google/callback

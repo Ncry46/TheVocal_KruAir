@@ -10,6 +10,7 @@ import {
     withTransaction,
 } from './store.js';
 import { savePaymentSlip, resolvePaymentSlipFile } from './uploads.js';
+import { nextInvoiceRef } from './invoiceRef.js';
 
 async function ensurePaymentColumns() {
     await ensurePaymentSettingsSchema();
@@ -167,8 +168,7 @@ export async function createPendingPurchase({
         }
 
         const net = gross - discount;
-        const count = await run(`SELECT COUNT(*) AS n FROM dbo.transactions`);
-        const refNo = `INV-${new Date().getFullYear()}-${8800 + Number(count.recordset[0].n) + 1}`;
+        const refNo = await nextInvoiceRef(run);
         const payMethod = 'พร้อมเพย์ / โอน';
         const gateway = gatewayFromMethod(payMethod);
 
@@ -335,7 +335,7 @@ export async function listPendingPayments() {
     await ensurePaymentColumns();
     const result = await query(
         `SELECT t.ref_no, t.status, t.net_amount, t.gross_amount, t.created_at, t.student_note, t.payment_slip_url, t.payment_slip_data,
-                u.nickname, u.name, u.email,
+                u.nickname, u.nickname_en, u.name, u.name_en, u.email,
                 o.title AS offer_title, o.public_id AS offer_public_id, o.hours AS offer_hours,
                 pkg.name AS pkg_name, pkg.hours AS pkg_hours
          FROM dbo.transactions t
@@ -351,6 +351,8 @@ export async function listPendingPayments() {
         status: row.status,
         amount: Number(row.net_amount),
         student: row.nickname || row.name,
+        studentEn: row.nickname_en || row.name_en || null,
+        fullName: row.name || null,
         email: row.email,
         label: row.offer_title || row.pkg_name || '—',
         hours: row.offer_hours ?? row.pkg_hours,
@@ -384,9 +386,13 @@ export async function confirmPendingPurchase(refNo, teacherId, enrollmentPublicI
             throw new Error('รายการนี้ยืนยันไม่ได้');
         }
 
-        const isInstallment = tx.payment_link_id && Number(tx.installment_total) > 1;
-        const isLastInstallment = !isInstallment
+        const isInstallmentPlan = Boolean(tx.payment_link_id) && Number(tx.installment_total) > 1;
+        const isLastInstallment = !isInstallmentPlan
             || Number(tx.installment_no) >= Number(tx.installment_total);
+        // First confirmed installment (or non-installment purchase) grants full course hours
+        // so the student can book lessons immediately.
+        const priorPaid = Number(tx.link_paid) || 0;
+        const shouldGrantHours = !tx.payment_link_id || priorPaid === 0;
 
         const hours = tx.offer_row_id
             ? Number(tx.offer_hours)
@@ -405,69 +411,105 @@ export async function confirmPendingPurchase(refNo, teacherId, enrollmentPublicI
             await onPaymentLinkInstallmentConfirmed(tx.payment_link_id, tx.installment_no);
         }
 
-        if (!isLastInstallment) {
-            await addNotification(
-                tx.user_id,
-                'รับชำระงวดแล้ว',
-                `ครูแอร์ยืนยันงวด ${tx.installment_no}/${tx.installment_total} ของ ${tx.ref_no} แล้ว — ชำระงวดถัดไปได้ที่ลิงก์เดิม`,
-                'green',
-                'Installment confirmed',
-                `Installment ${tx.installment_no}/${tx.installment_total} for ${tx.ref_no} confirmed — pay the next installment via the same link.`,
-            );
-            return { refNo: tx.ref_no, hours: 0, installment: true, installmentNo: tx.installment_no };
-        }
-
-        await run(
-            `UPDATE dbo.user_packages SET status = N'expired' WHERE user_id = @userId AND status = N'active'`,
-            { userId: tx.user_id },
-        );
-        const pkgInsert = await run(
-            `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status, transaction_id)
-             OUTPUT INSERTED.id
-             VALUES (@userId, @pkgId, @hours, 0, DATEADD(month, 6, SYSUTCDATETIME()), N'active', @txId)`,
-            { userId: tx.user_id, pkgId, hours, txId: tx.id },
-        );
-        const userPackageId = pkgInsert.recordset[0]?.id;
-
-        await run(
-            `INSERT INTO dbo.enrollments (public_id, user_id, package_id, hours_granted, status, source)
-             VALUES (@enrollmentId, @userId, @pkgId, @hours, N'active', N'web')`,
-            { enrollmentId: enrollmentPublicId, userId: tx.user_id, pkgId, hours },
-        );
-
-        if (tx.offer_row_id) {
+        let grantedHours = 0;
+        if (shouldGrantHours) {
             await run(
-                `UPDATE dbo.student_offers SET status = N'granted', user_package_id = @pkgId, updated_at = SYSUTCDATETIME() WHERE id = @id`,
-                { id: tx.offer_row_id, pkgId: userPackageId },
+                `UPDATE dbo.user_packages SET status = N'expired' WHERE user_id = @userId AND status = N'active'`,
+                { userId: tx.user_id },
             );
-        }
+            const pkgInsert = await run(
+                `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status, transaction_id)
+                 OUTPUT INSERTED.id
+                 VALUES (@userId, @pkgId, @hours, 0, DATEADD(month, 6, SYSUTCDATETIME()), N'active', @txId)`,
+                { userId: tx.user_id, pkgId, hours, txId: tx.id },
+            );
+            const userPackageId = pkgInsert.recordset[0]?.id;
 
-        if (tx.voucher_code) {
-            const voucherResult = await run(
-                `SELECT id FROM dbo.vouchers WHERE code = @code`,
-                { code: tx.voucher_code },
+            await run(
+                `INSERT INTO dbo.enrollments (public_id, user_id, package_id, hours_granted, status, source)
+                 VALUES (@enrollmentId, @userId, @pkgId, @hours, N'active', N'web')`,
+                { enrollmentId: enrollmentPublicId, userId: tx.user_id, pkgId, hours },
             );
-            const voucher = voucherResult.recordset[0];
-            if (voucher) {
+
+            if (tx.offer_row_id) {
                 await run(
-                    `UPDATE dbo.vouchers SET used_count = used_count + 1 WHERE id = @id`,
-                    { id: voucher.id },
+                    `UPDATE dbo.student_offers SET status = N'granted', user_package_id = @pkgId, updated_at = SYSUTCDATETIME() WHERE id = @id`,
+                    { id: tx.offer_row_id, pkgId: userPackageId },
                 );
             }
+
+            if (tx.voucher_code) {
+                const voucherResult = await run(
+                    `SELECT id FROM dbo.vouchers WHERE code = @code`,
+                    { code: tx.voucher_code },
+                );
+                const voucher = voucherResult.recordset[0];
+                if (voucher) {
+                    await run(
+                        `UPDATE dbo.vouchers SET used_count = used_count + 1 WHERE id = @id`,
+                        { id: voucher.id },
+                    );
+                }
+            }
+            grantedHours = hours;
         }
 
         const nameTh = tx.offer_title || tx.pkg_name;
         const nameEn = tx.offer_title_en || tx.pkg_name_en;
+
+        if (isInstallmentPlan && !isLastInstallment) {
+            await addNotification(
+                tx.user_id,
+                grantedHours > 0 ? 'รับชำระงวดแล้ว — ได้ชั่วโมงเรียน' : 'รับชำระงวดแล้ว',
+                grantedHours > 0
+                    ? `ครูแอร์ยืนยันงวด ${tx.installment_no}/${tx.installment_total} ของ ${tx.ref_no} แล้ว — เพิ่ม ${grantedHours} ชม. เข้าบัญชี ชำระงวดถัดไปได้ที่ลิงก์เดิม`
+                    : `ครูแอร์ยืนยันงวด ${tx.installment_no}/${tx.installment_total} ของ ${tx.ref_no} แล้ว — ชำระงวดถัดไปได้ที่ลิงก์เดิม`,
+                'green',
+                grantedHours > 0 ? 'Installment confirmed — hours added' : 'Installment confirmed',
+                grantedHours > 0
+                    ? `Installment ${tx.installment_no}/${tx.installment_total} for ${tx.ref_no} confirmed — ${grantedHours} hour(s) added. Pay the next installment via the same link.`
+                    : `Installment ${tx.installment_no}/${tx.installment_total} for ${tx.ref_no} confirmed — pay the next installment via the same link.`,
+            );
+            return {
+                refNo: tx.ref_no,
+                hours: grantedHours,
+                installment: true,
+                installmentNo: tx.installment_no,
+                label: nameTh,
+                labelEn: nameEn,
+            };
+        }
+
+        if (isInstallmentPlan && isLastInstallment && grantedHours === 0) {
+            await addNotification(
+                tx.user_id,
+                'ชำระครบทุกงวดแล้ว',
+                `ครูแอร์ยืนยันงวดสุดท้ายของ ${tx.ref_no} แล้ว — ชำระครบทุกงวด`,
+                'green',
+                'All installments paid',
+                `Final installment for ${tx.ref_no} confirmed — payment plan complete.`,
+            );
+            return {
+                refNo: tx.ref_no,
+                hours: 0,
+                installment: true,
+                installmentNo: tx.installment_no,
+                complete: true,
+                label: nameTh,
+                labelEn: nameEn,
+            };
+        }
+
         await addNotification(
             tx.user_id,
             'ยืนยันรับเงินแล้ว',
-            `ครูแอร์ยืนยัน ${tx.ref_no} แล้ว — เพิ่ม ${hours} ชม. เข้าบัญชี`,
+            `ครูแอร์ยืนยัน ${tx.ref_no} แล้ว — เพิ่ม ${grantedHours || hours} ชม. เข้าบัญชี`,
             'green',
             'Payment confirmed',
-            `Kru Air confirmed ${tx.ref_no} — ${hours} hour(s) added to your account.`,
+            `Kru Air confirmed ${tx.ref_no} — ${grantedHours || hours} hour(s) added to your account.`,
         );
 
-        return { refNo: tx.ref_no, hours, label: nameTh, labelEn: nameEn };
+        return { refNo: tx.ref_no, hours: grantedHours || hours, label: nameTh, labelEn: nameEn };
     });
 }
 

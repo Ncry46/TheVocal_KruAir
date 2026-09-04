@@ -8,6 +8,7 @@ import { createLineWebhookHandler } from './lineWebhook.js';
 import { getAuthMode, getPool } from './db.js';
 import { runSchoolJobs } from './jobs.js';
 import { ensureEnrollmentSchema } from './store.js';
+import { ensureRecurringScheduleSchema } from './recurringSchedule.js';
 import { UPLOAD_ROOT } from './uploads.js';
 
 function corsOrigin(reqOrigin, callback) {
@@ -88,6 +89,7 @@ const server = app.listen(port, '0.0.0.0', () => {
 getPool()
     .then(async () => {
         await ensureEnrollmentSchema();
+        await ensureRecurringScheduleSchema();
         console.log(`Connected to SQL Server with ${getAuthMode()}`);
         const tick = () => runSchoolJobs().then((result) => {
             if (result.expired || result.reminded || result.lowHours) {

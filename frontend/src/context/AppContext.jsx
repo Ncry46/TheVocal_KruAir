@@ -166,9 +166,7 @@ export function AppProvider({ children }) {
             : `สมัครเรียนสำเร็จแล้ว น้อง${s.nickname} — ซื้อแพ็กเกจทดลองเรียนเพื่อจองเวลาได้เลย`, 'ok');
         return s;
     }, [language, setSession, toast]);
-    const updateProfile = useCallback(async (input) => {
-        const data = await api.updateMe(input);
-        const profile = data.user ?? data;
+    const applyProfile = useCallback((profile) => {
         setUser((current) => {
             const next = { ...(current ?? {}), ...profile };
             try {
@@ -181,14 +179,45 @@ export function AppProvider({ children }) {
         });
         return profile;
     }, []);
+    const updateProfile = useCallback(async (input) => {
+        const data = await api.updateMe(input);
+        return applyProfile(data.user ?? data);
+    }, [applyProfile]);
+    const updateAvatar = useCallback(async (avatar) => {
+        try {
+            const data = await api.updateMeAvatar(avatar);
+            return applyProfile(data.user ?? data);
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : '';
+            // Fallback when an old API process is still running without /me/avatar.
+            if (!/404|Cannot PATCH|ไม่พบ|Not Found/i.test(message) && message !== 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์') {
+                throw err;
+            }
+            const data = await api.updateMe({
+                name: user?.nameTh ?? user?.name ?? '',
+                nameEn: user?.nameEn ?? user?.name ?? '',
+                nickname: user?.nicknameTh ?? user?.nickname ?? '',
+                nicknameEn: user?.nicknameEn ?? user?.nickname ?? '',
+                age: user?.age ?? null,
+                phone: user?.phone ?? '',
+                emergencyContact: user?.emergencyContact ?? '',
+                education: user?.education ?? '',
+                genres: user?.genres ?? [],
+                reason: user?.reason ?? '',
+                avatar,
+            });
+            return applyProfile(data.user ?? data);
+        }
+    }, [applyProfile, user]);
     const logout = useCallback(() => {
         api.logout();
         setSession(null);
         toast(language === 'en' ? 'Logged out — back to website' : 'ออกจากระบบแล้ว — กลับสู่หน้าเว็บไซต์');
     }, [language, setSession, toast]);
     const value = useMemo(
-        () => ({ user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t, liffBooting, setLiffBooting }),
-        [user, login, completeLineSession, register, updateProfile, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t, liffBooting],
+        () => ({ user, login, completeLineSession, register, updateProfile, updateAvatar, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t, liffBooting, setLiffBooting }),
+        [user, login, completeLineSession, register, updateProfile, updateAvatar, logout, toast, language, setLanguage, theme, setTheme, toggleTheme, t, liffBooting],
     );
     return (<AppContext.Provider value={value}>
       {children}

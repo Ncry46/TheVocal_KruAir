@@ -36,6 +36,8 @@ import {
     completeGoogleOAuth,
     disconnectGoogleCalendar,
     getGoogleConnection,
+    getGoogleRedirectUri,
+    resolveGoogleRedirectUri,
     isGoogleCalendarConfigured,
     parseGoogleOAuthState,
     syncAllBookingCalendars,
@@ -43,12 +45,18 @@ import {
 } from './googleCalendarSync.js';
 import { getPaymentSettings, paymentConfigured, updatePaymentSettings } from './paymentSettings.js';
 import { buildGoogleCalendarUrl, buildIcsCalendar, buildIcsEvent } from './googleCalendar.js';
-import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, requiredPersonNames, resolveLang, slotLabel, slotStatus } from './lang.js';
-import { defaultAvatar } from './avatar.js';
+import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, methodEn, monthYear, paymentStatus, pick, requiredPersonNames, resolveLang, slotLabel, slotStatus } from './lang.js';
+import { defaultAvatar, isAllowedPresetAvatar } from './avatar.js';
 import { parseIsoDate, plusOneHour, toIsoDate } from './dates.js';
-import { canStudentCancel, hoursUntilSlot, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
+import { bangkokDateIso, canStudentCancel, hoursUntilSlot, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
 import { isHomeworkNote, packageHoursLeft } from './packagePolicy.js';
 import { jobState } from './jobs.js';
+import {
+    createRecurringSchedule,
+    deleteRecurringSchedule,
+    generateRecurringBookings,
+    listRecurringSchedules,
+} from './recurringSchedule.js';
 
 function scheduleCalendarSync(bookingRowId, teacherId, studentUserId) {
     syncAllBookingCalendars(bookingRowId, teacherId, studentUserId).catch((err) => {
@@ -519,12 +527,17 @@ export function registerRoutes(app) {
         const genreList = Array.isArray(input.genres) ? input.genres.map(String).filter(Boolean) : [];
         const reason = String(input.reason ?? '').trim() || null;
         const language = resolveLang(req);
+        const avatarRaw = input.avatar == null ? null : String(input.avatar).trim();
+        if (avatarRaw && !isAllowedPresetAvatar(avatarRaw)) {
+            throw new Error('กรุณาเลือกรูปโปรไฟล์จากชุดที่ระบบกำหนด');
+        }
         await query(
             `UPDATE dbo.users
              SET name = @name, name_en = @nameEn, nickname = @nickname, nickname_en = @nicknameEn,
                  age = @age, phone = @phone,
                  emergency_contact = @emergencyContact, education = @education, education_en = @educationEn,
                  genres = @genres, genres_en = @genresEn, reason = @reason, reason_en = @reasonEn,
+                 avatar = CASE WHEN @hasAvatar = 1 THEN @avatar ELSE avatar END,
                  updated_at = SYSUTCDATETIME()
              WHERE id = @id`,
             {
@@ -542,7 +555,24 @@ export function registerRoutes(app) {
                 genresEn: genreList.length ? JSON.stringify(genresEn(genreList)) : null,
                 reason,
                 reasonEn: language === 'en' ? reason : null,
+                hasAvatar: avatarRaw ? 1 : 0,
+                avatar: avatarRaw,
             },
+        );
+        const user = await findUserById(req.user.id);
+        res.json({ user: toProfile(user) });
+    }));
+
+    app.patch('/api/me/avatar', requireAuth, asyncHandler(async (req, res) => {
+        const avatar = String(req.body?.avatar ?? '').trim();
+        if (!isAllowedPresetAvatar(avatar)) {
+            throw new Error('กรุณาเลือกรูปโปรไฟล์จากชุดที่ระบบกำหนด');
+        }
+        await query(
+            `UPDATE dbo.users
+             SET avatar = @avatar, updated_at = SYSUTCDATETIME()
+             WHERE id = @id`,
+            { id: req.user.id, avatar },
         );
         const user = await findUserById(req.user.id);
         res.json({ user: toProfile(user) });
@@ -605,11 +635,13 @@ export function registerRoutes(app) {
         const lang = resolveLang(req);
         const day = assertDayIso(req.query.day);
         const time = String(req.query.time ?? '');
+        const hours = Math.max(1, Number(req.query.hours ?? 1) || 1);
         const teacherId = await resolveStudentTeacherId(req.user.id, req.query.teacherId);
         const pkg = packageStatusFromRow(await activePackage(req.user.id), lang);
         res.json({
             day: `${chipLabel(day, lang)} ${formatDate(day, lang)}`,
-            time: lessonTimeRange(time, lang),
+            time: lessonTimeRange(time, lang, hours),
+            hours,
             teacher: await teacherDisplayLabel(teacherId, lang),
             leftHours: pkg.left,
         });
@@ -621,6 +653,7 @@ export function registerRoutes(app) {
         }
         const dayIso = String(req.body?.day ?? '');
         const time = String(req.body?.time ?? '');
+        const hours = Math.max(1, Number(req.body?.hours ?? 1) || 1);
         assertDayIso(dayIso);
         const lang = resolveLang(req);
         const teacherId = await resolveStudentTeacherId(req.user.id, req.body?.teacherId);
@@ -633,6 +666,7 @@ export function registerRoutes(app) {
             topicEn: 'Course based on your favorite genres',
             source: 'web',
             mode: req.body?.mode === 'online' ? 'online' : 'studio',
+            durationHours: hours,
             teacherId,
         });
         await query(
@@ -644,13 +678,13 @@ export function registerRoutes(app) {
         await notifySlotTeacher(
             booking.slot_id,
             'มีนัดเรียนใหม่',
-            `${studentLabel(student, 'th')} จอง ${chipLabel(date, 'th')} ${lessonTimeRange(time, 'th')} — รอคอนเฟิร์ม`,
+            `${studentLabel(student, 'th')} จอง ${chipLabel(date, 'th')} ${lessonTimeRange(time, 'th', hours)} — รอคอนเฟิร์ม`,
             'blue',
             'New lesson booking',
-            `${studentLabel(student, 'en')} booked ${chipLabel(date, 'en')} ${lessonTimeRange(time, 'en')} — awaiting confirmation`,
+            `${studentLabel(student, 'en')} booked ${chipLabel(date, 'en')} ${lessonTimeRange(time, 'en', hours)} — awaiting confirmation`,
         );
         scheduleCalendarSync(booking.id, teacherId, req.user.id);
-        res.json({ id: booking.public_id, saved: true, status: booking.status });
+        res.json({ id: booking.public_id, saved: true, status: booking.status, hours: Number(booking.duration_hours) || hours });
     }));
 
     app.get('/api/me/lessons', requireAuth, asyncHandler(async (req, res) => {
@@ -1119,23 +1153,38 @@ export function registerRoutes(app) {
 
     app.get('/api/me/signatures/pending', requireAuth, asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
+        const today = bangkokDateIso();
         const result = await query(
-            `SELECT b.public_id AS booking_id, cl.lesson_title, cl.lesson_title_en,
+            `SELECT b.public_id AS booking_id,
+                    b.topic AS lesson_title, b.topic_en AS lesson_title_en,
+                    cl.lesson_title AS log_title, cl.lesson_title_en AS log_title_en,
+                    COALESCE(b.duration_hours, 1) AS duration_hours,
                     CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
                     CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
-             FROM dbo.class_logs cl
-             JOIN dbo.bookings b ON b.id = cl.booking_id
+             FROM dbo.bookings b
              JOIN dbo.teacher_availability s ON s.id = b.slot_id
-             WHERE cl.user_id = @userId AND cl.outcome = N'done' AND cl.student_signature IS NULL
-             ORDER BY cl.created_at DESC`,
-            { userId: req.user.id },
+             LEFT JOIN dbo.class_logs cl ON cl.booking_id = b.id
+             WHERE b.user_id = @userId
+               AND CONVERT(varchar(10), s.slot_date, 23) = @today
+               AND b.status IN (N'confirmed', N'moved', N'done')
+               AND (cl.id IS NULL OR (cl.outcome = N'done' AND cl.student_signature IS NULL))
+             ORDER BY s.slot_time ASC`,
+            { userId: req.user.id, today },
         );
-        res.json(result.recordset.map((row) => ({
-            bookingId: row.booking_id,
-            date: chipLabel(parseIsoDate(row.slot_iso), lang),
-            time: `${row.slot_hhmm}–${plusOneHour(row.slot_hhmm)}`,
-            lesson: pick(row, 'lesson_title', lang),
-        })));
+        res.json(result.recordset.map((row) => {
+            const hours = Number(row.duration_hours) || 1;
+            const lesson = lang === 'en'
+                ? (row.log_title_en || row.lesson_title_en || row.log_title || row.lesson_title)
+                : (row.log_title || row.lesson_title || row.log_title_en || row.lesson_title_en);
+            return {
+                bookingId: row.booking_id,
+                slotIso: row.slot_iso,
+                date: chipLabel(parseIsoDate(row.slot_iso), lang),
+                time: lessonTimeRange(row.slot_hhmm, lang, hours),
+                lesson: lesson || (lang === 'en' ? 'Lesson' : 'คลาสเรียน'),
+                canSign: true,
+            };
+        }));
     }));
 
     app.post('/api/me/signatures/:bookingId', requireAuth, asyncHandler(async (req, res) => {
@@ -1176,9 +1225,11 @@ export function registerRoutes(app) {
     }));
 
     app.get('/api/admin/sales/export.csv', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
         const result = await query(
-            `SELECT t.ref_no, t.created_at, t.net_amount, t.method, t.status, t.voucher_code,
-                    u.nickname, u.name, p.name AS pkg_name, o.title AS offer_title
+            `SELECT t.ref_no, t.created_at, t.net_amount, t.method, t.method_en, t.status, t.voucher_code,
+                    u.nickname, u.nickname_en, u.name, u.name_en, p.name AS pkg_name, p.name_en AS pkg_name_en,
+                    o.title AS offer_title, o.title_en AS offer_title_en
              FROM dbo.transactions t
              JOIN dbo.users u ON u.id = t.user_id
              LEFT JOIN dbo.packages p ON p.id = t.package_id
@@ -1186,16 +1237,76 @@ export function registerRoutes(app) {
              WHERE t.status = N'success'
              ORDER BY t.created_at DESC`,
         );
-        const header = 'ref_no,date,student,item,amount,method,voucher,status\n';
-        const rows = result.recordset.map((row) => {
-            const date = new Date(row.created_at).toISOString();
-            const student = (row.nickname || row.name || '').replace(/"/g, '""');
-            const item = (row.offer_title || row.pkg_name || '—').replace(/"/g, '""');
-            return `"${row.ref_no}","${date}","${student}","${item}",${Number(row.net_amount)},"${row.method || ''}","${row.voucher_code || ''}","${row.status}"`;
-        }).join('\n');
+
+        const headers = lang === 'en'
+            ? ['No.', 'Reference No.', 'Paid Date', 'Paid Time', 'Student Nickname', 'Student Name', 'Package / Item', 'Amount (THB)', 'Payment Method', 'Voucher', 'Status']
+            : ['ลำดับ', 'เลขที่อ้างอิง', 'วันที่ชำระ', 'เวลาชำระ', 'ชื่อเล่นนักเรียน', 'ชื่อนักเรียน', 'แพ็กเกจ / รายการ', 'ยอดเงิน (บาท)', 'ช่องทางชำระ', 'วอเชอร์', 'สถานะ'];
+
+        const escapeCsv = (value) => {
+            const text = value == null ? '' : String(value);
+            if (/[",\n\r]/.test(text)) {
+                return `"${text.replace(/"/g, '""')}"`;
+            }
+            return text;
+        };
+
+        const methodLabel = (method, methodEnValue) => {
+            if (lang === 'en') {
+                return methodEn(methodEnValue || method) || '—';
+            }
+            const raw = String(method || methodEnValue || '');
+            const lower = raw.toLowerCase();
+            if (raw.includes('พร้อม') || lower.includes('prompt')) {
+                return 'พร้อมเพย์';
+            }
+            if (lower.includes('kbank')) {
+                return 'KBank';
+            }
+            if (raw.includes('บัตร') || lower.includes('card')) {
+                return 'บัตรเครดิต';
+            }
+            return raw || '—';
+        };
+
+        const monthLabels = lang === 'en'
+            ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            : ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+        const rows = result.recordset.map((row, index) => {
+            const paidAt = new Date(row.created_at);
+            const valid = !Number.isNaN(paidAt.getTime());
+            const year = valid ? paidAt.getFullYear() + (lang === 'en' ? 0 : 543) : '';
+            const paidDate = valid
+                ? `${paidAt.getDate()} ${monthLabels[paidAt.getMonth()]} ${year}`
+                : '—';
+            const paidTime = valid
+                ? `${String(paidAt.getHours()).padStart(2, '0')}:${String(paidAt.getMinutes()).padStart(2, '0')}`
+                : '—';
+            const nickname = pick(row, 'nickname', lang) || '—';
+            const fullName = pick(row, 'name', lang) || '—';
+            const item = pick(row, 'offer_title', lang) || pick(row, 'pkg_name', lang) || '—';
+            const amount = Number(row.net_amount) || 0;
+            return [
+                index + 1,
+                row.ref_no || '—',
+                paidDate,
+                paidTime,
+                nickname,
+                fullName,
+                item,
+                amount,
+                methodLabel(row.method, row.method_en),
+                row.voucher_code || '—',
+                paymentStatus(row.status, lang),
+            ].map(escapeCsv).join(',');
+        });
+
+        const stamp = new Date();
+        const fileStamp = `${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}`;
+        const filename = lang === 'en' ? `sales-report-${fileStamp}.csv` : `รายงานยอดขาย-${fileStamp}.csv`;
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', 'attachment; filename="sales-export.csv"');
-        res.send(`\uFEFF${header}${rows}`);
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+        res.send(`\uFEFF${headers.map(escapeCsv).join(',')}\n${rows.join('\n')}`);
     }));
 
     app.get('/api/admin/students', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
@@ -1285,6 +1396,68 @@ export function registerRoutes(app) {
             grantNow: Boolean(input.grantNow),
         });
         res.json(mapStudentOffer(created, lang));
+    }));
+
+    app.get('/api/teacher/students/:id/recurring', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        res.json(await listRecurringSchedules(userId));
+    }));
+
+    app.post('/api/teacher/students/:id/recurring', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const student = await findUserById(userId);
+        if (!student || student.role !== 'student') {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const teacherId = await teacherScopeId(req);
+        const created = await createRecurringSchedule({
+            userId,
+            teacherId,
+            createdBy: req.user.id,
+            weekday: Number(req.body?.weekday),
+            time: String(req.body?.time ?? ''),
+            hours: Number(req.body?.hours ?? 1),
+            mode: req.body?.mode === 'online' ? 'online' : 'studio',
+        });
+        const generated = await generateRecurringBookings({ userId, teacherId, weeks: 4 });
+        for (const row of generated.created) {
+            const booking = await query(`SELECT id FROM dbo.bookings WHERE public_id = @id`, { id: row.id });
+            const bookingId = booking.recordset[0]?.id;
+            if (bookingId) {
+                scheduleCalendarSync(bookingId, teacherId, userId);
+            }
+        }
+        res.json({ rule: created, generated });
+    }));
+
+    app.delete('/api/teacher/students/:id/recurring/:ruleId', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        await deleteRecurringSchedule(String(req.params.ruleId), teacherId);
+        res.json({ ok: true });
+    }));
+
+    app.post('/api/teacher/students/:id/recurring/generate', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const teacherId = await teacherScopeId(req);
+        const weeks = Math.min(4, Math.max(1, Number(req.body?.weeks ?? 4) || 4));
+        const generated = await generateRecurringBookings({ userId, teacherId, weeks });
+        for (const row of generated.created) {
+            const booking = await query(`SELECT id FROM dbo.bookings WHERE public_id = @id`, { id: row.id });
+            const bookingId = booking.recordset[0]?.id;
+            if (bookingId) {
+                scheduleCalendarSync(bookingId, teacherId, userId);
+            }
+        }
+        res.json(generated);
     }));
 
     app.patch('/api/teacher/offers/:publicId', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
@@ -1671,7 +1844,7 @@ export function registerRoutes(app) {
         const pkgs = await query(
             `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
              FROM dbo.packages
-             WHERE id NOT IN (N'trial', N'offer')
+             WHERE id NOT IN (N'trial', N'offer', N'link')
              ORDER BY hours`,
         );
         const roles = await query(
@@ -1734,6 +1907,7 @@ export function registerRoutes(app) {
                 },
                 googleCalendar: {
                     configured: isGoogleCalendarConfigured(),
+                    redirectUri: resolveGoogleRedirectUri(req),
                     ...(await getGoogleConnection(req.user.role === 'teacher' ? req.user.id : await defaultTeacherId())),
                 },
             },
@@ -1896,18 +2070,24 @@ export function registerRoutes(app) {
         const teacherId = await teacherScopeId(req);
         res.json({
             configured: isGoogleCalendarConfigured(),
+            redirectUri: resolveGoogleRedirectUri(req),
             ...await getGoogleConnection(teacherId),
         });
     }));
 
     app.get('/api/teacher/google/connect', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const teacherId = await teacherScopeId(req);
-        res.json({ url: buildGoogleConnectUrl(teacherId, 'teacher') });
+        const redirectUri = resolveGoogleRedirectUri(req);
+        res.json({
+            url: buildGoogleConnectUrl(teacherId, 'teacher', redirectUri),
+            redirectUri,
+        });
     }));
 
     app.get('/api/me/google/status', requireAuth, asyncHandler(async (req, res) => {
         res.json({
             configured: isGoogleCalendarConfigured(),
+            redirectUri: resolveGoogleRedirectUri(req),
             ...await getGoogleConnection(req.user.id),
         });
     }));
@@ -1916,14 +2096,19 @@ export function registerRoutes(app) {
         if (req.user.role !== 'student') {
             throw new Error('เฉพาะนักเรียนที่เชื่อม Google Calendar ได้');
         }
-        res.json({ url: buildGoogleConnectUrl(req.user.id, 'student') });
+        const redirectUri = resolveGoogleRedirectUri(req);
+        res.json({
+            url: buildGoogleConnectUrl(req.user.id, 'student', redirectUri),
+            redirectUri,
+        });
     }));
 
     const handleGoogleOAuthCallback = async (req, res) => {
-        const origin = String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
         try {
-            const { userId, returnTo } = parseGoogleOAuthState(String(req.query.state ?? ''));
-            await completeGoogleOAuth(String(req.query.code ?? ''), userId);
+            const { userId, returnTo, redirectUri } = parseGoogleOAuthState(String(req.query.state ?? ''));
+            await completeGoogleOAuth(String(req.query.code ?? ''), userId, redirectUri);
+            const origin = redirectUri.replace(/\/api\/teacher\/google\/callback\/?$/i, '')
+                || String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
             if (returnTo === 'student') {
                 await syncUpcomingStudentBookings(userId);
                 res.redirect(`${origin}/app/profile?google=connected`);
@@ -1933,14 +2118,18 @@ export function registerRoutes(app) {
         }
         catch (err) {
             const message = encodeURIComponent(err instanceof Error ? err.message : 'Google connect failed');
-            const returnTo = (() => {
-                try {
-                    return parseGoogleOAuthState(String(req.query.state ?? '')).returnTo;
+            let returnTo = 'teacher';
+            let origin = String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
+            try {
+                const parsed = parseGoogleOAuthState(String(req.query.state ?? ''));
+                returnTo = parsed.returnTo;
+                if (parsed.redirectUri) {
+                    origin = parsed.redirectUri.replace(/\/api\/teacher\/google\/callback\/?$/i, '') || origin;
                 }
-                catch {
-                    return 'teacher';
-                }
-            })();
+            }
+            catch {
+                /* keep defaults */
+            }
             const path = returnTo === 'student' ? '/app/profile' : '/teacher/settings';
             res.redirect(`${origin}${path}?google=error&msg=${message}`);
         }
@@ -2245,9 +2434,38 @@ export function registerRoutes(app) {
         }
         const deductHours = Math.max(1, Number(booking.duration_hours) || 1);
         const audioUrl = String(req.body?.feedbackAudioUrl ?? '').trim().slice(0, 500) || null;
-        const already = await query(`SELECT id FROM dbo.class_logs WHERE booking_id = @id`, { id: booking.id });
+        const already = await query(`SELECT id, student_signature, outcome FROM dbo.class_logs WHERE booking_id = @id`, { id: booking.id });
         if (already.recordset[0]) {
-            throw new Error('บันทึกการสอนคลาสนี้แล้ว');
+            const existing = already.recordset[0];
+            if (existing.outcome === 'no_show' || outcome === 'no_show') {
+                throw new Error('บันทึกการสอนคลาสนี้แล้ว');
+            }
+            // Student may have signed first — teacher can still attach note / homework audio.
+            await query(
+                `UPDATE dbo.class_logs
+                 SET lesson_title = COALESCE(NULLIF(@title, N''), lesson_title),
+                     lesson_title_en = COALESCE(NULLIF(@titleEn, N''), lesson_title_en),
+                     note = @note,
+                     note_en = @noteEn,
+                     feedback_audio_url = COALESCE(@audioUrl, feedback_audio_url),
+                     hours_deducted = CASE WHEN hours_deducted IS NULL OR hours_deducted < 1 THEN @hours ELSE hours_deducted END,
+                     outcome = N'done'
+                 WHERE id = @id`,
+                {
+                    id: existing.id,
+                    title: booking.topic || 'เทคนิคการหายใจ + สเกลพื้นฐาน',
+                    titleEn: booking.topic_en || 'Breathing technique + basic scales',
+                    note,
+                    noteEn: null,
+                    audioUrl,
+                    hours: deductHours,
+                },
+            );
+            if (outcome === 'done') {
+                await notifyHomeworkAssigned(booking.user_id, note, Boolean(audioUrl));
+            }
+            res.json({ ok: true, hoursDeducted: 0 });
+            return;
         }
         let pkg = null;
         if (booking.user_package_id) {

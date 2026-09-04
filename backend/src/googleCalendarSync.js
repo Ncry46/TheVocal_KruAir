@@ -5,16 +5,61 @@ import { query } from './store.js';
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const CLIENT_SECRET = String(process.env.GOOGLE_CLIENT_SECRET || '').trim();
-const REDIRECT_URI = String(process.env.GOOGLE_REDIRECT_URI || '').trim()
-    || `${String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '')}/api/teacher/google/callback`;
 const STUDENT_REMINDER_MINUTES = 24 * 60;
+const CALLBACK_PATH = '/api/teacher/google/callback';
 
 export function isGoogleCalendarConfigured() {
     return Boolean(CLIENT_ID && CLIENT_SECRET);
 }
 
-export function buildGoogleOAuthState(userId, returnTo = 'teacher') {
-    return jwt.sign({ purpose: 'google-calendar', userId, returnTo }, JWT_SECRET, { expiresIn: '15m' });
+function normalizeOrigin(raw) {
+    let origin = String(raw || '').trim().replace(/\/$/, '');
+    if (!origin) {
+        return '';
+    }
+    // Local Vite proxy serves /api on :5173 — never send :3001 to Google.
+    if (/^https?:\/\/(localhost|127\.0\.0\.1):3001$/i.test(origin)) {
+        return 'http://localhost:5173';
+    }
+    return origin;
+}
+
+export function resolveGoogleRedirectUri(req = null) {
+    const explicit = String(process.env.GOOGLE_REDIRECT_URI || '').trim();
+    if (explicit) {
+        return explicit.replace(/\/$/, '');
+    }
+
+    let origin = '';
+    if (req?.get) {
+        const forwardedHost = String(req.get('x-forwarded-host') || '').split(',')[0].trim();
+        const host = forwardedHost || String(req.get('host') || '').trim();
+        if (host) {
+            const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+            const proto = forwardedProto
+                || (host.includes('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+            origin = normalizeOrigin(`${proto}://${host}`);
+        }
+    }
+
+    if (!origin) {
+        origin = normalizeOrigin(process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+    }
+
+    return `${origin}${CALLBACK_PATH}`;
+}
+
+/** @deprecated use resolveGoogleRedirectUri(req) */
+export function getGoogleRedirectUri() {
+    return resolveGoogleRedirectUri();
+}
+
+export function buildGoogleOAuthState(userId, returnTo = 'teacher', redirectUri = '') {
+    return jwt.sign(
+        { purpose: 'google-calendar', userId, returnTo, redirectUri },
+        JWT_SECRET,
+        { expiresIn: '15m' },
+    );
 }
 
 export function parseGoogleOAuthState(state) {
@@ -25,26 +70,27 @@ export function parseGoogleOAuthState(state) {
     return {
         userId: Number(payload.userId),
         returnTo: payload.returnTo === 'student' ? 'student' : 'teacher',
+        redirectUri: String(payload.redirectUri || '').trim() || resolveGoogleRedirectUri(),
     };
 }
 
-export function buildGoogleConnectUrl(userId, returnTo = 'teacher') {
+export function buildGoogleConnectUrl(userId, returnTo = 'teacher', redirectUri = resolveGoogleRedirectUri()) {
     if (!isGoogleCalendarConfigured()) {
         throw new Error('Google Calendar ยังไม่ได้ตั้งค่าในระบบ');
     }
     const params = new URLSearchParams({
         client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: redirectUri,
         response_type: 'code',
         scope: 'https://www.googleapis.com/auth/calendar.events',
         access_type: 'offline',
         prompt: 'consent',
-        state: buildGoogleOAuthState(userId, returnTo),
+        state: buildGoogleOAuthState(userId, returnTo, redirectUri),
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-async function exchangeCode(code) {
+async function exchangeCode(code, redirectUri) {
     const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -52,7 +98,7 @@ async function exchangeCode(code) {
             code,
             client_id: CLIENT_ID,
             client_secret: CLIENT_SECRET,
-            redirect_uri: REDIRECT_URI,
+            redirect_uri: redirectUri,
             grant_type: 'authorization_code',
         }),
     });
@@ -88,8 +134,8 @@ export async function saveGoogleConnection(userId, tokenData) {
     );
 }
 
-export async function completeGoogleOAuth(code, userId) {
-    const tokenData = await exchangeCode(code);
+export async function completeGoogleOAuth(code, userId, redirectUri = resolveGoogleRedirectUri()) {
+    const tokenData = await exchangeCode(code, redirectUri);
     await saveGoogleConnection(userId, tokenData);
     return getGoogleConnection(userId);
 }
