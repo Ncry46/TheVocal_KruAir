@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+    canSignLesson,
     canStudentCancel,
     confirmDeadlineAt,
     hoursUntilSlot,
     isAllowedSlotTime,
+    lessonEndsAt,
     nextSlotStatus,
     shouldExpirePending,
     shouldSendDayBeforeReminder,
@@ -23,6 +25,28 @@ describe('slotStartAt / hoursUntilSlot', () => {
     it('returns hours remaining until the slot', () => {
         const now = new Date(2026, 7, 21, 17, 0, 0);
         assert.equal(hoursUntilSlot('2026-08-22', '17:00', now), 24);
+    });
+});
+
+describe('lessonEndsAt / canSignLesson', () => {
+    it('ends one hour after start by default', () => {
+        const end = lessonEndsAt('2026-09-04', '14:00', 1);
+        assert.equal(end.getHours(), 15);
+        assert.equal(end.getMinutes(), 0);
+    });
+
+    it('uses multi-hour duration', () => {
+        const end = lessonEndsAt('2026-09-04', '14:00', 2);
+        assert.equal(end.getHours(), 16);
+    });
+
+    it('allows signing only on the lesson calendar day', () => {
+        const before = new Date('2026-09-03T17:00:00+07:00');
+        const onDayMorning = new Date('2026-09-04T00:30:00+07:00');
+        const after = new Date('2026-09-05T10:00:00+07:00');
+        assert.equal(canSignLesson({ slotIso: '2026-09-04', now: before }), false);
+        assert.equal(canSignLesson({ slotIso: '2026-09-04', now: onDayMorning }), true);
+        assert.equal(canSignLesson({ slotIso: '2026-09-04', now: after }), false);
     });
 });
 

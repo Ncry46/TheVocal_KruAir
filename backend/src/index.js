@@ -1,12 +1,15 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
 import { registerRoutes } from './routes.js';
+import { createLineWebhookHandler } from './lineWebhook.js';
 import { getAuthMode, getPool } from './db.js';
 import { runSchoolJobs } from './jobs.js';
 import { ensureEnrollmentSchema } from './store.js';
+import { ensureRecurringScheduleSchema } from './recurringSchedule.js';
+import { UPLOAD_ROOT } from './uploads.js';
 
 function corsOrigin(reqOrigin, callback) {
     const configured = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
@@ -37,8 +40,10 @@ function corsOrigin(reqOrigin, callback) {
 const app = express();
 const port = Number(process.env.PORT || 3001);
 
+app.post('/api/webhooks/line', express.raw({ type: 'application/json' }), createLineWebhookHandler());
+
 app.use(cors({ origin: corsOrigin, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 app.use((req, _res, next) => {
     const raw = String(req.headers['x-lang'] || req.query.lang || '').toLowerCase();
     req.lang = raw.startsWith('en') ? 'en' : 'th';
@@ -51,6 +56,9 @@ app.get('/api/health', async (_req, res) => {
 });
 
 registerRoutes(app);
+
+mkdirSync(UPLOAD_ROOT, { recursive: true });
+app.use('/uploads', express.static(UPLOAD_ROOT));
 
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../public');
 if (existsSync(join(publicDir, 'index.html'))) {
@@ -81,6 +89,7 @@ const server = app.listen(port, '0.0.0.0', () => {
 getPool()
     .then(async () => {
         await ensureEnrollmentSchema();
+        await ensureRecurringScheduleSchema();
         console.log(`Connected to SQL Server with ${getAuthMode()}`);
         const tick = () => runSchoolJobs().then((result) => {
             if (result.expired || result.reminded || result.lowHours) {

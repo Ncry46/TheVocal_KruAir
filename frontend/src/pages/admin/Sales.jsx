@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RevenueAnalyticsChart } from '@components/admin/RevenueAnalyticsChart';
-import { Card, Kpi, Spinner, Table } from '@components/ui';
+import { Button, Card, Kpi, Spinner, Table } from '@components/ui';
 import { GraduationIcon, ReceiptIcon, TicketIcon, WalletIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 import { filterSalesByPeriod, paginateSales, SALES_PAGE_SIZE } from './salesTable';
 
 export default function Sales() {
-    const { language } = useApp();
+    const { language, toast } = useApp();
     const [report, setReport] = useState(null);
     const [salesPeriod, setSalesPeriod] = useState('monthly');
     const [salesPage, setSalesPage] = useState(1);
     useEffect(() => {
-        api.getSalesReport().then(setReport);
+        api.getSalesReport().then(setReport).catch(() => setReport({
+            revenue: 0,
+            orders: 0,
+            vouchersUsed: 0,
+            newStudents: 0,
+            analytics: { daily: [], monthly: [], yearly: [] },
+            sales: [],
+        }));
     }, [language]);
     useEffect(() => {
         setSalesPage(1);
@@ -44,9 +51,16 @@ export default function Sales() {
 
         <Card
           title={latestSalesTitle}
-          action={<select className="input sales-filter" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value)} aria-label={latestSalesTitle}>
-            {salesPeriodOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
-          </select>}
+          action={(
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Button ghost size="sm" type="button" onClick={() => api.downloadSalesCsv(language).catch(() => toast(language === 'en' ? 'Export failed' : 'Export ไม่สำเร็จ'))}>
+                {language === 'en' ? 'Export CSV' : 'Export CSV'}
+              </Button>
+              <select className="input sales-filter" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value)} aria-label={latestSalesTitle}>
+                {salesPeriodOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
+              </select>
+            </div>
+          )}
         >
           {pagedSales.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>{emptyMessage}</p>

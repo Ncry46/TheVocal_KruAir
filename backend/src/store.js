@@ -1,10 +1,11 @@
 import { getPool, sql } from './db.js';
-import { confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, SLOT_TIMES, slotStartAt } from './bookingPolicy.js';
+import { canSignLesson, confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, SLOT_TIMES, slotStartAt } from './bookingPolicy.js';
 import { parseIsoDate, toIsoDate } from './dates.js';
 import { chipLabel, educationEn, formatDate, genresEn, methodEn, moveStatus, pick, relativeTime } from './lang.js';
 import { isYes, toYn } from './yn.js';
 import { formatLineNotifyMessage, findLineUserIdForAppUser, pushLineText } from './lineMessaging.js';
 import { isHomeworkNote, packageHoursLeft, shouldNotifyLowHours } from './packagePolicy.js';
+import { nextInvoiceRef } from './invoiceRef.js';
 
 export async function query(text, params = {}) {
     const pool = await getPool();
@@ -163,12 +164,16 @@ export function packageStatusFromRow(row, lang = 'th') {
     };
 }
 
-export async function addNotification(userId, title, body, tone = 'blue', titleEn = null, bodyEn = null) {
+export async function addNotification(userId, title, body, tone = 'blue', titleEn = null, bodyEn = null, linkPath = null, options = {}) {
+    const { skipLinePush = false } = options;
     await query(
-        `INSERT INTO dbo.notifications (public_id, user_id, title, body, title_en, body_en, tone)
-         VALUES (CONCAT('N', REPLACE(CONVERT(varchar(36), NEWID()), '-', '')), @userId, @title, @body, @titleEn, @bodyEn, @tone)`,
-        { userId, title, body, titleEn, bodyEn, tone },
+        `INSERT INTO dbo.notifications (public_id, user_id, title, body, title_en, body_en, tone, link_path)
+         VALUES (CONCAT('N', REPLACE(CONVERT(varchar(36), NEWID()), '-', '')), @userId, @title, @body, @titleEn, @bodyEn, @tone, @linkPath)`,
+        { userId, title, body, titleEn, bodyEn, tone, linkPath },
     );
+    if (skipLinePush) {
+        return;
+    }
     try {
         const lineUserId = await findLineUserIdForAppUser(userId, query);
         if (lineUserId) {
@@ -265,6 +270,7 @@ export function mapNotification(row, lang = 'th') {
         time: relativeTime(new Date(row.created_at), lang),
         read: isYes(row.is_read),
         tone: row.tone,
+        link: row.link_path || null,
     };
 }
 
@@ -302,6 +308,165 @@ export async function findSlot(dayIso, time, teacherId) {
 export async function defaultTeacherId() {
     const result = await query(`SELECT TOP 1 id FROM dbo.users WHERE role = 'teacher' AND status = N'Y' ORDER BY id`);
     return result.recordset[0]?.id ?? null;
+}
+
+export async function listActiveTeachers() {
+    const result = await query(
+        `SELECT id, name, name_en, nickname, nickname_en, avatar
+         FROM dbo.users
+         WHERE role = N'teacher' AND status = N'Y'
+         ORDER BY id`,
+    );
+    return result.recordset;
+}
+
+export async function resolveStudentTeacherId(userId, teacherIdInput = null) {
+    if (teacherIdInput) {
+        const teacher = await query(
+            `SELECT id FROM dbo.users WHERE id = @id AND role = N'teacher' AND status = N'Y'`,
+            { id: Number(teacherIdInput) },
+        );
+        if (teacher.recordset[0]) {
+            return teacher.recordset[0].id;
+        }
+    }
+    const user = await query(`SELECT primary_teacher_id FROM dbo.users WHERE id = @id`, { id: userId });
+    if (user.recordset[0]?.primary_teacher_id) {
+        return user.recordset[0].primary_teacher_id;
+    }
+    return defaultTeacherId();
+}
+
+export async function teacherDisplayLabel(teacherId, lang = 'th') {
+    const result = await query(
+        `SELECT nickname, nickname_en, name, name_en FROM dbo.users WHERE id = @id`,
+        { id: teacherId },
+    );
+    const row = result.recordset[0];
+    if (!row) {
+        return lang === 'en' ? 'Teacher (live 1:1)' : 'ครู (เรียนสด 1:1)';
+    }
+    const nickname = pick(row, 'nickname', lang);
+    const name = pick(row, 'name', lang);
+    return lang === 'en'
+        ? `${nickname} (${name}) · live 1:1`
+        : `${nickname} (${name}) · เรียนสด 1:1`;
+}
+
+export async function listTeacherDayLessons(teacherId, dayIso) {
+    const result = await query(
+        `SELECT b.public_id AS booking_id, b.status AS booking_status, b.topic, b.topic_en,
+                COALESCE(b.duration_hours, 1) AS duration_hours,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                u.nickname, u.nickname_en, u.name, u.name_en, u.id AS student_id
+         FROM dbo.bookings b
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         JOIN dbo.users u ON u.id = b.user_id
+         WHERE s.teacher_id = @teacherId
+           AND CONVERT(varchar(10), s.slot_date, 23) = @dayIso
+           AND b.status IN (N'pending', N'confirmed', N'moved')
+           AND b.slot_id = s.id
+         ORDER BY s.slot_time`,
+        { teacherId, dayIso },
+    );
+    return result.recordset;
+}
+
+export async function getStudentProfileForTeacher(studentId) {
+    const userResult = await query(
+        `SELECT u.*, pt.nickname AS teacher_nickname, pt.nickname_en AS teacher_nickname_en,
+                pt.name AS teacher_name, pt.name_en AS teacher_name_en
+         FROM dbo.users u
+         LEFT JOIN dbo.users pt ON pt.id = u.primary_teacher_id
+         WHERE u.id = @id AND u.role = N'student'`,
+        { id: studentId },
+    );
+    const user = userResult.recordset[0];
+    if (!user) {
+        return null;
+    }
+    const pkg = await activePackage(studentId);
+    const logs = await query(
+        `SELECT TOP 12 cl.lesson_title, cl.lesson_title_en, cl.note, cl.note_en, cl.outcome, cl.hours_deducted,
+                cl.created_at, cl.student_signature, cl.signed_at,
+                b.public_id AS booking_id,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+         FROM dbo.class_logs cl
+         JOIN dbo.bookings b ON b.id = cl.booking_id
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         WHERE cl.user_id = @userId
+         ORDER BY cl.created_at DESC`,
+        { userId: studentId },
+    );
+    const upcoming = await query(
+        `SELECT TOP 5 b.public_id, b.status, b.topic, b.topic_en,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+         FROM dbo.bookings b
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         WHERE b.user_id = @userId AND b.status IN (N'pending', N'confirmed', N'moved')
+         ORDER BY s.slot_date, s.slot_time`,
+        { userId: studentId },
+    );
+    return { user, pkg, logs: logs.recordset, upcoming: upcoming.recordset };
+}
+
+export async function rescheduleTeacherBooking({ bookingPublicId, teacherId, newDayIso, newTime }) {
+    assertDayIso(newDayIso);
+    return withTransaction(async (run) => {
+        const found = await run(
+            `SELECT b.id, b.public_id, b.user_id, b.slot_id, b.status, b.duration_hours,
+                    s.teacher_id,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE b.public_id = @id AND b.status IN (N'pending', N'confirmed', N'moved')`,
+            { id: bookingPublicId },
+        );
+        const booking = found.recordset[0];
+        if (!booking) {
+            throw new Error('ไม่พบนัดที่เลือก');
+        }
+        if (Number(booking.teacher_id) !== Number(teacherId)) {
+            throw new Error('นัดนี้ไม่ใช่ของครูที่เลือก');
+        }
+        const slotResult = await run(
+            `SELECT id, status FROM dbo.teacher_availability
+             WHERE teacher_id = @teacherId
+               AND CONVERT(varchar(10), slot_date, 23) = @dayIso
+               AND CONVERT(varchar(5), slot_time, 108) = @time`,
+            { teacherId, dayIso: newDayIso, time: newTime },
+        );
+        const newSlot = slotResult.recordset[0];
+        if (!newSlot || newSlot.status !== 'open') {
+            throw new Error('สล็อตใหม่ไม่ว่าง');
+        }
+        const linked = await run(`SELECT slot_id FROM dbo.booking_slots WHERE booking_id = @id`, { id: booking.id });
+        const oldSlotIds = linked.recordset.length
+            ? linked.recordset.map((row) => row.slot_id)
+            : [booking.slot_id];
+        for (const slotId of oldSlotIds) {
+            await run(`UPDATE dbo.teacher_availability SET status = N'open' WHERE id = @slotId`, { slotId });
+        }
+        await run(`DELETE FROM dbo.booking_slots WHERE booking_id = @id`, { id: booking.id });
+        await run(
+            `UPDATE dbo.teacher_availability SET status = N'booked' WHERE id = @slotId;
+             UPDATE dbo.bookings SET slot_id = @slotId, status = N'confirmed', confirmed_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME() WHERE id = @bookingId;
+             INSERT INTO dbo.booking_slots (booking_id, slot_id) VALUES (@bookingId, @slotId);`,
+            { slotId: newSlot.id, bookingId: booking.id },
+        );
+        return {
+            bookingId: booking.public_id,
+            userId: booking.user_id,
+            fromIso: booking.slot_iso,
+            fromTime: booking.slot_hhmm,
+            toIso: newDayIso,
+            toTime: newTime,
+        };
+    });
 }
 
 export async function copyTeacherAvailability(fromTeacherId, toTeacherId) {
@@ -525,7 +690,22 @@ export async function ensureEnrollmentSchema() {
     await ensureColumn('bookings', 'reminder_sent_at', 'reminder_sent_at DATETIME2 NULL');
     await ensureColumn('bookings', 'updated_at', 'updated_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_updated DEFAULT SYSUTCDATETIME()');
     await ensureColumn('class_logs', 'feedback_audio_url', 'feedback_audio_url NVARCHAR(500) NULL');
+    await ensureColumn('class_logs', 'student_audio_url', 'student_audio_url NVARCHAR(500) NULL');
+    await ensureColumn('class_logs', 'student_signature', 'student_signature NVARCHAR(MAX) NULL');
+    await ensureColumn('class_logs', 'signed_at', 'signed_at DATETIME2 NULL');
+    await ensureColumn('class_logs', 'hours_charged_at', 'hours_charged_at DATETIME2 NULL');
     await ensureColumn('user_packages', 'low_hours_notified_at', 'low_hours_notified_at DATETIME2 NULL');
+    await ensureColumn('user_packages', 'expiry_notified_at', 'expiry_notified_at DATETIME2 NULL');
+    await ensureColumn('users', 'birth_date', 'birth_date DATE NULL');
+    await ensureColumn('users', 'singing_experience', 'singing_experience NVARCHAR(200) NULL');
+    await ensureColumn('users', 'instruments', 'instruments NVARCHAR(MAX) NULL');
+    await ensureColumn('users', 'goals', 'goals NVARCHAR(MAX) NULL');
+    await ensureColumn('users', 'address_street', 'address_street NVARCHAR(200) NULL');
+    await ensureColumn('users', 'address_district', 'address_district NVARCHAR(100) NULL');
+    await ensureColumn('users', 'address_province', 'address_province NVARCHAR(100) NULL');
+    await ensureColumn('users', 'primary_teacher_id', 'primary_teacher_id INT NULL');
+    await ensureColumn('bookings', 'google_event_id', 'google_event_id NVARCHAR(200) NULL');
+    await ensureColumn('bookings', 'google_student_event_id', 'google_student_event_id NVARCHAR(200) NULL');
     await ensureColumn('users', 'name_en', 'name_en NVARCHAR(100) NULL');
     await ensureColumn('users', 'nickname_en', 'nickname_en NVARCHAR(50) NULL');
     await ensureColumn('users', 'education_en', 'education_en NVARCHAR(100) NULL');
@@ -534,6 +714,7 @@ export async function ensureEnrollmentSchema() {
     await ensureColumn('transactions', 'method_en', 'method_en NVARCHAR(80) NULL');
     await ensureColumn('payments', 'method_en', 'method_en NVARCHAR(80) NULL');
     await dropUsersPublicId();
+    await ensureColumn('notifications', 'link_path', 'link_path NVARCHAR(300) NULL');
     await convertBitFlagToYn('notifications', 'is_read', 'N');
     await convertBitFlagToYn('vouchers', 'is_active', 'Y');
     await convertBitFlagToYn('packages', 'is_active', 'Y');
@@ -571,6 +752,20 @@ export async function ensureEnrollmentSchema() {
     await query(`
         UPDATE dbo.enrollments SET source = N'trial' WHERE package_id = N'trial' AND (source IS NULL OR source = N'web')`);
     await ensureActiveBookingSlotIndex();
+    await query(`
+        IF OBJECT_ID(N'dbo.google_calendar_connections', N'U') IS NULL
+        CREATE TABLE dbo.google_calendar_connections (
+            user_id INT NOT NULL PRIMARY KEY,
+            access_token NVARCHAR(MAX) NOT NULL,
+            refresh_token NVARCHAR(MAX) NULL,
+            expires_at DATETIME2 NULL,
+            calendar_id NVARCHAR(200) NOT NULL CONSTRAINT DF_gcal_calendar DEFAULT N'primary',
+            connected_at DATETIME2 NOT NULL CONSTRAINT DF_gcal_connected DEFAULT SYSUTCDATETIME()
+        )`);
+    await query(`
+        UPDATE dbo.class_logs
+        SET hours_charged_at = created_at
+        WHERE hours_deducted > 0 AND hours_charged_at IS NULL`);
     await query(`
         UPDATE b
         SET confirm_deadline = CASE
@@ -686,6 +881,19 @@ export async function ensureEnrollmentSchema() {
     await ensureStudentOffersSchema();
     await ensureCatalogMigration();
     await ensureBookingDurationSchema();
+    await ensurePaymentTransactionSchema();
+}
+
+async function ensurePaymentTransactionSchema() {
+    await ensureColumn('transactions', 'offer_id', 'offer_id INT NULL');
+    await ensureColumn('transactions', 'student_note', 'student_note NVARCHAR(500) NULL');
+    await ensureColumn('transactions', 'payment_slip_url', 'payment_slip_url NVARCHAR(500) NULL');
+    await ensureColumn('transactions', 'payment_slip_data', 'payment_slip_data NVARCHAR(MAX) NULL');
+    await ensureColumn('transactions', 'confirmed_by', 'confirmed_by INT NULL');
+    await ensureColumn('transactions', 'confirmed_at', 'confirmed_at DATETIME2 NULL');
+    await ensureColumn('transactions', 'payment_link_id', 'payment_link_id INT NULL');
+    await ensureColumn('transactions', 'installment_no', 'installment_no INT NULL');
+    await ensureColumn('transactions', 'installment_total', 'installment_total INT NULL');
 }
 
 async function ensureBookingDurationSchema() {
@@ -740,6 +948,11 @@ async function ensureCatalogMigration() {
         VALUES (N'offer', N'คอร์สพิเศษ', 0, 0, N'แพ็กเกจระบบสำหรับคอร์สที่ครูจัดให้', NULL, N'pink',
                 N'Custom offer', N'System package for teacher-assigned courses', N'N')`);
     await query(`
+        IF NOT EXISTS (SELECT 1 FROM dbo.packages WHERE id = N'link')
+        INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone, name_en, note_en, is_active)
+        VALUES (N'link', N'ลิงก์ชำระเงิน', 0, 0, N'แพ็กเกจระบบสำหรับลิงก์ชำระ / ผ่อนชำระ', NULL, N'pink',
+                N'Payment link', N'System package for payment / installment links', N'N')`);
+    await query(`
         IF NOT EXISTS (SELECT 1 FROM dbo.packages WHERE id = N'single')
         INSERT INTO dbo.packages (id, name, hours, price, note, tag, tone, name_en, note_en, is_active)
         VALUES (N'single', N'เรียน 1 ชั่วโมง', 1, 2500, N'฿2,500/ชม. · จองเวลาเรียนได้ทันที', NULL, N'pink',
@@ -756,12 +969,14 @@ async function ensureCatalogMigration() {
         WHERE id = N'single'`);
 }
 
+export { ensurePaymentSettingsSchema, getPaymentSettings, updatePaymentSettings, paymentConfigured } from './paymentSettings.js';
+
 export async function enrollStudent(input) {
     return withTransaction(async (run) => {
         const inserted = await run(
-            `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, name_en, nickname, nickname_en, age, education, education_en, genres, genres_en, reason, reason_en, language, avatar, consent_pdpa_at)
+            `INSERT INTO dbo.users (role, email, phone, emergency_contact, password_hash, name, name_en, nickname, nickname_en, age, birth_date, education, education_en, genres, genres_en, singing_experience, instruments, goals, reason, reason_en, address_street, address_district, address_province, language, avatar, consent_pdpa_at)
              OUTPUT INSERTED.*
-             VALUES ('student', @email, @phone, @emergency, @hash, @name, @nameEn, @nickname, @nicknameEn, @age, @education, @educationEn, @genres, @genresEn, @reason, @reasonEn, @language, @avatar, SYSUTCDATETIME())`,
+             VALUES ('student', @email, @phone, @emergency, @hash, @name, @nameEn, @nickname, @nicknameEn, @age, @birthDate, @education, @educationEn, @genres, @genresEn, @singingExperience, @instruments, @goals, @reason, @reasonEn, @addressStreet, @addressDistrict, @addressProvince, @language, @avatar, SYSUTCDATETIME())`,
             {
                 email: input.email,
                 phone: input.phone,
@@ -772,12 +987,19 @@ export async function enrollStudent(input) {
                 nickname: input.nickname,
                 nicknameEn: input.nicknameEn,
                 age: input.age,
+                birthDate: input.birthDate || null,
                 education: input.education,
                 educationEn: input.educationEn || (input.education ? educationEn(input.education) : null),
                 genres: input.genres,
                 genresEn: input.genresEn || null,
+                singingExperience: input.singingExperience || null,
+                instruments: input.instruments || null,
+                goals: input.goals || null,
                 reason: input.reason,
                 reasonEn: input.reasonEn || null,
+                addressStreet: input.addressStreet || null,
+                addressDistrict: input.addressDistrict || null,
+                addressProvince: input.addressProvince || null,
                 language: input.language,
                 avatar: input.avatar,
             },
@@ -787,20 +1009,8 @@ export async function enrollStudent(input) {
             throw new Error('บันทึกผู้เรียนลงฐานข้อมูลไม่สำเร็จ');
         }
         await run(
-            `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status)
-             VALUES (@userId, N'trial', 1, 0, DATEADD(month, 2, SYSUTCDATETIME()), N'active')`,
-            { userId: user.id },
-        );
-        const pkg = await run(
-            `SELECT TOP 1 id FROM dbo.user_packages WHERE user_id = @userId ORDER BY id DESC`,
-            { userId: user.id },
-        );
-        if (!pkg.recordset[0]?.id) {
-            throw new Error('บันทึกชั่วโมงทดลองลงฐานข้อมูลไม่สำเร็จ');
-        }
-        await run(
             `INSERT INTO dbo.enrollments (public_id, user_id, package_id, hours_granted, status, source)
-             VALUES (@enrollmentId, @userId, N'trial', 1, N'active', N'trial')`,
+             VALUES (@enrollmentId, @userId, N'single', 0, N'pending_payment', N'web')`,
             { enrollmentId: input.enrollmentId, userId: user.id },
         );
         const enrollment = await run(
@@ -813,15 +1023,152 @@ export async function enrollStudent(input) {
         await run(
             `INSERT INTO dbo.notifications (public_id, user_id, title, body, title_en, body_en, tone)
              VALUES (CONCAT('N', REPLACE(CONVERT(varchar(36), NEWID()), '-', '')), @userId,
-                     N'ยินดีต้อนรับ', N'สมัครเรียนสำเร็จ — มีชั่วโมงทดลอง 1 ชม. จองเวลาเรียนได้เลย',
-                     N'Welcome', N'You are enrolled — you have 1 trial hour. Book your first lesson now.', N'blue')`,
+                     N'ยินดีต้อนรับ', N'สมัครเรียนสำเร็จ — ซื้อแพ็กเกจทดลองเรียน ฿2,500 แล้วจองเวลาได้เลย',
+                     N'Welcome', N'You are enrolled — buy the ฿2,500 trial package to book your first lesson.', N'blue')`,
             { userId: user.id },
         );
         return {
             user,
             enrollmentId: enrollment.recordset[0].public_id,
-            hoursGranted: 1,
+            hoursGranted: 0,
         };
+    });
+}
+
+export function ageFromBirthDate(birthDate) {
+    const birth = new Date(birthDate);
+    if (Number.isNaN(birth.getTime())) {
+        return null;
+    }
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDelta = today.getMonth() - birth.getMonth();
+    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birth.getDate())) {
+        age -= 1;
+    }
+    return age >= 0 && age <= 120 ? age : null;
+}
+
+export async function signLessonAndDeductHours({ bookingPublicId, userId, signature }) {
+    return withTransaction(async (run) => {
+        const found = await run(
+            `SELECT b.id AS booking_id, b.user_package_id, b.user_id AS booking_user_id,
+                    b.topic, b.topic_en, b.status AS booking_status,
+                    COALESCE(b.duration_hours, 1) AS duration_hours,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                    cl.id AS log_id, cl.hours_deducted, cl.hours_charged_at, cl.outcome,
+                    cl.student_signature
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             LEFT JOIN dbo.class_logs cl ON cl.booking_id = b.id
+             WHERE b.public_id = @bookingId AND b.user_id = @userId`,
+            { bookingId: bookingPublicId, userId },
+        );
+        const row = found.recordset[0];
+        if (!row) {
+            throw new Error('ไม่พบคลาสที่ต้องลงชื่อ');
+        }
+        if (row.student_signature) {
+            throw new Error('ลงลายเซ็นคลาสนี้แล้ว');
+        }
+        if (row.outcome === 'no_show') {
+            throw new Error('คลาสนี้ถูกบันทึกว่าไม่มาเรียน');
+        }
+        if (!canSignLesson({ slotIso: row.slot_iso })) {
+            throw new Error('เซ็นได้เฉพาะวันที่มีคลาสเท่านั้น');
+        }
+        const allowedStatus = ['confirmed', 'moved', 'done'];
+        if (!row.log_id && !allowedStatus.includes(row.booking_status)) {
+            throw new Error('ยังไม่สามารถลงชื่อได้ จนกว่าจะยืนยันนัดเรียน');
+        }
+
+        const deductHours = Math.max(1, Number(row.hours_deducted) || Number(row.duration_hours) || 1);
+        let logId = row.log_id;
+        let hoursChargedAt = row.hours_charged_at;
+
+        if (!logId) {
+            const title = row.topic || 'เทคนิคการหายใจ + สเกลพื้นฐาน';
+            const titleEn = row.topic_en || 'Breathing technique + basic scales';
+            const inserted = await run(
+                `INSERT INTO dbo.class_logs
+                    (booking_id, user_id, lesson_title, lesson_title_en, note, note_en,
+                     hours_deducted, hours_charged_at, outcome, student_signature, signed_at)
+                 OUTPUT INSERTED.id
+                 VALUES (@bookingId, @userId, @title, @titleEn, N'ยืนยันโดยลายเซ็นนักเรียน', N'Confirmed by student signature',
+                         @hours, NULL, N'done', @sig, SYSUTCDATETIME())`,
+                {
+                    bookingId: row.booking_id,
+                    userId,
+                    title,
+                    titleEn,
+                    hours: deductHours,
+                    sig: signature.slice(0, 200000),
+                },
+            );
+            logId = inserted.recordset[0]?.id;
+            if (!logId) {
+                throw new Error('บันทึกลายเซ็นไม่สำเร็จ');
+            }
+            await run(
+                `UPDATE dbo.bookings SET status = N'done', updated_at = SYSUTCDATETIME() WHERE id = @bookingId;
+                 DELETE FROM dbo.booking_slots WHERE booking_id = @bookingId;`,
+                { bookingId: row.booking_id },
+            );
+        }
+        else {
+            await run(
+                `UPDATE dbo.class_logs
+                 SET student_signature = @sig, signed_at = SYSUTCDATETIME(),
+                     outcome = N'done',
+                     hours_deducted = CASE WHEN hours_deducted IS NULL OR hours_deducted < 1 THEN @hours ELSE hours_deducted END
+                 WHERE id = @id;
+                 UPDATE dbo.bookings SET status = N'done', updated_at = SYSUTCDATETIME() WHERE id = @bookingId;`,
+                {
+                    id: logId,
+                    bookingId: row.booking_id,
+                    sig: signature.slice(0, 200000),
+                    hours: deductHours,
+                },
+            );
+        }
+
+        let hoursDeducted = 0;
+        if (!hoursChargedAt) {
+            let pkg = null;
+            if (row.user_package_id) {
+                const pkgResult = await run(
+                    `SELECT id, hours_total, hours_used FROM dbo.user_packages WHERE id = @id`,
+                    { id: row.user_package_id },
+                );
+                pkg = pkgResult.recordset[0] ?? null;
+            }
+            else {
+                const active = await run(
+                    `SELECT TOP 1 id, hours_total, hours_used
+                     FROM dbo.user_packages
+                     WHERE user_id = @userId AND status = N'active' AND expires_at > SYSUTCDATETIME()
+                     ORDER BY expires_at ASC`,
+                    { userId: row.booking_user_id },
+                );
+                pkg = active.recordset[0] ?? null;
+            }
+            if (pkg?.id) {
+                const hoursBefore = packageHoursLeft(pkg.hours_total, pkg.hours_used);
+                await run(
+                    `UPDATE dbo.user_packages SET hours_used = hours_used + @hours WHERE id = @pkgId`,
+                    { pkgId: pkg.id, hours: deductHours },
+                );
+                await run(
+                    `UPDATE dbo.class_logs SET hours_charged_at = SYSUTCDATETIME() WHERE id = @id`,
+                    { id: logId },
+                );
+                const hoursAfter = Math.max(0, hoursBefore - deductHours);
+                await maybeNotifyPackageHours(row.booking_user_id, pkg.id, hoursBefore, hoursAfter);
+                hoursDeducted = deductHours;
+            }
+        }
+        return { ok: true, hoursDeducted };
     });
 }
 
@@ -1040,8 +1387,7 @@ export async function createPackagePurchase({
             discount = Math.min(discountForVoucher(voucher, pkg.price), Number(pkg.price));
         }
         const net = Number(pkg.price) - discount;
-        const count = await run(`SELECT COUNT(*) AS n FROM dbo.transactions`);
-        const refNo = `INV-${new Date().getFullYear()}-${8800 + Number(count.recordset[0].n) + 1}`;
+        const refNo = await nextInvoiceRef(run);
         const payMethod = String(method ?? 'บัตรเครดิต').split(' (')[0];
         const gateway = gatewayFromMethod(payMethod);
         const tx = await run(
@@ -1118,7 +1464,7 @@ export async function createPackagePurchase({
     });
 }
 
-const SYSTEM_PACKAGE_IDS = new Set(['trial', 'offer']);
+const SYSTEM_PACKAGE_IDS = new Set(['trial', 'offer', 'link']);
 
 export function mapStudentOffer(row, lang) {
     return {
@@ -1240,7 +1586,7 @@ export async function listAdminPackages() {
     return query(
         `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
          FROM dbo.packages
-         WHERE id NOT IN (N'trial', N'offer')
+         WHERE id NOT IN (N'trial', N'offer', N'link')
          ORDER BY hours, id`,
     );
 }
@@ -1506,6 +1852,55 @@ export async function bulkCloseTeacherSlots({ teacherId, fromIso, toIso }) {
         closed: Number(closed.rowsAffected?.[0] || 0),
         skippedBooked: Number(skipped || 0),
     };
+}
+
+export async function listTeacherSignatureLogs(teacherId) {
+    return query(
+        `SELECT cl.id, b.public_id AS booking_id, cl.lesson_title, cl.lesson_title_en,
+                cl.student_signature, cl.signed_at, cl.outcome, cl.created_at,
+                u.id AS student_id, u.nickname, u.nickname_en, u.name, u.name_en,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+         FROM dbo.class_logs cl
+         JOIN dbo.bookings b ON b.id = cl.booking_id
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         JOIN dbo.users u ON u.id = cl.user_id
+         WHERE s.teacher_id = @teacherId AND cl.outcome = N'done'
+         ORDER BY CASE WHEN cl.student_signature IS NULL THEN 0 ELSE 1 END,
+                  COALESCE(cl.signed_at, cl.created_at) DESC`,
+        { teacherId },
+    );
+}
+
+export async function getTeacherSignatureLog(teacherId, bookingPublicId) {
+    const result = await query(
+        `SELECT cl.id, b.public_id AS booking_id, cl.lesson_title, cl.lesson_title_en,
+                cl.student_signature, cl.signed_at, cl.outcome, cl.created_at,
+                u.id AS student_id, u.nickname, u.nickname_en, u.name, u.name_en,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+         FROM dbo.class_logs cl
+         JOIN dbo.bookings b ON b.id = cl.booking_id
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         JOIN dbo.users u ON u.id = cl.user_id
+         WHERE s.teacher_id = @teacherId AND b.public_id = @bookingId AND cl.outcome = N'done'`,
+        { teacherId, bookingId: bookingPublicId },
+    );
+    return result.recordset[0] ?? null;
+}
+
+export async function countPendingTeacherSignatures(teacherId) {
+    const result = await query(
+        `SELECT COUNT(*) AS n
+         FROM dbo.class_logs cl
+         JOIN dbo.bookings b ON b.id = cl.booking_id
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         WHERE s.teacher_id = @teacherId
+           AND cl.outcome = N'done'
+           AND cl.student_signature IS NULL`,
+        { teacherId },
+    );
+    return Number(result.recordset[0]?.n || 0);
 }
 
 export async function listTeacherMonthSlots({ teacherId, start, end }) {

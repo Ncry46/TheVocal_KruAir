@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge, Button, Card, Field, Input, Modal, Spinner, Table } from '@components/ui';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
@@ -9,6 +10,7 @@ const EMPTY_OFFER = {
     hours: '',
     price: '',
     grantNow: true,
+    installmentCount: '1',
 };
 
 function offerTone(status) {
@@ -73,6 +75,16 @@ export default function Students() {
                 price: Number(form.price),
                 grantNow: form.grantNow,
             });
+            if (!form.grantNow) {
+                await api.createPaymentLink({
+                    studentUserId: selected.id,
+                    title: form.title.trim(),
+                    titleEn: form.titleEn.trim() || form.title.trim(),
+                    hours: Number(form.hours),
+                    totalAmount: Number(form.price),
+                    installmentCount: Number(form.installmentCount) || 1,
+                });
+            }
             toast(t('offers.createdOk'), 'ok');
             setForm(EMPTY_OFFER);
             setOffers(await api.getStudentOffers(selected.id));
@@ -126,7 +138,7 @@ export default function Students() {
           <Table
             heads={[t('studentsPage.student'), t('studentsPage.info'), t('studentsPage.package'), t('studentsPage.left'), t('studentsPage.done'), t('studentsPage.status'), '']}
             rows={filtered.map((student) => [
-              <b key="n">{student.name}</b>,
+              <Link key="n" to={`/teacher/students/${student.id}`} className="link"><b>{student.name}</b></Link>,
               student.info,
               student.pkg === '—' ? <span key="p" className="muted">—</span> : student.pkg,
               student.left > 0 ? <b key="l" className="accent">{student.left} {t('studentsPage.hours')}</b> : <span key="l" className="muted">0</span>,
@@ -164,6 +176,17 @@ export default function Students() {
               {t('offers.pendingPayment')}
             </button>
           </div>
+          {!form.grantNow && (
+            <Field label={t('paymentLinks.installmentCount')}>
+              <Input
+                type="number"
+                min="1"
+                max="12"
+                value={form.installmentCount}
+                onChange={(e) => setForm((current) => ({ ...current, installmentCount: e.target.value }))}
+              />
+            </Field>
+          )}
           <Button pink style={{ width: '100%', marginBottom: 16 }} onClick={createOffer} disabled={busy}>
             {busy ? t('offers.creating') : t('offers.create')}
           </Button>

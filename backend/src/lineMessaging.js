@@ -5,7 +5,9 @@
  * the student must have linked LINE (dbo.line_links) so we have their userId.
  */
 
-const PUSH_URL = 'https://api.line.me/v2/bot/message/push';
+const API_ROOT = 'https://api.line.me/v2/bot';
+const PUSH_URL = `${API_ROOT}/message/push`;
+const REPLY_URL = `${API_ROOT}/message/reply`;
 
 export function getLineMessagingConfig(env = process.env) {
     const accessToken = String(env.LINE_CHANNEL_ACCESS_TOKEN || '').trim();
@@ -19,28 +21,46 @@ export function isLineMessagingConfigured(env = process.env) {
     return getLineMessagingConfig(env).configured;
 }
 
-export async function pushLineText(lineUserId, text, env = process.env) {
+async function postLineMessages(url, payload, env = process.env) {
     const { configured, accessToken } = getLineMessagingConfig(env);
-    if (!configured || !lineUserId || !text) {
+    if (!configured) {
         return { ok: false, skipped: true };
     }
-    const body = String(text).slice(0, 4900);
-    const response = await fetch(PUSH_URL, {
+    const response = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-            to: String(lineUserId),
-            messages: [{ type: 'text', text: body }],
-        }),
+        body: JSON.stringify(payload),
     });
     if (!response.ok) {
         const detail = await response.text().catch(() => '');
-        throw new Error(`LINE push failed (${response.status}): ${detail.slice(0, 200)}`);
+        throw new Error(`LINE API failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return { ok: true };
+}
+
+export async function pushLineMessages(lineUserId, messages, env = process.env) {
+    if (!lineUserId || !messages?.length) {
+        return { ok: false, skipped: true };
+    }
+    return postLineMessages(PUSH_URL, { to: String(lineUserId), messages }, env);
+}
+
+export async function replyLineMessages(replyToken, messages, env = process.env) {
+    if (!replyToken || !messages?.length) {
+        return { ok: false, skipped: true };
+    }
+    return postLineMessages(REPLY_URL, { replyToken, messages }, env);
+}
+
+export async function pushLineText(lineUserId, text, env = process.env) {
+    if (!lineUserId || !text) {
+        return { ok: false, skipped: true };
+    }
+    const body = String(text).slice(0, 4900);
+    return pushLineMessages(lineUserId, [{ type: 'text', text: body }], env);
 }
 
 export async function findLineUserIdForAppUser(userId, runQuery) {

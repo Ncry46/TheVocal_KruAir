@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 
-const colors = ['#fc007a', '#a0105e', '#ff87ba', '#6d0a40', '#ff4d9d'];
+const colors = ['#334E68', '#486581', '#627D98', '#243B53', '#829AB1'];
 
 const timeframeLabels = {
   daily: 'รายวัน',
@@ -133,11 +133,11 @@ export function RevenueAnalyticsChart({ analytics }) {
             <AreaChart data={activeOption.data} margin={{ top: 18, right: 16, left: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id="revenueRoseGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#fc007a" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#fc007a" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor="#486581" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#486581" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(252, 0, 122, 0.12)" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(36, 59, 83, 0.08)" vertical={false} />
               <XAxis
                 dataKey="axisLabel"
                 axisLine={false}
@@ -152,14 +152,14 @@ export function RevenueAnalyticsChart({ analytics }) {
                 tickFormatter={formatTHB}
                 width={62}
               />
-              <Tooltip content={<RevenueTooltip />} cursor={{ stroke: '#fc007a', strokeOpacity: 0.2, strokeWidth: 2 }} />
+              <Tooltip content={<RevenueTooltip />} cursor={{ stroke: '#486581', strokeOpacity: 0.15, strokeWidth: 2 }} />
               <Area
                 type="monotone"
                 dataKey="revenue"
-                stroke="#fc007a"
+                stroke="#486581"
                 strokeWidth={3}
                 fill="url(#revenueRoseGradient)"
-                activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff', fill: '#fc007a' }}
+                activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff', fill: '#486581' }}
               />
             </AreaChart>
           </ResponsiveContainer>

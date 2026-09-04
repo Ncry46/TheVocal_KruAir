@@ -12,20 +12,67 @@ import {
     verifyLinePending,
 } from './lineLogin.js';
 import { isLineMessagingConfigured } from './lineMessaging.js';
-import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, monthYear, paymentStatus, pick, requiredPersonNames, resolveLang, slotLabel, slotStatus } from './lang.js';
-import { defaultAvatar } from './avatar.js';
+import { authenticateLiffIdToken, getLiffConfig, isLiffConfigured, resolveLiffAuthDecision } from './lineLiff.js';
+import { publishRichMenu } from './lineRichMenu.js';
+import {
+    buildPaymentPresentation,
+    confirmPendingPurchase,
+    createPendingPurchase,
+    getPaymentSlipPayloadForRef,
+    getPurchaseByRef,
+    listPendingPayments,
+    notifyPurchasePaid,
+    rejectPendingPurchase,
+} from './payments.js';
+import {
+    createPaymentLink,
+    listPaymentLinksForStudent,
+    listPaymentLinksForTeacher,
+    cancelPaymentLink,
+    startPaymentFromLink,
+} from './paymentLinks.js';
+import {
+    buildGoogleConnectUrl,
+    completeGoogleOAuth,
+    disconnectGoogleCalendar,
+    getGoogleConnection,
+    getGoogleRedirectUri,
+    resolveGoogleRedirectUri,
+    isGoogleCalendarConfigured,
+    parseGoogleOAuthState,
+    syncAllBookingCalendars,
+    syncUpcomingStudentBookings,
+} from './googleCalendarSync.js';
+import { getPaymentSettings, paymentConfigured, updatePaymentSettings } from './paymentSettings.js';
+import { buildGoogleCalendarUrl, buildIcsCalendar, buildIcsEvent } from './googleCalendar.js';
+import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localizePackage, methodEn, monthYear, paymentStatus, pick, requiredPersonNames, resolveLang, slotLabel, slotStatus } from './lang.js';
+import { defaultAvatar, isAllowedPresetAvatar } from './avatar.js';
 import { parseIsoDate, plusOneHour, toIsoDate } from './dates.js';
-import { canStudentCancel, hoursUntilSlot, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
-import { packageHoursLeft } from './packagePolicy.js';
+import { bangkokDateIso, canStudentCancel, hoursUntilSlot, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
+import { isHomeworkNote, packageHoursLeft } from './packagePolicy.js';
 import { jobState } from './jobs.js';
+import {
+    createRecurringSchedule,
+    deleteRecurringSchedule,
+    generateRecurringBookings,
+    listRecurringSchedules,
+} from './recurringSchedule.js';
+
+function scheduleCalendarSync(bookingRowId, teacherId, studentUserId) {
+    syncAllBookingCalendars(bookingRowId, teacherId, studentUserId).catch((err) => {
+        console.error('Google Calendar sync failed:', err instanceof Error ? err.message : err);
+    });
+}
 import {
     activePackage,
     addNotification,
+    ageFromBirthDate,
     assertDayIso,
     assertStudentPhone,
     bulkCloseTeacherSlots,
     cancelLessonBooking,
     cancelStudentOffer,
+    countPendingTeacherSignatures,
     createLessonBooking,
     createPackagePurchase,
     createStandardPackage,
@@ -39,11 +86,16 @@ import {
     findUserById,
     findUserByLineUserId,
     findUserByLogin,
+    getStudentProfileForTeacher,
+    getTeacherSignatureLog,
     linkLineAccount,
     isYes,
+    listActiveTeachers,
     listAdminPackages,
     listStudentOffers,
+    listTeacherDayLessons,
     listTeacherMonthSlots,
+    listTeacherSignatureLogs,
     mapMoveRequest,
     mapNotification,
     mapStudentOffer,
@@ -53,21 +105,23 @@ import {
     notifySlotTeacher,
     packageStatusFromRow,
     query,
+    rescheduleTeacherBooking,
+    resolveStudentTeacherId,
     setTeacherSlotStatus,
+    signLessonAndDeductHours,
     studentLabel,
+    teacherDisplayLabel,
     toYn,
     updateStandardPackage,
 } from './store.js';
+import { saveHomeworkAudio } from './uploads.js';
 
 function publicId(prefix) {
     return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function homePathForRole(role) {
-    if (role === 'teacher' || role === 'admin') {
-        return '/teacher';
-    }
-    return '/app';
+function homePathForRole(_role) {
+    return '/';
 }
 
 function profilePathForRole(role) {
@@ -81,12 +135,23 @@ async function teacherScopeId(req) {
     if (req.user.role === 'teacher') {
         return req.user.id;
     }
+    const requested = Number(req.query.teacherId ?? req.body?.teacherId);
+    if (Number.isInteger(requested) && requested > 0) {
+        const found = await query(
+            `SELECT id FROM dbo.users WHERE id = @id AND role = N'teacher' AND status = N'Y'`,
+            { id: requested },
+        );
+        if (found.recordset[0]) {
+            return found.recordset[0].id;
+        }
+    }
     return defaultTeacherId();
 }
 
 async function loadLessonForUser(lessonPublicId, userId) {
     const found = await query(
-        `SELECT b.*, CONVERT(varchar(10), s.slot_date, 23) AS slot_iso, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+        `SELECT b.*, CONVERT(varchar(10), s.slot_date, 23) AS slot_iso, CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                s.teacher_id
          FROM dbo.bookings b
          JOIN dbo.teacher_availability s ON s.id = b.slot_id
          WHERE b.public_id = @id AND b.user_id = @userId`,
@@ -112,6 +177,22 @@ function mapAdminVoucher(row, lang) {
         expires: row.valid_to ? formatDate(new Date(row.valid_to), lang) : '—',
         used: `${row.used_count} / ${row.max_uses ?? '—'}`,
         state: isYes(row.is_active) ? 'active' : 'draft',
+    };
+}
+
+function mapTeacherSignatureRow(row, lang, { includeSignature = false } = {}) {
+    const signed = Boolean(row.student_signature);
+    return {
+        bookingId: row.booking_id,
+        studentId: row.student_id,
+        student: studentLabel(row, lang),
+        slotIso: row.slot_iso,
+        date: chipLabel(parseIsoDate(row.slot_iso), lang),
+        time: row.slot_hhmm,
+        lesson: pick(row, 'lesson_title', lang),
+        signed,
+        signedAt: row.signed_at ? new Date(row.signed_at).toISOString() : null,
+        ...(includeSignature && signed ? { signature: row.student_signature } : {}),
     };
 }
 
@@ -152,7 +233,7 @@ export function registerRoutes(app) {
             }
         }
         const viaLine = Boolean(pending);
-        if (!viaLine && (!input.age || !input.education || !input.genres?.length || !input.reason)) {
+        if (!viaLine && (!input.birthDate || !input.education || !input.singingExperience || !input.genres?.length || !input.instruments?.length || !input.goals || !input.addressProvince)) {
             throw new Error('กรุณากรอกข้อมูลให้ครบทุกช่อง');
         }
         const defaults = viaLine ? lineSignupDefaults(pending) : null;
@@ -188,8 +269,18 @@ export function registerRoutes(app) {
         const genreList = viaLine
             ? []
             : (Array.isArray(input.genres) ? input.genres.map(String) : []);
+        const instrumentList = viaLine
+            ? []
+            : (Array.isArray(input.instruments) ? input.instruments.map(String) : []);
         const education = viaLine ? null : String(input.education);
-        const reason = viaLine ? 'สมัครผ่าน LINE' : String(input.reason);
+        const birthDate = viaLine ? null : String(input.birthDate ?? '').trim();
+        const age = birthDate ? ageFromBirthDate(birthDate) : null;
+        if (!viaLine && (!age || age < 5)) {
+            throw new Error('กรุณากรอกวันเกิดให้ถูกต้อง');
+        }
+        const singingExperience = viaLine ? null : String(input.singingExperience ?? '').trim().slice(0, 200);
+        const goals = viaLine ? 'สมัครผ่าน LINE' : String(input.goals ?? '').trim();
+        const reason = goals;
         const enrolled = await enrollStudent({
             enrollmentId: publicId('enr-'),
             email,
@@ -200,13 +291,20 @@ export function registerRoutes(app) {
             nameEn: names.nameEn,
             nickname: names.nickname,
             nicknameEn: names.nicknameEn,
-            age: viaLine ? null : Number(input.age),
+            age,
+            birthDate: birthDate || null,
             education,
             educationEn: education ? educationEn(education) : null,
             genres: genreList.length ? JSON.stringify(genreList) : null,
             genresEn: genreList.length ? JSON.stringify(genresEn(genreList)) : null,
+            singingExperience,
+            instruments: instrumentList.length ? JSON.stringify(instrumentList) : null,
+            goals,
             reason,
-            reasonEn: viaLine ? 'Signed up with LINE' : (language === 'en' ? reason : null),
+            reasonEn: viaLine ? 'Signed up with LINE' : (language === 'en' ? goals : null),
+            addressStreet: viaLine ? null : String(input.addressStreet ?? '').trim().slice(0, 200) || null,
+            addressDistrict: viaLine ? null : String(input.addressDistrict ?? '').trim().slice(0, 100) || null,
+            addressProvince: viaLine ? null : String(input.addressProvince ?? '').trim().slice(0, 100) || null,
             language,
             avatar,
         });
@@ -228,16 +326,53 @@ export function registerRoutes(app) {
         });
     }));
 
-    app.get('/api/auth/line/status', (_req, res) => {
+    app.get('/api/auth/line/status', (req, res) => {
         const qrUrl = String(process.env.LINE_OA_QR_URL || '').trim() || null;
         const addFriendUrl = String(process.env.LINE_OA_ADD_FRIEND_URL || '').trim() || null;
+        const liff = getLiffConfig();
+        const origin = String(process.env.FRONTEND_ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+        const apiOrigin = origin.includes(':5173')
+            ? `http://localhost:${process.env.PORT || 3001}`
+            : origin;
         res.json({
             configured: isLineConfigured(),
             messagingConfigured: isLineMessagingConfigured(),
+            liffConfigured: isLiffConfigured(),
+            liffId: liff.liffId || null,
+            webhookUrl: `${apiOrigin}/api/webhooks/line`,
             oaQrUrl: qrUrl,
             oaAddFriendUrl: addFriendUrl,
         });
     });
+
+    app.post('/api/auth/liff', asyncHandler(async (req, res) => {
+        if (!isLiffConfigured()) {
+            res.status(503).json({ error: 'ยังไม่ได้ตั้งค่า LIFF_ID ใน backend/.env' });
+            return;
+        }
+        const { profile } = await authenticateLiffIdToken(req.body?.idToken);
+        const existingByLine = await findUserByLineUserId(profile.lineUserId);
+        const existingByEmail = profile.email ? await findUserByLogin(profile.email) : null;
+        const decision = resolveLiffAuthDecision({ profile, existingByLine, existingByEmail });
+        if (decision.action === 'register') {
+            res.json({ needRegister: true, ticket: signLinePending(profile) });
+            return;
+        }
+        if (decision.action === 'link_and_login') {
+            await linkLineAccount(decision.userId, profile);
+        }
+        const user = await findUserById(decision.userId);
+        if (!user || !isYes(user.status)) {
+            res.status(403).json({ error: 'บัญชีนี้ถูกระงับหรือไม่พบ' });
+            return;
+        }
+        const language = resolveLang(req);
+        await query(`UPDATE dbo.users SET language = @language, updated_at = SYSUTCDATETIME() WHERE id = @id`, {
+            language,
+            id: user.id,
+        });
+        res.json({ token: signUser(user), user: toProfile(user) });
+    }));
 
     app.post('/api/auth/line/start', optionalAuth, asyncHandler(async (req, res) => {
         const intent = String(req.body?.intent || 'login');
@@ -392,12 +527,17 @@ export function registerRoutes(app) {
         const genreList = Array.isArray(input.genres) ? input.genres.map(String).filter(Boolean) : [];
         const reason = String(input.reason ?? '').trim() || null;
         const language = resolveLang(req);
+        const avatarRaw = input.avatar == null ? null : String(input.avatar).trim();
+        if (avatarRaw && !isAllowedPresetAvatar(avatarRaw)) {
+            throw new Error('กรุณาเลือกรูปโปรไฟล์จากชุดที่ระบบกำหนด');
+        }
         await query(
             `UPDATE dbo.users
              SET name = @name, name_en = @nameEn, nickname = @nickname, nickname_en = @nicknameEn,
                  age = @age, phone = @phone,
                  emergency_contact = @emergencyContact, education = @education, education_en = @educationEn,
                  genres = @genres, genres_en = @genresEn, reason = @reason, reason_en = @reasonEn,
+                 avatar = CASE WHEN @hasAvatar = 1 THEN @avatar ELSE avatar END,
                  updated_at = SYSUTCDATETIME()
              WHERE id = @id`,
             {
@@ -415,14 +555,42 @@ export function registerRoutes(app) {
                 genresEn: genreList.length ? JSON.stringify(genresEn(genreList)) : null,
                 reason,
                 reasonEn: language === 'en' ? reason : null,
+                hasAvatar: avatarRaw ? 1 : 0,
+                avatar: avatarRaw,
             },
         );
         const user = await findUserById(req.user.id);
         res.json({ user: toProfile(user) });
     }));
 
-    app.get('/api/days', requireAuth, asyncHandler(async (_req, res) => {
-        const teacherId = await defaultTeacherId();
+    app.patch('/api/me/avatar', requireAuth, asyncHandler(async (req, res) => {
+        const avatar = String(req.body?.avatar ?? '').trim();
+        if (!isAllowedPresetAvatar(avatar)) {
+            throw new Error('กรุณาเลือกรูปโปรไฟล์จากชุดที่ระบบกำหนด');
+        }
+        await query(
+            `UPDATE dbo.users
+             SET avatar = @avatar, updated_at = SYSUTCDATETIME()
+             WHERE id = @id`,
+            { id: req.user.id, avatar },
+        );
+        const user = await findUserById(req.user.id);
+        res.json({ user: toProfile(user) });
+    }));
+
+    app.get('/api/teachers', requireAuth, asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const rows = await listActiveTeachers();
+        res.json(rows.map((row) => ({
+            id: row.id,
+            name: pick(row, 'name', lang),
+            nickname: pick(row, 'nickname', lang),
+            avatar: row.avatar,
+        })));
+    }));
+
+    app.get('/api/days', requireAuth, asyncHandler(async (req, res) => {
+        const teacherId = await resolveStudentTeacherId(req.user.id, req.query.teacherId);
         const result = await query(
             `SELECT DISTINCT CONVERT(varchar(10), slot_date, 23) AS iso
              FROM dbo.teacher_availability
@@ -438,7 +606,7 @@ export function registerRoutes(app) {
 
     app.get('/api/slots', requireAuth, asyncHandler(async (req, res) => {
         const day = assertDayIso(req.query.day);
-        const teacherId = await defaultTeacherId();
+        const teacherId = await resolveStudentTeacherId(req.user.id, req.query.teacherId);
         const result = await query(
             `SELECT CONVERT(varchar(5), slot_time, 108) AS time, status
              FROM dbo.teacher_availability
@@ -467,11 +635,14 @@ export function registerRoutes(app) {
         const lang = resolveLang(req);
         const day = assertDayIso(req.query.day);
         const time = String(req.query.time ?? '');
+        const hours = Math.max(1, Number(req.query.hours ?? 1) || 1);
+        const teacherId = await resolveStudentTeacherId(req.user.id, req.query.teacherId);
         const pkg = packageStatusFromRow(await activePackage(req.user.id), lang);
         res.json({
             day: `${chipLabel(day, lang)} ${formatDate(day, lang)}`,
-            time: lessonTimeRange(time, lang),
-            teacher: lang === 'en' ? 'Kru Air (live 1:1)' : 'ครูแอร์ (เรียนสด 1:1)',
+            time: lessonTimeRange(time, lang, hours),
+            hours,
+            teacher: await teacherDisplayLabel(teacherId, lang),
             leftHours: pkg.left,
         });
     }));
@@ -482,8 +653,10 @@ export function registerRoutes(app) {
         }
         const dayIso = String(req.body?.day ?? '');
         const time = String(req.body?.time ?? '');
+        const hours = Math.max(1, Number(req.body?.hours ?? 1) || 1);
         assertDayIso(dayIso);
         const lang = resolveLang(req);
+        const teacherId = await resolveStudentTeacherId(req.user.id, req.body?.teacherId);
         const booking = await createLessonBooking({
             publicId: publicId('L'),
             userId: req.user.id,
@@ -493,18 +666,25 @@ export function registerRoutes(app) {
             topicEn: 'Course based on your favorite genres',
             source: 'web',
             mode: req.body?.mode === 'online' ? 'online' : 'studio',
+            durationHours: hours,
+            teacherId,
         });
+        await query(
+            `UPDATE dbo.users SET primary_teacher_id = @teacherId WHERE id = @userId AND (primary_teacher_id IS NULL OR primary_teacher_id = @teacherId)`,
+            { teacherId, userId: req.user.id },
+        );
         const student = await findUserById(req.user.id);
         const date = parseIsoDate(dayIso);
         await notifySlotTeacher(
             booking.slot_id,
             'มีนัดเรียนใหม่',
-            `${studentLabel(student, 'th')} จอง ${chipLabel(date, 'th')} ${lessonTimeRange(time, 'th')} — รอคอนเฟิร์ม`,
+            `${studentLabel(student, 'th')} จอง ${chipLabel(date, 'th')} ${lessonTimeRange(time, 'th', hours)} — รอคอนเฟิร์ม`,
             'blue',
             'New lesson booking',
-            `${studentLabel(student, 'en')} booked ${chipLabel(date, 'en')} ${lessonTimeRange(time, 'en')} — awaiting confirmation`,
+            `${studentLabel(student, 'en')} booked ${chipLabel(date, 'en')} ${lessonTimeRange(time, 'en', hours)} — awaiting confirmation`,
         );
-        res.json({ id: booking.public_id, saved: true, status: booking.status });
+        scheduleCalendarSync(booking.id, teacherId, req.user.id);
+        res.json({ id: booking.public_id, saved: true, status: booking.status, hours: Number(booking.duration_hours) || hours });
     }));
 
     app.get('/api/me/lessons', requireAuth, asyncHandler(async (req, res) => {
@@ -512,9 +692,12 @@ export function registerRoutes(app) {
         const result = await query(
             `SELECT b.public_id, b.status, b.topic, b.topic_en, COALESCE(b.duration_hours, 1) AS duration_hours,
                     CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
-                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                    t.nickname AS teacher_nickname, t.nickname_en AS teacher_nickname_en,
+                    t.name AS teacher_name, t.name_en AS teacher_name_en
              FROM dbo.bookings b
              JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             JOIN dbo.users t ON t.id = s.teacher_id
              WHERE b.user_id = @userId AND b.status IN ('pending', 'confirmed', 'moved')
              ORDER BY s.slot_date, s.slot_time`,
             { userId: req.user.id },
@@ -523,15 +706,28 @@ export function registerRoutes(app) {
             const date = parseIsoDate(row.slot_iso);
             const hoursUntil = hoursUntilSlot(row.slot_iso, row.slot_hhmm);
             const hours = Number(row.duration_hours) || 1;
+            const teacherRow = {
+                nickname: row.teacher_nickname,
+                nickname_en: row.teacher_nickname_en,
+                name: row.teacher_name,
+                name_en: row.teacher_name_en,
+            };
+            const calendarUrl = buildGoogleCalendarUrl({
+                title: lang === 'en' ? (row.topic_en || row.topic || 'Vocal lesson') : (row.topic || row.topic_en || 'คอร์สร้อง'),
+                startDate: row.slot_iso,
+                startTime: row.slot_hhmm,
+                durationHours: hours,
+            });
             return {
                 id: row.public_id,
                 date: chipLabel(date, lang),
                 time: lessonTimeRange(row.slot_hhmm, lang, hours),
                 hours,
-                teacher: lang === 'en' ? 'Kru Air (live 1:1)' : 'ครูแอร์ (เรียนสด 1:1)',
+                teacher: `${pick(teacherRow, 'nickname', lang)} (${pick(teacherRow, 'name', lang)})`,
                 status: row.status,
                 topic: pick(row, 'topic', lang),
                 canCancel: canStudentCancel({ status: row.status, hoursUntil }),
+                calendarUrl,
             };
         }));
     }));
@@ -546,6 +742,7 @@ export function registerRoutes(app) {
             reason: 'student_rejected',
             slotAfter: 'open',
         });
+        scheduleCalendarSync(lesson.id, lesson.teacher_id, req.user.id);
         res.json({ ok: true });
     }));
 
@@ -573,6 +770,7 @@ export function registerRoutes(app) {
             'Student confirmed attendance',
             `${studentLabel(student, 'en')} confirmed ${chipLabel(date, 'en')} ${lessonTimeRange(lesson.slot_hhmm, 'en')}`,
         );
+        scheduleCalendarSync(lesson.id, lesson.teacher_id, req.user.id);
         res.json({ ok: true });
     }));
 
@@ -605,6 +803,7 @@ export function registerRoutes(app) {
             'Student cancelled a lesson',
             `${studentLabel(student, 'en')} cancelled ${chipLabel(date, 'en')} ${lessonTimeRange(booking.slot_hhmm, 'en')} — the slot is open again`,
         );
+        scheduleCalendarSync(lesson.id, lesson.teacher_id, req.user.id);
         res.json({ ok: true });
     }));
 
@@ -623,7 +822,11 @@ export function registerRoutes(app) {
         if (!lesson) {
             throw new Error('ไม่พบคลาสที่เลือก');
         }
-        const teacherId = await defaultTeacherId();
+        const slotTeacher = await query(
+            `SELECT teacher_id FROM dbo.teacher_availability WHERE id = @id`,
+            { id: lesson.slot_id },
+        );
+        const teacherId = slotTeacher.recordset[0]?.teacher_id ?? await defaultTeacherId();
         const slot = await findSlot(newDay, newTime, teacherId);
         if (!slot || slot.status !== 'open') {
             throw new Error('สล็อตใหม่ไม่ว่าง');
@@ -752,21 +955,365 @@ export function registerRoutes(app) {
         if (req.user.role !== 'student') {
             throw new Error('เฉพาะนักเรียนที่ซื้อแพ็กเกจได้');
         }
-        const purchased = await createPackagePurchase({
+        const purchased = await createPendingPurchase({
             userId: req.user.id,
             pkgId: String(req.body?.pkgId ?? ''),
+            offerPublicId: String(req.body?.offerId ?? '').trim() || null,
             voucherCode: String(req.body?.voucherCode ?? ''),
-            method: String(req.body?.method ?? 'บัตรเครดิต'),
-            enrollmentPublicId: publicId('enr-'),
             paymentPublicId: publicId('pay-'),
         });
-        res.json({ ok: true, refNo: purchased.refNo });
+        res.json({ ok: true, ...purchased });
+    }));
+
+    app.get('/api/purchases/:ref/slip', requireAuth, asyncHandler(async (req, res) => {
+        const payload = await getPaymentSlipPayloadForRef(req.params.ref, { userId: req.user.id });
+        if (payload.kind === 'file') {
+            res.type('image/jpeg');
+            res.sendFile(payload.file);
+            return;
+        }
+        res.type(payload.mime).send(payload.buffer);
+    }));
+
+    app.get('/api/purchases/:ref', requireAuth, asyncHandler(async (req, res) => {
+        const purchase = await getPurchaseByRef(req.params.ref, req.user.id);
+        if (!purchase) {
+            throw new Error('ไม่พบรายการชำระเงิน');
+        }
+        res.json(purchase);
+    }));
+
+    app.post('/api/purchases/:ref/notify', requireAuth, asyncHandler(async (req, res) => {
+        const result = await notifyPurchasePaid(req.params.ref, req.user.id, {
+            note: String(req.body?.note ?? ''),
+            slipDataUrl: String(req.body?.slipDataUrl ?? ''),
+        });
+        res.json(result);
+    }));
+
+    app.get('/api/payment/config', requireAuth, asyncHandler(async (req, res) => {
+        const settings = await getPaymentSettings();
+        res.json({
+            configured: paymentConfigured(settings),
+            promptpayId: settings.promptpayId || null,
+            bankName: settings.bankName || null,
+            bankAccount: settings.bankAccount || null,
+            accountName: settings.accountName || null,
+            qrImageUrl: settings.qrImageUrl || null,
+        });
+    }));
+
+    app.get('/api/teacher/payments/pending', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        res.json(await listPendingPayments());
+    }));
+
+    app.get('/api/teacher/payments/:ref/slip', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const payload = await getPaymentSlipPayloadForRef(req.params.ref, { allowTeacher: true });
+        if (payload.kind === 'file') {
+            res.type('image/jpeg');
+            res.sendFile(payload.file);
+            return;
+        }
+        res.type(payload.mime).send(payload.buffer);
+    }));
+
+    app.post('/api/teacher/payments/:ref/confirm', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const result = await confirmPendingPurchase(req.params.ref, req.user.id, publicId('enr-'));
+        res.json({ ok: true, ...result });
+    }));
+
+    app.post('/api/teacher/payments/:ref/reject', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        await rejectPendingPurchase(req.params.ref, req.user.id, String(req.body?.reason ?? ''));
+        res.json({ ok: true });
+    }));
+
+    app.patch('/api/admin/settings/payment', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const settings = await updatePaymentSettings({
+            promptpayId: req.body?.promptpayId,
+            bankName: req.body?.bankName,
+            bankAccount: req.body?.bankAccount,
+            accountName: req.body?.accountName,
+            qrImageUrl: req.body?.qrImageUrl,
+        });
+        res.json({ ok: true, payment: settings });
+    }));
+
+    app.get('/api/me/payment-links', requireAuth, asyncHandler(async (req, res) => {
+        if (req.user.role !== 'student') {
+            res.json([]);
+            return;
+        }
+        res.json(await listPaymentLinksForStudent(req.user.id));
+    }));
+
+    app.post('/api/me/payment-links/:token/start', requireAuth, asyncHandler(async (req, res) => {
+        if (req.user.role !== 'student') {
+            throw new Error('เฉพาะนักเรียนที่ชำระได้');
+        }
+        const started = await startPaymentFromLink(req.params.token, req.user.id, publicId('pay-'));
+        res.json({ ok: true, ...started });
+    }));
+
+    app.get('/api/teacher/payment-links', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        res.json(await listPaymentLinksForTeacher(teacherId));
+    }));
+
+    app.post('/api/teacher/payment-links', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const studentUserId = Number(req.body?.studentUserId);
+        if (!studentUserId) {
+            throw new Error('กรุณาเลือกนักเรียน');
+        }
+        const teacherId = await teacherScopeId(req);
+        const link = await createPaymentLink({
+            studentUserId,
+            teacherId,
+            title: String(req.body?.title ?? '').trim(),
+            titleEn: String(req.body?.titleEn ?? '').trim(),
+            hours: Number(req.body?.hours),
+            totalAmount: Number(req.body?.totalAmount),
+            installmentCount: Number(req.body?.installmentCount ?? 1),
+            offerId: req.body?.offerId ? Number(req.body.offerId) : null,
+            publicId: publicId('plink-'),
+        });
+        res.json({ ok: true, ...link });
+    }));
+
+    app.patch('/api/teacher/payment-links/:id', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        res.json(await cancelPaymentLink(req.params.id, teacherId));
+    }));
+
+    app.get('/api/me/homework', requireAuth, asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const result = await query(
+            `SELECT cl.id, cl.lesson_title, cl.lesson_title_en, cl.note, cl.note_en, cl.feedback_audio_url, cl.student_audio_url, cl.created_at,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.class_logs cl
+             JOIN dbo.bookings b ON b.id = cl.booking_id
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE cl.user_id = @userId AND cl.outcome = N'done'
+             ORDER BY cl.created_at DESC`,
+            { userId: req.user.id },
+        );
+        res.json(result.recordset
+            .filter((row) => isHomeworkNote(pick(row, 'note', lang)))
+            .map((row) => ({
+                id: row.id,
+                date: chipLabel(parseIsoDate(row.slot_iso), lang),
+                lesson: pick(row, 'lesson_title', lang),
+                note: pick(row, 'note', lang),
+                audioUrl: row.feedback_audio_url || null,
+                studentAudioUrl: row.student_audio_url || null,
+            })));
+    }));
+
+    app.post('/api/me/homework/:classLogId/audio', requireAuth, asyncHandler(async (req, res) => {
+        const classLogId = Number(req.params.classLogId);
+        if (!Number.isInteger(classLogId) || classLogId < 1) {
+            throw new Error('ไม่พบการบ้านที่เลือก');
+        }
+        const audioData = String(req.body?.audio ?? '').trim();
+        if (!audioData.startsWith('data:audio/')) {
+            throw new Error('กรุณาอัปโหลดไฟล์เสียง');
+        }
+        const found = await query(
+            `SELECT cl.id, cl.user_id, cl.lesson_title, cl.lesson_title_en, s.teacher_id,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.class_logs cl
+             JOIN dbo.bookings b ON b.id = cl.booking_id
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE cl.id = @id AND cl.user_id = @userId AND cl.outcome = N'done'`,
+            { id: classLogId, userId: req.user.id },
+        );
+        const row = found.recordset[0];
+        if (!row) {
+            throw new Error('ไม่พบการบ้านที่เลือก');
+        }
+        const audioUrl = saveHomeworkAudio(audioData);
+        await query(
+            `UPDATE dbo.class_logs SET student_audio_url = @url WHERE id = @id`,
+            { id: classLogId, url: audioUrl.slice(0, 500) },
+        );
+        const lang = resolveLang(req);
+        const student = await findUserById(req.user.id);
+        const date = chipLabel(parseIsoDate(row.slot_iso), lang);
+        await addNotification(
+            row.teacher_id,
+            'นักเรียนส่งการบ้านเสียง',
+            `${studentLabel(student, 'th')} ส่งเสียงการบ้าน · ${pick(row, 'lesson_title', 'th')} (${date})`,
+            'blue',
+            'Student homework audio',
+            `${studentLabel(student, 'en')} submitted audio homework · ${pick(row, 'lesson_title', 'en')} (${chipLabel(parseIsoDate(row.slot_iso), 'en')})`,
+        );
+        res.json({ ok: true, audioUrl });
+    }));
+
+    app.get('/api/me/signatures/pending', requireAuth, asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const today = bangkokDateIso();
+        const result = await query(
+            `SELECT b.public_id AS booking_id,
+                    b.topic AS lesson_title, b.topic_en AS lesson_title_en,
+                    cl.lesson_title AS log_title, cl.lesson_title_en AS log_title_en,
+                    COALESCE(b.duration_hours, 1) AS duration_hours,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             LEFT JOIN dbo.class_logs cl ON cl.booking_id = b.id
+             WHERE b.user_id = @userId
+               AND CONVERT(varchar(10), s.slot_date, 23) = @today
+               AND b.status IN (N'confirmed', N'moved', N'done')
+               AND (cl.id IS NULL OR (cl.outcome = N'done' AND cl.student_signature IS NULL))
+             ORDER BY s.slot_time ASC`,
+            { userId: req.user.id, today },
+        );
+        res.json(result.recordset.map((row) => {
+            const hours = Number(row.duration_hours) || 1;
+            const lesson = lang === 'en'
+                ? (row.log_title_en || row.lesson_title_en || row.log_title || row.lesson_title)
+                : (row.log_title || row.lesson_title || row.log_title_en || row.lesson_title_en);
+            return {
+                bookingId: row.booking_id,
+                slotIso: row.slot_iso,
+                date: chipLabel(parseIsoDate(row.slot_iso), lang),
+                time: lessonTimeRange(row.slot_hhmm, lang, hours),
+                lesson: lesson || (lang === 'en' ? 'Lesson' : 'คลาสเรียน'),
+                canSign: true,
+            };
+        }));
+    }));
+
+    app.post('/api/me/signatures/:bookingId', requireAuth, asyncHandler(async (req, res) => {
+        const signature = String(req.body?.signature ?? '').trim();
+        if (!signature.startsWith('data:image/')) {
+            throw new Error('กรุณาลงลายเซ็น');
+        }
+        const result = await signLessonAndDeductHours({
+            bookingPublicId: req.params.bookingId,
+            userId: req.user.id,
+            signature,
+        });
+        res.json(result);
+    }));
+
+    app.get('/api/me/calendar.ics', requireAuth, asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const result = await query(
+            `SELECT b.public_id, b.topic, b.topic_en, b.duration_hours,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.bookings b
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE b.user_id = @userId AND b.status IN (N'pending', N'confirmed')
+             ORDER BY s.slot_date, s.slot_time`,
+            { userId: req.user.id },
+        );
+        const events = result.recordset.map((row) => buildIcsEvent({
+            uid: row.public_id,
+            title: lang === 'en' ? (row.topic_en || row.topic || 'Vocal lesson') : (row.topic || row.topic_en || 'คอร์สร้อง'),
+            startDate: row.slot_iso,
+            startTime: row.slot_hhmm,
+            durationHours: Number(row.duration_hours) || 1,
+        }));
+        res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="kruair-lessons.ics"');
+        res.send(buildIcsCalendar(events));
+    }));
+
+    app.get('/api/admin/sales/export.csv', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const result = await query(
+            `SELECT t.ref_no, t.created_at, t.net_amount, t.method, t.method_en, t.status, t.voucher_code,
+                    u.nickname, u.nickname_en, u.name, u.name_en, p.name AS pkg_name, p.name_en AS pkg_name_en,
+                    o.title AS offer_title, o.title_en AS offer_title_en
+             FROM dbo.transactions t
+             JOIN dbo.users u ON u.id = t.user_id
+             LEFT JOIN dbo.packages p ON p.id = t.package_id
+             LEFT JOIN dbo.student_offers o ON o.id = t.offer_id
+             WHERE t.status = N'success'
+             ORDER BY t.created_at DESC`,
+        );
+
+        const headers = lang === 'en'
+            ? ['No.', 'Reference No.', 'Paid Date', 'Paid Time', 'Student Nickname', 'Student Name', 'Package / Item', 'Amount (THB)', 'Payment Method', 'Voucher', 'Status']
+            : ['ลำดับ', 'เลขที่อ้างอิง', 'วันที่ชำระ', 'เวลาชำระ', 'ชื่อเล่นนักเรียน', 'ชื่อนักเรียน', 'แพ็กเกจ / รายการ', 'ยอดเงิน (บาท)', 'ช่องทางชำระ', 'วอเชอร์', 'สถานะ'];
+
+        const escapeCsv = (value) => {
+            const text = value == null ? '' : String(value);
+            if (/[",\n\r]/.test(text)) {
+                return `"${text.replace(/"/g, '""')}"`;
+            }
+            return text;
+        };
+
+        const methodLabel = (method, methodEnValue) => {
+            if (lang === 'en') {
+                return methodEn(methodEnValue || method) || '—';
+            }
+            const raw = String(method || methodEnValue || '');
+            const lower = raw.toLowerCase();
+            if (raw.includes('พร้อม') || lower.includes('prompt')) {
+                return 'พร้อมเพย์';
+            }
+            if (lower.includes('kbank')) {
+                return 'KBank';
+            }
+            if (raw.includes('บัตร') || lower.includes('card')) {
+                return 'บัตรเครดิต';
+            }
+            return raw || '—';
+        };
+
+        const monthLabels = lang === 'en'
+            ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            : ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+        const rows = result.recordset.map((row, index) => {
+            const paidAt = new Date(row.created_at);
+            const valid = !Number.isNaN(paidAt.getTime());
+            const year = valid ? paidAt.getFullYear() + (lang === 'en' ? 0 : 543) : '';
+            const paidDate = valid
+                ? `${paidAt.getDate()} ${monthLabels[paidAt.getMonth()]} ${year}`
+                : '—';
+            const paidTime = valid
+                ? `${String(paidAt.getHours()).padStart(2, '0')}:${String(paidAt.getMinutes()).padStart(2, '0')}`
+                : '—';
+            const nickname = pick(row, 'nickname', lang) || '—';
+            const fullName = pick(row, 'name', lang) || '—';
+            const item = pick(row, 'offer_title', lang) || pick(row, 'pkg_name', lang) || '—';
+            const amount = Number(row.net_amount) || 0;
+            return [
+                index + 1,
+                row.ref_no || '—',
+                paidDate,
+                paidTime,
+                nickname,
+                fullName,
+                item,
+                amount,
+                methodLabel(row.method, row.method_en),
+                row.voucher_code || '—',
+                paymentStatus(row.status, lang),
+            ].map(escapeCsv).join(',');
+        });
+
+        const stamp = new Date();
+        const fileStamp = `${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}`;
+        const filename = lang === 'en' ? `sales-report-${fileStamp}.csv` : `รายงานยอดขาย-${fileStamp}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+        res.send(`\uFEFF${headers.map(escapeCsv).join(',')}\n${rows.join('\n')}`);
     }));
 
     app.get('/api/admin/students', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const result = await query(
-            `SELECT u.id, u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.education, u.education_en, u.phone, u.emergency_contact, u.created_at,
+            `SELECT u.id, u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.birth_date, u.education, u.education_en,
+                    u.singing_experience, u.instruments, u.goals, u.address_province, u.phone, u.emergency_contact, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
                     up.hours_total, up.hours_used, up.expires_at, up.status AS pkg_status,
                     (SELECT COUNT(*) FROM dbo.class_logs cl WHERE cl.user_id = u.id AND cl.outcome = 'done') AS done
@@ -791,9 +1338,13 @@ export function registerRoutes(app) {
             return {
                 id: Number(row.id),
                 name: `${pick(row, 'nickname', lang)} ${pick(row, 'name', lang).split(' ')[0] ?? ''}`.trim(),
-                info: `${row.age ?? '—'} · ${pick(row, 'education', lang) || '—'} · ${row.phone || '—'}`,
+                info: `${row.age ?? '—'} · ${pick(row, 'education', lang) || '—'} · ${row.singing_experience || '—'} · ${row.address_province || '—'}`,
                 phone: row.phone || null,
                 emergencyContact: row.emergency_contact || null,
+                singingExperience: row.singing_experience || null,
+                goals: row.goals || null,
+                instruments: row.instruments || null,
+                addressProvince: row.address_province || null,
                 pkg: row.pkg_name ? `${pick({ name: row.pkg_name, name_en: row.pkg_name_en }, 'name', lang)} ${row.pkg_hours}` : '—',
                 left,
                 done: row.done,
@@ -845,6 +1396,68 @@ export function registerRoutes(app) {
             grantNow: Boolean(input.grantNow),
         });
         res.json(mapStudentOffer(created, lang));
+    }));
+
+    app.get('/api/teacher/students/:id/recurring', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        res.json(await listRecurringSchedules(userId));
+    }));
+
+    app.post('/api/teacher/students/:id/recurring', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const student = await findUserById(userId);
+        if (!student || student.role !== 'student') {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const teacherId = await teacherScopeId(req);
+        const created = await createRecurringSchedule({
+            userId,
+            teacherId,
+            createdBy: req.user.id,
+            weekday: Number(req.body?.weekday),
+            time: String(req.body?.time ?? ''),
+            hours: Number(req.body?.hours ?? 1),
+            mode: req.body?.mode === 'online' ? 'online' : 'studio',
+        });
+        const generated = await generateRecurringBookings({ userId, teacherId, weeks: 4 });
+        for (const row of generated.created) {
+            const booking = await query(`SELECT id FROM dbo.bookings WHERE public_id = @id`, { id: row.id });
+            const bookingId = booking.recordset[0]?.id;
+            if (bookingId) {
+                scheduleCalendarSync(bookingId, teacherId, userId);
+            }
+        }
+        res.json({ rule: created, generated });
+    }));
+
+    app.delete('/api/teacher/students/:id/recurring/:ruleId', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        await deleteRecurringSchedule(String(req.params.ruleId), teacherId);
+        res.json({ ok: true });
+    }));
+
+    app.post('/api/teacher/students/:id/recurring/generate', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const userId = Number(req.params.id);
+        if (!Number.isInteger(userId) || userId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const teacherId = await teacherScopeId(req);
+        const weeks = Math.min(4, Math.max(1, Number(req.body?.weeks ?? 4) || 4));
+        const generated = await generateRecurringBookings({ userId, teacherId, weeks });
+        for (const row of generated.created) {
+            const booking = await query(`SELECT id FROM dbo.bookings WHERE public_id = @id`, { id: row.id });
+            const bookingId = booking.recordset[0]?.id;
+            if (bookingId) {
+                scheduleCalendarSync(bookingId, teacherId, userId);
+            }
+        }
+        res.json(generated);
     }));
 
     app.patch('/api/teacher/offers/:publicId', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
@@ -1152,6 +1765,7 @@ export function registerRoutes(app) {
     }));
 
     app.get('/api/admin/move-requests', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
         const result = await query(
             `SELECT m.*, u.nickname, u.nickname_en, b.public_id AS booking_public_id,
                     CONVERT(varchar(10), s.slot_date, 23) AS requested_iso,
@@ -1160,7 +1774,10 @@ export function registerRoutes(app) {
              JOIN dbo.users u ON u.id = m.user_id
              JOIN dbo.bookings b ON b.id = m.booking_id
              JOIN dbo.teacher_availability s ON s.id = m.requested_slot_id
+             JOIN dbo.teacher_availability old_s ON old_s.id = b.slot_id
+             WHERE old_s.teacher_id = @teacherId
              ORDER BY m.created_at DESC`,
+            { teacherId },
         );
         res.json(result.recordset.map((row) => mapMoveRequest(row, resolveLang(req))));
     }));
@@ -1198,6 +1815,8 @@ export function registerRoutes(app) {
                 'Move approved',
                 `Your lesson was moved to ${row.to_text_en || row.to_text}. The schedule is updated.`,
             );
+            const teacherId = await teacherScopeId(req);
+            scheduleCalendarSync(row.booking_row_id, teacherId, row.student_id);
         }
         else {
             await query(
@@ -1225,7 +1844,7 @@ export function registerRoutes(app) {
         const pkgs = await query(
             `SELECT id, name, name_en, hours, price, note, note_en, tag, tag_en, tone, is_active
              FROM dbo.packages
-             WHERE id NOT IN (N'trial', N'offer')
+             WHERE id NOT IN (N'trial', N'offer', N'link')
              ORDER BY hours`,
         );
         const roles = await query(
@@ -1263,7 +1882,7 @@ export function registerRoutes(app) {
                 cancelHours: CANCEL_MIN_HOURS,
                 reminderWindowHours: [20, 28],
                 packageMonths: 6,
-                trialHours: 1,
+                trialHours: 0,
             },
             integrations: {
                 lineLogin: {
@@ -1273,12 +1892,23 @@ export function registerRoutes(app) {
                 lineOa: {
                     connected: isLineMessagingConfigured(),
                     pushEnabled: isLineMessagingConfigured(),
+                    liffConfigured: isLiffConfigured(),
+                    liffId: getLiffConfig().liffId || null,
+                    webhookUrl: `${String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '').includes(':5173')
+                        ? `http://localhost:${process.env.PORT || 3001}`
+                        : String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '')}/api/webhooks/line`,
                     qrUrl: String(process.env.LINE_OA_QR_URL || '').trim() || null,
                     addFriendUrl: String(process.env.LINE_OA_ADD_FRIEND_URL || '').trim() || null,
                 },
                 payment: {
-                    mode: 'mock',
-                    methods: ['card', 'kbank', 'promptpay'],
+                    mode: paymentConfigured(await getPaymentSettings()) ? 'transfer' : 'unconfigured',
+                    methods: ['promptpay'],
+                    ...(await getPaymentSettings()),
+                },
+                googleCalendar: {
+                    configured: isGoogleCalendarConfigured(),
+                    redirectUri: resolveGoogleRedirectUri(req),
+                    ...(await getGoogleConnection(req.user.role === 'teacher' ? req.user.id : await defaultTeacherId())),
                 },
             },
             jobs: {
@@ -1287,9 +1917,11 @@ export function registerRoutes(app) {
                 lastExpired: jobState.lastResult.expired,
                 lastReminded: jobState.lastResult.reminded,
                 lastLowHours: jobState.lastResult.lowHours,
-                dayBefore: { enabled: true, channel: 'in_app+line' },
+                lastExpiry: jobState.lastResult.expiry,
+                dayBefore: { enabled: true, channel: 'in_app+line+google', hoursBefore: 24 },
                 expireUnconfirmed: { enabled: true },
                 packageLowHours: { enabled: true, thresholdHours: 2, channel: 'in_app+line' },
+                packageExpiry: { enabled: true, daysBefore: 7, channel: 'in_app' },
             },
             data: {
                 database: process.env.SQL_DATABASE || 'BD_AIR',
@@ -1301,6 +1933,279 @@ export function registerRoutes(app) {
                 dailyBackup: false,
             },
         });
+    }));
+
+    app.get('/api/teacher/today', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const teacherId = await teacherScopeId(req);
+        const todayIso = toIsoDate(new Date());
+        const lessons = await listTeacherDayLessons(teacherId, todayIso);
+        const pendingCount = lessons.filter((row) => row.booking_status === 'pending').length;
+        const moveResult = await query(
+            `SELECT COUNT(*) AS n
+             FROM dbo.move_requests m
+             JOIN dbo.bookings b ON b.id = m.booking_id
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE m.status = N'pending' AND s.teacher_id = @teacherId`,
+            { teacherId },
+        );
+        const homeworkResult = await query(
+            `SELECT COUNT(*) AS n
+             FROM dbo.class_logs cl
+             JOIN dbo.bookings b ON b.id = cl.booking_id
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             WHERE cl.student_audio_url IS NOT NULL
+               AND cl.created_at >= DATEADD(day, -7, SYSUTCDATETIME())
+               AND s.teacher_id = @teacherId`,
+            { teacherId },
+        );
+        const pendingPayments = await listPendingPayments();
+        const pendingSignatures = await countPendingTeacherSignatures(teacherId);
+        res.json({
+            date: chipLabel(parseIsoDate(todayIso), lang),
+            pendingLessons: pendingCount,
+            moveRequests: Number(moveResult.recordset[0]?.n || 0),
+            homeworkThisWeek: Number(homeworkResult.recordset[0]?.n || 0),
+            pendingSignatures,
+            pendingPayments: pendingPayments.length,
+            lessons: lessons.map((row) => ({
+                bookingId: row.booking_id,
+                time: row.slot_hhmm,
+                timeRange: lessonTimeRange(row.slot_hhmm, lang, Number(row.duration_hours) || 1),
+                student: studentLabel(row, lang),
+                studentId: row.student_id,
+                lesson: pick(row, 'topic', lang) || (lang === 'en' ? 'Vocal lesson' : 'คอร์สร้อง'),
+                status: row.booking_status === 'confirmed' ? 'confirmed' : 'pending',
+            })),
+        });
+    }));
+
+    app.get('/api/teacher/students/:id', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const studentId = Number(req.params.id);
+        if (!Number.isInteger(studentId) || studentId < 1) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const profile = await getStudentProfileForTeacher(studentId);
+        if (!profile) {
+            throw new Error('ไม่พบนักเรียนที่เลือก');
+        }
+        const { user, pkg, logs, upcoming } = profile;
+        const pkgStatus = packageStatusFromRow(pkg, lang);
+        res.json({
+            id: user.id,
+            name: pick(user, 'name', lang),
+            nickname: pick(user, 'nickname', lang),
+            email: user.email,
+            phone: user.phone,
+            emergencyContact: user.emergency_contact,
+            birthDate: user.birth_date ? new Date(user.birth_date).toISOString().slice(0, 10) : null,
+            age: user.age,
+            education: pick(user, 'education', lang),
+            singingExperience: user.singing_experience,
+            genres: user.genres,
+            instruments: user.instruments,
+            goals: user.goals || user.reason,
+            address: [user.address_street, user.address_district, user.address_province].filter(Boolean).join(', '),
+            teacher: user.primary_teacher_id
+                ? pick({
+                    nickname: user.teacher_nickname,
+                    nickname_en: user.teacher_nickname_en,
+                    name: user.teacher_name,
+                    name_en: user.teacher_name_en,
+                }, 'nickname', lang)
+                : null,
+            package: pkgStatus,
+            lessons: logs.map((row) => ({
+                bookingId: row.booking_id,
+                date: chipLabel(parseIsoDate(row.slot_iso), lang),
+                time: row.slot_hhmm,
+                lesson: row.outcome === 'no_show'
+                    ? (lang === 'en' ? 'No-show' : 'No-show')
+                    : pick(row, 'lesson_title', lang),
+                note: pick(row, 'note', lang) || '—',
+                hours: row.hours_deducted,
+                outcome: row.outcome,
+                signed: Boolean(row.student_signature),
+                signedAt: row.signed_at ? new Date(row.signed_at).toISOString() : null,
+                needsSignature: row.outcome === 'done' && !row.student_signature,
+                signature: row.student_signature || null,
+            })),
+            upcoming: upcoming.map((row) => ({
+                id: row.public_id,
+                date: chipLabel(parseIsoDate(row.slot_iso), lang),
+                time: row.slot_hhmm,
+                lesson: pick(row, 'topic', lang),
+                status: row.status,
+            })),
+        });
+    }));
+
+    app.post('/api/teacher/bookings/:id/move', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        const newDay = String(req.body?.day ?? '');
+        const newTime = String(req.body?.time ?? '');
+        const moved = await rescheduleTeacherBooking({
+            bookingPublicId: req.params.id,
+            teacherId,
+            newDayIso: newDay,
+            newTime,
+        });
+        const fromDate = parseIsoDate(moved.fromIso);
+        const toDate = parseIsoDate(moved.toIso);
+        await addNotification(
+            moved.userId,
+            'ครูเลื่อนนัดให้แล้ว',
+            `เลื่อนนัดจาก ${slotLabel(fromDate, moved.fromTime, 'th')} เป็น ${slotLabel(toDate, moved.toTime, 'th')}`,
+            'green',
+            'Lesson rescheduled',
+            `Your lesson was moved from ${slotLabel(fromDate, moved.fromTime, 'en')} to ${slotLabel(toDate, moved.toTime, 'en')}.`,
+        );
+        const bookingRow = await query(`SELECT id FROM dbo.bookings WHERE public_id = @id`, { id: moved.bookingId });
+        scheduleCalendarSync(bookingRow.recordset[0]?.id, teacherId, moved.userId);
+        res.json({ ok: true });
+    }));
+
+    app.get('/api/teacher/google/status', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        res.json({
+            configured: isGoogleCalendarConfigured(),
+            redirectUri: resolveGoogleRedirectUri(req),
+            ...await getGoogleConnection(teacherId),
+        });
+    }));
+
+    app.get('/api/teacher/google/connect', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        const redirectUri = resolveGoogleRedirectUri(req);
+        res.json({
+            url: buildGoogleConnectUrl(teacherId, 'teacher', redirectUri),
+            redirectUri,
+        });
+    }));
+
+    app.get('/api/me/google/status', requireAuth, asyncHandler(async (req, res) => {
+        res.json({
+            configured: isGoogleCalendarConfigured(),
+            redirectUri: resolveGoogleRedirectUri(req),
+            ...await getGoogleConnection(req.user.id),
+        });
+    }));
+
+    app.get('/api/me/google/connect', requireAuth, asyncHandler(async (req, res) => {
+        if (req.user.role !== 'student') {
+            throw new Error('เฉพาะนักเรียนที่เชื่อม Google Calendar ได้');
+        }
+        const redirectUri = resolveGoogleRedirectUri(req);
+        res.json({
+            url: buildGoogleConnectUrl(req.user.id, 'student', redirectUri),
+            redirectUri,
+        });
+    }));
+
+    const handleGoogleOAuthCallback = async (req, res) => {
+        try {
+            const { userId, returnTo, redirectUri } = parseGoogleOAuthState(String(req.query.state ?? ''));
+            await completeGoogleOAuth(String(req.query.code ?? ''), userId, redirectUri);
+            const origin = redirectUri.replace(/\/api\/teacher\/google\/callback\/?$/i, '')
+                || String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
+            if (returnTo === 'student') {
+                await syncUpcomingStudentBookings(userId);
+                res.redirect(`${origin}/app/profile?google=connected`);
+                return;
+            }
+            res.redirect(`${origin}/teacher/settings?google=connected`);
+        }
+        catch (err) {
+            const message = encodeURIComponent(err instanceof Error ? err.message : 'Google connect failed');
+            let returnTo = 'teacher';
+            let origin = String(process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
+            try {
+                const parsed = parseGoogleOAuthState(String(req.query.state ?? ''));
+                returnTo = parsed.returnTo;
+                if (parsed.redirectUri) {
+                    origin = parsed.redirectUri.replace(/\/api\/teacher\/google\/callback\/?$/i, '') || origin;
+                }
+            }
+            catch {
+                /* keep defaults */
+            }
+            const path = returnTo === 'student' ? '/app/profile' : '/teacher/settings';
+            res.redirect(`${origin}${path}?google=error&msg=${message}`);
+        }
+    };
+
+    app.get('/api/google/callback', asyncHandler(handleGoogleOAuthCallback));
+    app.get('/api/teacher/google/callback', asyncHandler(handleGoogleOAuthCallback));
+
+    app.delete('/api/teacher/google', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const teacherId = await teacherScopeId(req);
+        await disconnectGoogleCalendar(teacherId);
+        res.json({ ok: true });
+    }));
+
+    app.delete('/api/me/google', requireAuth, asyncHandler(async (req, res) => {
+        await disconnectGoogleCalendar(req.user.id);
+        res.json({ ok: true });
+    }));
+
+    app.post('/api/admin/line/rich-menu', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (_req, res) => {
+        if (!isLineMessagingConfigured()) {
+            throw new Error('ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN');
+        }
+        if (!isLiffConfigured()) {
+            throw new Error('ยังไม่ได้ตั้งค่า LIFF_ID ใน backend/.env');
+        }
+        const result = await publishRichMenu();
+        res.json({ ok: true, ...result });
+    }));
+
+    app.get('/api/teacher/signatures', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const teacherId = await teacherScopeId(req);
+        const result = await listTeacherSignatureLogs(teacherId);
+        const rows = result.recordset.map((row) => mapTeacherSignatureRow(row, lang));
+        res.json({
+            pending: rows.filter((row) => !row.signed),
+            signed: rows.filter((row) => row.signed).slice(0, 20),
+        });
+    }));
+
+    app.get('/api/teacher/signatures/:bookingId', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const teacherId = await teacherScopeId(req);
+        const row = await getTeacherSignatureLog(teacherId, req.params.bookingId);
+        if (!row) {
+            throw new Error(lang === 'en' ? 'Signature not found' : 'ไม่พบลายเซ็น');
+        }
+        res.json(mapTeacherSignatureRow(row, lang, { includeSignature: true }));
+    }));
+
+    app.get('/api/teacher/homework/submissions', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
+        const lang = resolveLang(req);
+        const teacherId = await teacherScopeId(req);
+        const result = await query(
+            `SELECT cl.id, cl.student_audio_url, cl.lesson_title, cl.lesson_title_en, cl.created_at,
+                    u.nickname, u.nickname_en, u.name, u.name_en,
+                    CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                    CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
+             FROM dbo.class_logs cl
+             JOIN dbo.bookings b ON b.id = cl.booking_id
+             JOIN dbo.teacher_availability s ON s.id = b.slot_id
+             JOIN dbo.users u ON u.id = cl.user_id
+             WHERE cl.student_audio_url IS NOT NULL
+               AND s.teacher_id = @teacherId
+             ORDER BY cl.created_at DESC`,
+            { teacherId },
+        );
+        res.json(result.recordset.map((row) => ({
+            id: row.id,
+            student: studentLabel(row, lang),
+            date: chipLabel(parseIsoDate(row.slot_iso), lang),
+            time: row.slot_hhmm,
+            lesson: pick(row, 'lesson_title', lang),
+            audioUrl: row.student_audio_url,
+        })));
     }));
 
     app.get('/api/teacher/schedule', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
@@ -1404,6 +2309,7 @@ export function registerRoutes(app) {
             teacherId,
             createdByTeacher: true,
         });
+        scheduleCalendarSync(booking.id, teacherId, req.user.id);
         res.json({
             id: booking.public_id,
             saved: true,
@@ -1497,6 +2403,8 @@ export function registerRoutes(app) {
             reason: String(req.body?.reason ?? 'teacher_cancel').slice(0, 200),
             slotAfter: 'open',
         });
+        const teacherId = await teacherScopeId(req);
+        scheduleCalendarSync(lesson.id, teacherId, booking.user_id);
         const date = parseIsoDate(booking.slot_iso);
         await addNotification(
             booking.user_id,
@@ -1526,9 +2434,38 @@ export function registerRoutes(app) {
         }
         const deductHours = Math.max(1, Number(booking.duration_hours) || 1);
         const audioUrl = String(req.body?.feedbackAudioUrl ?? '').trim().slice(0, 500) || null;
-        const already = await query(`SELECT id FROM dbo.class_logs WHERE booking_id = @id`, { id: booking.id });
+        const already = await query(`SELECT id, student_signature, outcome FROM dbo.class_logs WHERE booking_id = @id`, { id: booking.id });
         if (already.recordset[0]) {
-            throw new Error('บันทึกการสอนคลาสนี้แล้ว');
+            const existing = already.recordset[0];
+            if (existing.outcome === 'no_show' || outcome === 'no_show') {
+                throw new Error('บันทึกการสอนคลาสนี้แล้ว');
+            }
+            // Student may have signed first — teacher can still attach note / homework audio.
+            await query(
+                `UPDATE dbo.class_logs
+                 SET lesson_title = COALESCE(NULLIF(@title, N''), lesson_title),
+                     lesson_title_en = COALESCE(NULLIF(@titleEn, N''), lesson_title_en),
+                     note = @note,
+                     note_en = @noteEn,
+                     feedback_audio_url = COALESCE(@audioUrl, feedback_audio_url),
+                     hours_deducted = CASE WHEN hours_deducted IS NULL OR hours_deducted < 1 THEN @hours ELSE hours_deducted END,
+                     outcome = N'done'
+                 WHERE id = @id`,
+                {
+                    id: existing.id,
+                    title: booking.topic || 'เทคนิคการหายใจ + สเกลพื้นฐาน',
+                    titleEn: booking.topic_en || 'Breathing technique + basic scales',
+                    note,
+                    noteEn: null,
+                    audioUrl,
+                    hours: deductHours,
+                },
+            );
+            if (outcome === 'done') {
+                await notifyHomeworkAssigned(booking.user_id, note, Boolean(audioUrl));
+            }
+            res.json({ ok: true, hoursDeducted: 0 });
+            return;
         }
         let pkg = null;
         if (booking.user_package_id) {
@@ -1542,9 +2479,10 @@ export function registerRoutes(app) {
             pkg = await activePackage(booking.user_id);
         }
         const hoursBefore = pkg ? packageHoursLeft(pkg.hours_total, pkg.hours_used) : 0;
+        const chargeNow = outcome === 'no_show';
         await query(
-            `INSERT INTO dbo.class_logs (booking_id, user_id, lesson_title, lesson_title_en, note, note_en, feedback_audio_url, hours_deducted, outcome)
-             VALUES (@bookingId, @userId, @title, @titleEn, @note, @noteEn, @audioUrl, @hours, @outcome);
+            `INSERT INTO dbo.class_logs (booking_id, user_id, lesson_title, lesson_title_en, note, note_en, feedback_audio_url, hours_deducted, hours_charged_at, outcome)
+             VALUES (@bookingId, @userId, @title, @titleEn, @note, @noteEn, @audioUrl, @hours, CASE WHEN @chargeNow = 1 THEN SYSUTCDATETIME() ELSE NULL END, @outcome);
              UPDATE dbo.bookings SET status = @status, updated_at = SYSUTCDATETIME() WHERE id = @bookingId;`,
             {
                 bookingId: booking.id,
@@ -1555,11 +2493,12 @@ export function registerRoutes(app) {
                 noteEn: null,
                 audioUrl,
                 hours: deductHours,
+                chargeNow: chargeNow ? 1 : 0,
                 outcome,
                 status: outcome === 'done' ? 'done' : 'no_show',
             },
         );
-        if (pkg?.id) {
+        if (pkg?.id && chargeNow) {
             await query(`UPDATE dbo.user_packages SET hours_used = hours_used + @hours WHERE id = @pkgId`, {
                 pkgId: pkg.id,
                 hours: deductHours,
@@ -1568,7 +2507,6 @@ export function registerRoutes(app) {
             await maybeNotifyPackageHours(booking.user_id, pkg.id, hoursBefore, hoursAfter);
         }
         await query(`DELETE FROM dbo.booking_slots WHERE booking_id = @id`, { id: booking.id });
-        const student = await findUserById(booking.user_id);
         if (outcome === 'done') {
             await notifyHomeworkAssigned(booking.user_id, note, Boolean(audioUrl));
         }
@@ -1576,15 +2514,15 @@ export function registerRoutes(app) {
             booking.user_id,
             outcome === 'done' ? 'บันทึกการเรียนแล้ว' : 'บันทึกว่าไม่มาเรียน',
             outcome === 'done'
-                ? `ครูแอร์บันทึกคลาสแล้ว หัก ${deductHours} ชม. จากบัญชีของน้อง${student?.nickname ?? ''}`
+                ? `ครูแอร์บันทึกคลาสแล้ว — ลงชื่อในแอปเพื่อยืนยันการเข้าเรียนและหัก ${deductHours} ชม.`
                 : `บันทึก No-show และหัก ${deductHours} ชม. ตามเงื่อนไขแพ็กเกจ`,
             outcome === 'done' ? 'green' : 'pink',
             outcome === 'done' ? 'Lesson recorded' : 'Marked as no-show',
             outcome === 'done'
-                ? `Kru Air recorded the class and deducted ${deductHours} hour(s) from ${student?.nickname ?? 'your'} account.`
+                ? `Kru Air recorded the class — sign in the app to confirm attendance and deduct ${deductHours} hour(s).`
                 : `Marked as no-show and deducted ${deductHours} hour(s) per package terms.`,
         );
-        res.json({ ok: true, hoursDeducted: deductHours });
+        res.json({ ok: true, hoursDeducted: chargeNow ? deductHours : 0 });
     }));
 }
 

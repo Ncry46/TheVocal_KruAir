@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@app/context/AppContext';
 import { api } from '@app/services/apiClient';
-import { Logo } from '../Logo';
+import { BrandLogo } from '../BrandLogo';
 import { ThemeToggle } from '../ThemeToggle';
 import { avatarSrc, profilePath } from '@app/utils/avatar';
-import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon } from '../icons';
+import { resolveNotificationLink } from '@app/utils/notificationLink';
+import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon, WalletIcon } from '../icons';
 const NAV = {
     student: [
         {
@@ -15,6 +16,7 @@ const NAV = {
                 { to: '/app/packages', icon: <CartIcon width={18} height={18}/>, label: 'nav.buyPackages' },
                 { to: '/app/booking', icon: <CalendarIcon width={18} height={18}/>, label: 'nav.booking' },
                 { to: '/app/history', icon: <BookIcon width={18} height={18}/>, label: 'nav.history' },
+                { to: '/app/homework', icon: <BookIcon width={18} height={18}/>, label: 'nav.homework' },
             ],
         },
         {
@@ -29,7 +31,8 @@ const NAV = {
         {
             group: 'pages.scheduleTitle',
             items: [
-                { to: '/teacher', icon: <CalendarIcon width={18} height={18}/>, label: 'nav.schedule', end: true },
+                { to: '/teacher', icon: <HomeIcon width={18} height={18}/>, label: 'nav.today', end: true },
+                { to: '/teacher/calendar', icon: <CalendarIcon width={18} height={18}/>, label: 'nav.schedule' },
                 { to: '/teacher/requests', icon: <RefreshIcon width={18} height={18}/>, label: 'nav.requests' },
                 { to: '/teacher/students', icon: <GraduationIcon width={18} height={18}/>, label: 'nav.students' },
             ],
@@ -38,6 +41,8 @@ const NAV = {
             group: 'nav.adminGroup',
             items: [
                 { to: '/teacher/sales', icon: <ChartIcon width={18} height={18}/>, label: 'nav.sales' },
+                { to: '/teacher/payments', icon: <WalletIcon width={18} height={18}/>, label: 'nav.payments' },
+                { to: '/teacher/payment-links', icon: <WalletIcon width={18} height={18}/>, label: 'nav.paymentLinks' },
                 { to: '/teacher/users', icon: <UserIcon width={18} height={18}/>, label: 'nav.manageUsers' },
                 { to: '/teacher/vouchers', icon: <TicketIcon width={18} height={18}/>, label: 'nav.vouchers' },
             ],
@@ -56,17 +61,32 @@ const PAGE_TITLES = {
     '/app/packages': { title: 'nav.buyPackages', sub: 'pages.packagesSub' },
     '/app/booking': { title: 'nav.booking', sub: 'pages.bookingSub' },
     '/app/history': { title: 'nav.history', sub: 'pages.historySub' },
+    '/app/homework': { title: 'nav.homework', sub: 'pages.homeworkSub' },
     '/app/receipts': { title: 'nav.receipts', sub: 'pages.receiptsSub' },
     '/app/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
-    '/teacher': { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' },
+    '/teacher': { title: 'nav.today', sub: 'pages.todaySub' },
+    '/teacher/calendar': { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' },
     '/teacher/requests': { title: 'nav.requests', sub: 'pages.requestsSub' },
     '/teacher/students': { title: 'nav.students', sub: 'pages.studentsSub' },
     '/teacher/sales': { title: 'nav.sales', sub: 'pages.salesSub' },
+    '/teacher/payments': { title: 'nav.payments', sub: 'pages.paymentsSub' },
+    '/teacher/payment-links': { title: 'nav.paymentLinks', sub: 'pages.paymentLinksSub' },
     '/teacher/users': { title: 'nav.manageUsers', sub: 'pages.usersSub' },
     '/teacher/vouchers': { title: 'nav.vouchers', sub: 'pages.vouchersSub' },
     '/teacher/settings': { title: 'nav.settings', sub: 'pages.settingsSub' },
     '/teacher/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
 };
+function pathMatchesNavItem(pathname, item) {
+    if (item.end) {
+        return pathname === item.to;
+    }
+    return pathname === item.to || pathname.startsWith(`${item.to}/`);
+}
+
+function groupContainsPath(group, pathname) {
+    return group.items.some((item) => pathMatchesNavItem(pathname, item));
+}
+
 export function AppLayout({ mode }) {
     const { language, logout, setLanguage, t, user } = useApp();
     const navigate = useNavigate();
@@ -75,10 +95,22 @@ export function AppLayout({ mode }) {
     const [bellOpen, setBellOpen] = useState(false);
     const [reqCount, setReqCount] = useState(0);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const pageInfo = PAGE_TITLES[location.pathname] ?? (mode === 'teacher'
-        ? { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' }
-        : { title: 'nav.studentHome', sub: 'pages.studentHomeSub' });
+    const navGroups = NAV[mode];
+    const activeGroupKey = navGroups.find((group) => groupContainsPath(group, location.pathname))?.group
+        ?? navGroups[0]?.group
+        ?? '';
+    const [openGroup, setOpenGroup] = useState(activeGroupKey);
+    const pageInfo = PAGE_TITLES[location.pathname]
+        ?? (location.pathname.startsWith('/teacher/students/') ? { title: 'nav.students', sub: 'pages.studentProfileSub' } : null)
+        ?? (mode === 'teacher'
+            ? { title: 'nav.today', sub: 'pages.todaySub' }
+            : { title: 'nav.studentHome', sub: 'pages.studentHomeSub' });
     const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+    useEffect(() => {
+        setOpenGroup(activeGroupKey);
+    }, [activeGroupKey]);
+
     useEffect(() => {
         const load = () => api.getNotifications().then(setNotifs).catch(() => {});
         load();
@@ -99,9 +131,22 @@ export function AppLayout({ mode }) {
         }
         setBellOpen((v) => !v);
     };
+    const openNotification = (notification) => {
+        const link = resolveNotificationLink(notification, mode);
+        if (!link) {
+            return;
+        }
+        setBellOpen(false);
+        navigate(link);
+    };
+    const toggleGroup = (groupKey) => {
+        setOpenGroup((current) => (current === groupKey ? '' : groupKey));
+    };
     return (<div className="app">
       <aside className={`side ${sidebarOpen ? 'open' : ''}`}>
-        <Logo size={42}/>
+        <div className="side-brand">
+          <BrandLogo light size={46} stacked onClick={() => { navigate('/'); closeSidebar(); }}/>
+        </div>
 
         <div className="role-badge">
           {mode === 'student' && <><GraduationIcon width={16} height={16}/> {t('roles.student')}</>}
@@ -109,14 +154,44 @@ export function AppLayout({ mode }) {
         </div>
 
         <nav className="side-nav">
-          {NAV[mode].map((g, gi) => (<div key={gi}>
-              <div className="grp">{t(g.group)}</div>
-              {g.items.map((item) => (<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => (isActive ? 'on' : '')} onClick={closeSidebar}>
-                  <span className="ic">{item.icon}</span>
-                  {t(item.label)}
-                  {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
-                </NavLink>))}
-            </div>))}
+          {navGroups.map((group) => {
+              const isOpen = openGroup === group.group;
+              const isActiveGroup = groupContainsPath(group, location.pathname);
+              const groupBadge = group.items.some((item) => item.to === '/teacher/requests') && reqCount > 0
+                  ? reqCount
+                  : 0;
+              return (
+                <div key={group.group} className={`side-nav-group${isOpen ? ' open' : ''}${isActiveGroup ? ' active' : ''}`}>
+                  <button
+                    type="button"
+                    className="grp"
+                    aria-expanded={isOpen}
+                    onClick={() => toggleGroup(group.group)}
+                  >
+                    <span className="grp-label">{t(group.group)}</span>
+                    {groupBadge > 0 && !isOpen && <span className="nav-badge">{groupBadge}</span>}
+                    <span className="grp-chevron" aria-hidden="true"/>
+                  </button>
+                  {isOpen && (
+                    <div className="side-nav-items">
+                      {group.items.map((item) => (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          end={item.end}
+                          className={({ isActive }) => (isActive ? 'on' : '')}
+                          onClick={closeSidebar}
+                        >
+                          <span className="ic">{item.icon}</span>
+                          {t(item.label)}
+                          {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+          })}
         </nav>
 
         <div className="foot">
@@ -162,16 +237,27 @@ export function AppLayout({ mode }) {
                     <b>{t('common.notifications')}</b>
                     <span>{unread > 0 ? `${unread} ${t('common.newMessages')}` : t('common.allRead')}</span>
                   </div>
-                  {notifs && notifs.length > 0 ? (notifs.map((n) => (<div key={n.id} className={`bell-item ${n.read ? '' : 'new'}`}>
-                        <div className={`bell-ic ${n.tone}`}>
-                          {n.tone === 'green' ? (<CheckIcon width={15} height={15}/>) : n.tone === 'blue' ? (<CalendarIcon width={15} height={15}/>) : (<BellIcon width={15} height={15}/>)}
-                        </div>
-                        <div>
-                          <b>{n.title}</b>
-                          <p>{n.body}</p>
-                          <span className="time">{n.time}</span>
-                        </div>
-                      </div>))) : (<div className="bell-empty">{t('common.noNotifications')}</div>)}
+                  {notifs && notifs.length > 0 ? (notifs.map((n) => {
+                        const link = resolveNotificationLink(n, mode);
+                        const ItemTag = link ? 'button' : 'div';
+                        return (
+                          <ItemTag
+                            key={n.id}
+                            type={link ? 'button' : undefined}
+                            className={`bell-item ${n.read ? '' : 'new'}${link ? ' clickable' : ''}`}
+                            onClick={link ? () => openNotification(n) : undefined}
+                          >
+                            <div className={`bell-ic ${n.tone}`}>
+                              {n.tone === 'green' ? (<CheckIcon width={15} height={15}/>) : n.tone === 'blue' ? (<CalendarIcon width={15} height={15}/>) : (<BellIcon width={15} height={15}/>)}
+                            </div>
+                            <div>
+                              <b>{n.title}</b>
+                              <p>{n.body}</p>
+                              <span className="time">{n.time}</span>
+                            </div>
+                          </ItemTag>
+                        );
+                      })) : (<div className="bell-empty">{t('common.noNotifications')}</div>)}
                 </div>)}
             </div>
             <button type="button" className="user" title={t('nav.profile')} onClick={() => navigate(profilePath(user))}>
@@ -186,7 +272,7 @@ export function AppLayout({ mode }) {
           </div>
         </header>
 
-        <main className="content">
+        <main className="content app-content">
           <Outlet />
         </main>
       </div>

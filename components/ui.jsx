@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+
 export function Button({ variant = 'pink', size, className = '', pink, green, line, ghost, danger, ...props }) {
     const v = pink ? 'pink' : green ? 'green' : line ? 'line' : ghost ? 'ghost' : danger ? 'danger' : variant;
     return (<button className={`btn ${v} ${size === 'sm' ? 'sm' : ''} ${className}`} {...props}/>);
@@ -42,20 +45,52 @@ export function Field({ label, required, children }) {
     </div>);
 }
 /* ---------- Modal ---------- */
-export function Modal({ open, onClose, title, children }) {
-    if (!open)
+export function Modal({ open, onClose, title, children, className = '', backdropClassName = '', headerActions = null }) {
+    useEffect(() => {
+        if (!open) {
+            return undefined;
+        }
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [open, onClose]);
+
+    if (!open) {
         return null;
-    return (<div className="backdrop open" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="mh">
-          <b>{title}</b>
-          <button className="x" onClick={onClose} aria-label="ปิด">
-            ✕
-          </button>
+    }
+
+    return createPortal(
+      <div
+        className={`backdrop open ${backdropClassName}`.trim()}
+        onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <div className={`modal ${className}`.trim()} onClick={(event) => event.stopPropagation()}>
+          <div className="mh">
+            <b>{title}</b>
+            <div className="mh-actions">
+              {headerActions}
+              <button type="button" className="x" onClick={onClose} aria-label="ปิด">
+                ✕
+              </button>
+            </div>
+          </div>
+          <div className="mb">{children}</div>
         </div>
-        <div className="mb">{children}</div>
-      </div>
-    </div>);
+      </div>,
+      document.body,
+    );
 }
 /* ---------- Progress ---------- */
 export function Progress({ value, max }) {
@@ -77,18 +112,20 @@ export function Skeleton() {
 }
 /* ---------- Table helper ---------- */
 export function Table({ heads, rows }) {
-    return (<table>
-      <thead>
-        <tr>
-          {heads.map((h) => (<th key={h}>{h}</th>))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (<tr key={i}>
-            {row.map((cell, j) => (<td key={j}>{cell}</td>))}
-          </tr>))}
-      </tbody>
-    </table>);
+    return (<div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            {heads.map((h) => (<th key={h}>{h}</th>))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (<tr key={i}>
+              {row.map((cell, j) => (<td key={j}>{cell}</td>))}
+            </tr>))}
+        </tbody>
+      </table>
+    </div>);
 }
 /* ---------- Stat (landing) ---------- */
 export function Stat({ value, label }) {

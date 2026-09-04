@@ -14,6 +14,31 @@ export function slotStartAt(isoDate, hhmm) {
     return new Date(year, month - 1, day, hour, minute || 0, 0, 0);
 }
 
+export function lessonEndsAt(isoDate, hhmm, durationHours = 1) {
+    const start = slotStartAt(isoDate, hhmm);
+    const hours = Math.max(1, Number(durationHours) || 1);
+    return new Date(start.getTime() + hours * 36e5);
+}
+
+/** Calendar date YYYY-MM-DD in Asia/Bangkok. */
+export function bangkokDateIso(now = new Date()) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(now);
+}
+
+/** Sign allowed on the lesson's calendar day only (Asia/Bangkok). */
+export function canSignLesson({ slotIso, now = new Date() }) {
+    const lessonDay = String(slotIso || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(lessonDay)) {
+        return false;
+    }
+    return bangkokDateIso(now) === lessonDay;
+}
+
 export function hoursUntilSlot(isoDate, hhmm, now = new Date()) {
     return (slotStartAt(isoDate, hhmm).getTime() - now.getTime()) / 36e5;
 }

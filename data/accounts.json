@@ -35,6 +35,23 @@
     "avatar": "/img/teacher-studio.jpg"
   },
   {
+    "publicId": "tch-002",
+    "role": "teacher",
+    "email": "krukob@email.com",
+    "phone": null,
+    "password": "krukob123",
+    "name": "ครูกบ",
+    "nameEn": "Kru Kob",
+    "nickname": "กบ",
+    "nicknameEn": "Kob",
+    "age": 32,
+    "education": "ปริญญาตรี",
+    "genres": ["Pop", "Ballad", "Jazz"],
+    "reason": "สอนร้องเพลงและเทคนิคการหายใจ",
+    "lineLinked": false,
+    "avatar": "/img/teacher-studio.jpg"
+  },
+  {
     "publicId": "admin-001",
     "role": "admin",
     "email": "admin@kruaer.com",

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Field, Input } from '@components/ui';
-import { LogoMark } from '@components/Logo';
-import { PublicLayout } from '@components/layout/PublicLayout';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/apiClient';
 import { beginLineLogin } from '../services/lineAuth';
@@ -24,6 +22,22 @@ const GENRES = [
     { value: 'Jazz', th: 'Jazz', en: 'Jazz' },
     { value: 'อื่น ๆ', th: 'อื่น ๆ', en: 'Other' },
 ];
+const INSTRUMENTS = [
+    { value: 'ไม่เล่น', th: 'ไม่เล่น', en: 'None' },
+    { value: 'เปียโน', th: 'เปียโน', en: 'Piano' },
+    { value: 'กีตาร์', th: 'กีตาร์', en: 'Guitar' },
+    { value: 'กลอง', th: 'กลอง', en: 'Drums' },
+    { value: 'Ukulele', th: 'Ukulele', en: 'Ukulele' },
+    { value: 'อื่น ๆ', th: 'อื่น ๆ', en: 'Other' },
+];
+const SINGING_EXPERIENCE = [
+    { value: 'ไม่เคยเรียน', th: 'ไม่เคยเรียน', en: 'Never studied' },
+    { value: 'เรียนมาแล้ว 1–6 เดือน', th: 'เรียนมาแล้ว 1–6 เดือน', en: '1–6 months' },
+    { value: 'เรียนมาแล้ว 6 เดือน–1 ปี', th: 'เรียนมาแล้ว 6 เดือน–1 ปี', en: '6 months–1 year' },
+    { value: 'เรียนมาแล้ว 1 ปีขึ้นไป', th: 'เรียนมาแล้ว 1 ปีขึ้นไป', en: '1+ years' },
+    { value: 'มีประสบการณ์แสดง', th: 'มีประสบการณ์แสดง', en: 'Performance experience' },
+];
+
 export default function Register() {
     const { register, t, toast, language } = useApp();
     const navigate = useNavigate();
@@ -37,14 +51,20 @@ export default function Register() {
     const [phone, setPhone] = useState('');
     const [emergencyContact, setEmergencyContact] = useState('');
     const [password, setPassword] = useState('');
-    const [age, setAge] = useState('');
+    const [birthDate, setBirthDate] = useState('');
     const [education, setEducation] = useState('');
+    const [singingExperience, setSingingExperience] = useState('');
     const [genres, setGenres] = useState([]);
-    const [reason, setReason] = useState('');
+    const [instruments, setInstruments] = useState([]);
+    const [goals, setGoals] = useState('');
+    const [addressStreet, setAddressStreet] = useState('');
+    const [addressDistrict, setAddressDistrict] = useState('');
+    const [addressProvince, setAddressProvince] = useState('');
     const [consent, setConsent] = useState(false);
     const [busy, setBusy] = useState(false);
     const [lineBusy, setLineBusy] = useState(false);
     const toggleGenre = (g) => setGenres((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+    const toggleInstrument = (value) => setInstruments((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]));
 
     useEffect(() => {
         if (!lineTicket) {
@@ -96,17 +116,22 @@ export default function Register() {
                     nameEn,
                     nickname,
                     nicknameEn,
-                    age: Number(age),
+                    birthDate,
                     education,
+                    singingExperience,
                     genres,
-                    reason,
+                    instruments,
+                    goals,
+                    addressStreet,
+                    addressDistrict,
+                    addressProvince,
                     consent,
                     email,
                     phone,
                     emergencyContact,
                     password,
                 });
-            navigate('/app');
+            navigate(lineTicket ? '/' : '/app/packages?pkg=single', { replace: true });
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('auth.registerFailed'));
@@ -129,12 +154,12 @@ export default function Register() {
     };
 
     return (
-      <PublicLayout footer={false}>
-        <div className="authwrap">
-          <form className="authcard" onSubmit={submit}>
-            <LogoMark size={64}/>
-            <h2>{t('auth.registerTitle')}</h2>
-            <div className="sub">{lineTicket ? t('auth.lineRegisterSub') : t('auth.registerSub')}</div>
+          <form className="authcard authcard-register" onSubmit={submit}>
+            <header className="authcard-head">
+              <span className="auth-eyebrow">{t('common.register')}</span>
+              <h2>{t('auth.registerTitle')}</h2>
+              <p className="auth-sub">{lineTicket ? t('auth.lineRegisterSub') : t('auth.registerSub')}</p>
+            </header>
 
         {lineTicket ? (
           <>
@@ -150,6 +175,8 @@ export default function Register() {
           </>
         ) : (
           <>
+        <fieldset className="auth-block">
+          <legend>{language === 'en' ? 'Profile' : 'ข้อมูลส่วนตัว'}</legend>
         <Field label={t('auth.name')} required>
           <Input placeholder="เช่น สมชาย ใจดี" value={name} onChange={(e) => setName(e.target.value)}/>
         </Field>
@@ -164,7 +191,13 @@ export default function Register() {
             <Input placeholder={t('auth.nicknameEnPlaceholder')} value={nicknameEn} onChange={(e) => setNicknameEn(e.target.value)}/>
           </Field>
         </div>
+        <Field label={t('auth.birthDate')} required>
+          <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)}/>
+        </Field>
+        </fieldset>
 
+        <fieldset className="auth-block">
+          <legend>{language === 'en' ? 'Account' : 'บัญชีผู้ใช้'}</legend>
         <div className="two-col">
           <Field label={t('auth.email')} required>
             <Input type="email" placeholder={t('auth.idPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)}/>
@@ -182,15 +215,23 @@ export default function Register() {
             <Input placeholder={t('auth.emergencyPlaceholder')} value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)}/>
           </Field>
         </div>
+        </fieldset>
 
+        <fieldset className="auth-block">
+          <legend>{language === 'en' ? 'Goals' : 'เป้าหมายการเรียน'}</legend>
         <div className="two-col">
-          <Field label={t('auth.age')} required>
-            <Input type="number" placeholder="เช่น 22" value={age} onChange={(e) => setAge(e.target.value)}/>
-          </Field>
           <Field label={t('auth.education')} required>
             <select className="input" value={education} onChange={(e) => setEducation(e.target.value)}>
               <option value="">{t('auth.select')}</option>
               {EDUCATION_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>{language === 'en' ? item.en : item.th}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t('auth.singingExperience')} required>
+            <select className="input" value={singingExperience} onChange={(e) => setSingingExperience(e.target.value)}>
+              <option value="">{t('auth.select')}</option>
+              {SINGING_EXPERIENCE.map((item) => (
                 <option key={item.value} value={item.value}>{language === 'en' ? item.en : item.th}</option>
               ))}
             </select>
@@ -205,9 +246,33 @@ export default function Register() {
           </div>
         </Field>
 
-        <Field label={t('auth.reason')} required>
-          <textarea className="input" rows={2} placeholder="เช่น อยากออดิชันวงดนตรี / พัฒนาน้ำเสียง…" value={reason} onChange={(e) => setReason(e.target.value)}/>
+        <Field label={t('auth.instruments')} required>
+          <div className="genre-row">
+            {INSTRUMENTS.map((item) => (<span key={item.value} className={`chk ${instruments.includes(item.value) ? 'on' : ''}`} onClick={() => toggleInstrument(item.value)}>
+                {language === 'en' ? item.en : item.th}
+              </span>))}
+          </div>
         </Field>
+
+        <Field label={t('auth.goals')} required>
+          <textarea className="input" rows={2} placeholder="เช่น อยากออดิชันวงดนตรี / พัฒนาน้ำเสียง…" value={goals} onChange={(e) => setGoals(e.target.value)}/>
+        </Field>
+        </fieldset>
+
+        <fieldset className="auth-block">
+          <legend>{language === 'en' ? 'Address' : 'ที่อยู่'}</legend>
+        <Field label={t('auth.addressStreet')}>
+          <Input placeholder="123/4 Sukhumvit Rd." value={addressStreet} onChange={(e) => setAddressStreet(e.target.value)}/>
+        </Field>
+        <div className="two-col">
+          <Field label={t('auth.addressDistrict')}>
+            <Input value={addressDistrict} onChange={(e) => setAddressDistrict(e.target.value)}/>
+          </Field>
+          <Field label={t('auth.addressProvince')} required>
+            <Input placeholder="กรุงเทพมหานคร" value={addressProvince} onChange={(e) => setAddressProvince(e.target.value)}/>
+          </Field>
+        </div>
+        </fieldset>
           </>
         )}
 
@@ -229,11 +294,9 @@ export default function Register() {
           </>
         )}
 
-            <div className="authlink">
+            <p className="authlink">
               {t('auth.hasAccount')} <Link to="/login">{t('common.login')}</Link>
-            </div>
+            </p>
           </form>
-        </div>
-      </PublicLayout>
     );
 }

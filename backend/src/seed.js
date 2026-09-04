@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { toIsoDate } from './dates.js';
 import { closePool } from './db.js';
 import { educationEn, genresEn } from './lang.js';
-import { query, toYn } from './store.js';
+import { query, toYn, ensureTeacherAvailability } from './store.js';
 
 const dataDir = join(dirname(fileURLToPath(import.meta.url)), '../../data');
 function loadJson(name) {
@@ -212,6 +212,10 @@ async function seed() {
          VALUES (@bookingId, @userId, N'เทคนิคการหายใจ + สเกลพื้นฐาน', N'เสียงดีขึ้นมาก ฝึก C3–C5', 1, 'done')`,
         { bookingId: pastBooking.recordset[0].id, userId: mintId },
     );
+
+    if (ids['tch-002']) {
+        await ensureTeacherAvailability(ids['tch-002']);
+    }
 
     console.log('Seed completed for BD_AIR');
     await closePool();
