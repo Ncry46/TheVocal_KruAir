@@ -3642,6 +3642,13 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
   overflow: auto;
   padding-right: 2px;
 }
+.sched-day-card .empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
 .sched-signatures {
   margin-top: 0;
 }
@@ -3649,6 +3656,9 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
 @media (max-width: 960px) {
   .booking-layout,
   .sched-layout { grid-template-columns: 1fr; }
+  .sched-day-card .sched-list {
+    max-height: min(420px, 50vh);
+  }
 }
 
 @media (max-width: 640px) {
