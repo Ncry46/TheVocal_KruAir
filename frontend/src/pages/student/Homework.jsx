@@ -285,8 +285,8 @@ export default function Homework() {
         };
     }, []);
     const [filterYear, setFilterYear] = useState(todayParts.year);
-    const [filterMonth, setFilterMonth] = useState(todayParts.month);
-    const [filterDay, setFilterDay] = useState(todayParts.day);
+    const [filterMonth, setFilterMonth] = useState('');
+    const [filterDay, setFilterDay] = useState('');
 
     const load = async () => {
         const [homework, signRows] = await Promise.all([
@@ -323,8 +323,8 @@ export default function Homework() {
 
     const resetFilter = () => {
         setFilterYear(todayParts.year);
-        setFilterMonth(todayParts.month);
-        setFilterDay(todayParts.day);
+        setFilterMonth('');
+        setFilterDay('');
     };
 
     const submitSign = async (bookingId) => {

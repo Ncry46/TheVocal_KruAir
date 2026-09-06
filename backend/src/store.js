@@ -1075,12 +1075,17 @@ export async function signLessonAndDeductHours({ bookingPublicId, userId, signat
         if (row.outcome === 'no_show') {
             throw new Error('คลาสนี้ถูกบันทึกว่าไม่มาเรียน');
         }
-        if (!canSignLesson({ slotIso: row.slot_iso })) {
-            throw new Error('เซ็นได้เฉพาะวันที่มีคลาสเท่านั้น');
-        }
         const allowedStatus = ['confirmed', 'moved', 'done'];
-        if (!row.log_id && !allowedStatus.includes(row.booking_status)) {
-            throw new Error('ยังไม่สามารถลงชื่อได้ จนกว่าจะยืนยันนัดเรียน');
+        if (!row.log_id) {
+            if (!canSignLesson({ slotIso: row.slot_iso })) {
+                throw new Error('เซ็นได้เฉพาะวันที่มีคลาสเท่านั้น');
+            }
+            if (!allowedStatus.includes(row.booking_status)) {
+                throw new Error('ยังไม่สามารถลงชื่อได้ จนกว่าจะยืนยันนัดเรียน');
+            }
+        }
+        else if (!(row.outcome === 'done' && !row.student_signature)) {
+            throw new Error('ยังไม่สามารถลงชื่อได้');
         }
 
         const deductHours = Math.max(1, Number(row.hours_deducted) || Number(row.duration_hours) || 1);

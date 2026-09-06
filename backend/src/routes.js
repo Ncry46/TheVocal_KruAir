@@ -1165,10 +1165,13 @@ export function registerRoutes(app) {
              JOIN dbo.teacher_availability s ON s.id = b.slot_id
              LEFT JOIN dbo.class_logs cl ON cl.booking_id = b.id
              WHERE b.user_id = @userId
-               AND CONVERT(varchar(10), s.slot_date, 23) = @today
                AND b.status IN (N'confirmed', N'moved', N'done')
-               AND (cl.id IS NULL OR (cl.outcome = N'done' AND cl.student_signature IS NULL))
-             ORDER BY s.slot_time ASC`,
+               AND (cl.outcome IS NULL OR cl.outcome <> N'no_show')
+               AND (
+                    (cl.outcome = N'done' AND cl.student_signature IS NULL)
+                    OR (cl.id IS NULL AND CONVERT(varchar(10), s.slot_date, 23) = @today)
+               )
+             ORDER BY s.slot_date DESC, s.slot_time ASC`,
             { userId: req.user.id, today },
         );
         res.json(result.recordset.map((row) => {
