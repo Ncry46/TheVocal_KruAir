@@ -361,7 +361,7 @@ export default function Homework() {
               <label className="signature-filter-field">
                 <span className="muted">{t('signature.filterYear')}</span>
                 <select
-                  className="input sales-filter"
+                  className="input"
                   value={filterYear}
                   onChange={(e) => {
                       setFilterYear(e.target.value);
@@ -376,7 +376,7 @@ export default function Homework() {
               <label className="signature-filter-field">
                 <span className="muted">{t('signature.filterMonth')}</span>
                 <select
-                  className="input sales-filter"
+                  className="input"
                   value={filterMonth}
                   onChange={(e) => {
                       const nextMonth = e.target.value;
@@ -398,7 +398,7 @@ export default function Homework() {
               <label className="signature-filter-field">
                 <span className="muted">{t('signature.filterDay')}</span>
                 <select
-                  className="input sales-filter"
+                  className="input"
                   value={filterDay}
                   disabled={!filterMonth}
                   onChange={(e) => setFilterDay(e.target.value)}

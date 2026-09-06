@@ -3586,7 +3586,65 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
   .kpi-grid { grid-template-columns: 1fr; }
 }
 
-.sched-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.sched-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.92fr) minmax(320px, 1.08fr);
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+.sched-layout > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.sched-layout > .card:hover {
+  transform: none;
+}
+.sched-cal {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.sched-cal .cal-header {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+.sched-cal .cal-grid {
+  gap: 5px;
+}
+.sched-cal .cal-day {
+  min-height: 36px;
+  border-radius: 12px;
+}
+.sched-cal .cal-legend {
+  margin-top: auto;
+}
+.sched-cal-actions {
+  display: flex;
+  margin-top: 12px;
+}
+.sched-cal-actions .btn {
+  width: 100%;
+}
+.sched-day-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.sched-day-card .sched-list {
+  flex: 1 1 auto;
+  min-height: 180px;
+  max-height: min(560px, 58vh);
+  overflow: auto;
+  padding-right: 2px;
+}
+.sched-signatures {
+  margin-top: 0;
+}
 
 @media (max-width: 960px) {
   .booking-layout,
@@ -4254,10 +4312,10 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
 }
 
 .signature-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 12px;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
   margin-bottom: 14px;
   padding-bottom: 14px;
   border-bottom: 1px dashed var(--line);
@@ -4266,7 +4324,7 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
 .signature-filter-field {
   display: grid;
   gap: 4px;
-  min-width: 120px;
+  min-width: 0;
 }
 
 .signature-filter-field .muted {
@@ -4274,8 +4332,25 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
   font-weight: 600;
 }
 
+.signature-filter-row .input,
 .signature-filter-row .sales-filter {
-  min-width: 120px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.signature-filter-row .btn {
+  width: 100%;
+  min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  .signature-filter-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .signature-filter-row .btn {
+    grid-column: 1 / -1;
+  }
 }
 
 html[data-liff="1"] .public-nav,

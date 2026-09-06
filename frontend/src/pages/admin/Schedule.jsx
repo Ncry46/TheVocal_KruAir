@@ -387,7 +387,8 @@ export default function Schedule() {
       </div>
 
       <div className="sched-layout">
-        <Card>
+        <Card className="sched-cal-card">
+          <div className="sched-cal">
           <div className="cal-header">
             <button type="button" className="cal-nav" onClick={prevMonth} aria-label={t('schedule.prev')}>‹</button>
             <div className="cal-title">{week.title || monthLabel}</div>
@@ -428,17 +429,20 @@ export default function Schedule() {
             <span><span className="cal-dot-legend selected"/> {t('schedule.selected')}</span>
             <span><span className="cal-dot-legend closed"/> {t('schedule.closed')}</span>
           </div>
-          <div className="dp-actions" style={{ marginTop: 14 }}>
+          <div className="dp-actions sched-cal-actions">
             <Button ghost onClick={() => { setBulkFrom(selectedIso); setBulkTo(selectedIso); setBulkOpen(true); }}>
               {t('schedule.bulkClose')}
             </Button>
           </div>
+          </div>
         </Card>
 
         <Card
+          className="sched-day-card"
           title={selectedIso ? formatLongDate(selectedIso, language) : t('schedule.pickDay')}
           action={<Button pink size="sm" onClick={openBookModal}>{t('schedule.bookStudent')}</Button>}
         >
+          <div className="sched-day-body">
           {displaySlots.length === 0 ? (
             <div className="empty">{t('schedule.emptySlots')}</div>
           ) : (
@@ -515,6 +519,7 @@ export default function Schedule() {
               ))}
             </div>
           )}
+          </div>
         </Card>
       </div>
 
@@ -638,16 +643,16 @@ export default function Schedule() {
       )}
 
       <Card
+        className="sched-signatures"
         title={t('teacherSignature.title')}
         action={filteredPendingSignatures.length > 0
             ? <span className="badge amber">{filteredPendingSignatures.length} {t('teacherSignature.pending')}</span>
             : <span className="badge green">{t('teacherSignature.nonePending')}</span>}
-        style={{ marginTop: 16 }}
       >
         <div className="signature-filter-row">
           <label className="signature-filter-field">
             <span className="muted">{t('teacherSignature.filterYear')}</span>
-            <select className="input sales-filter" value={sigFilterYear} onChange={(e) => onSignatureYearChange(e.target.value)}>
+            <select className="input" value={sigFilterYear} onChange={(e) => onSignatureYearChange(e.target.value)}>
               {signatureYearOptions.map((item) => (
                 <option key={item} value={item}>{language === 'en' ? item : Number(item) + 543}</option>
               ))}
@@ -655,7 +660,7 @@ export default function Schedule() {
           </label>
           <label className="signature-filter-field">
             <span className="muted">{t('teacherSignature.filterMonth')}</span>
-            <select className="input sales-filter" value={sigFilterMonth} onChange={(e) => onSignatureMonthChange(e.target.value)}>
+            <select className="input" value={sigFilterMonth} onChange={(e) => onSignatureMonthChange(e.target.value)}>
               <option value="">{t('teacherSignature.allMonths')}</option>
               {monthLabels.map((label, index) => (
                 <option key={label} value={String(index + 1)}>{label}</option>
@@ -665,7 +670,7 @@ export default function Schedule() {
           <label className="signature-filter-field">
             <span className="muted">{t('teacherSignature.filterDay')}</span>
             <select
-              className="input sales-filter"
+              className="input"
               value={sigFilterDay}
               disabled={!sigFilterMonth}
               onChange={(e) => setSigFilterDay(e.target.value)}
