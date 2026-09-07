@@ -145,7 +145,7 @@ export function AppLayout({ mode }) {
     return (<div className="app">
       <aside className={`side ${sidebarOpen ? 'open' : ''}`}>
         <div className="side-brand">
-          <BrandLogo light size={46} stacked onClick={() => { navigate('/'); closeSidebar(); }}/>
+          <BrandLogo light size={42} onClick={() => { navigate('/'); closeSidebar(); }}/>
         </div>
 
         <div className="role-badge">

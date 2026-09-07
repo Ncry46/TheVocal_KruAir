@@ -3,16 +3,11 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-
-const colors = ['#334E68', '#486581', '#627D98', '#243B53', '#829AB1'];
 
 const timeframeLabels = {
   daily: 'รายวัน',
@@ -64,17 +59,6 @@ function RevenueTooltip({ active, payload }) {
   );
 }
 
-function DonutTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const item = payload[0].payload;
-  return (
-    <div className="revenue-tooltip">
-      <div className="revenue-tooltip-title">{item.name}</div>
-      <div className="revenue-tooltip-total">{item.value} units</div>
-    </div>
-  );
-}
-
 export function RevenueAnalyticsChart({ analytics }) {
   const [timeframe, setTimeframe] = useState('monthly');
   const timeframeOptions = useMemo(
@@ -89,18 +73,6 @@ export function RevenueAnalyticsChart({ analytics }) {
     () => timeframeOptions.find((option) => option.key === timeframe) ?? timeframeOptions[1],
     [timeframe, timeframeOptions],
   );
-  const donutData = useMemo(() => {
-    const totals = new Map();
-    activeOption.data.forEach((point) => {
-      Object.entries(point.packages).forEach(([name, units]) => {
-        totals.set(name, (totals.get(name) ?? 0) + Number(units || 0));
-      });
-    });
-    return Array.from(totals, ([name, value]) => ({ name, value }))
-      .filter((item) => item.value > 0)
-      .sort((a, b) => b.value - a.value);
-  }, [activeOption.data]);
-  const bestSeller = donutData[0];
 
   return (
     <section className="revenue-analytics-card">
@@ -164,47 +136,6 @@ export function RevenueAnalyticsChart({ analytics }) {
             </AreaChart>
           </ResponsiveContainer>
         </div>
-
-        <aside className="package-donut-card">
-          <div>
-            <h4>แพ็กเกจขายดีที่สุด</h4>
-            <p>{bestSeller ? `${bestSeller.name} · ${bestSeller.value} units` : 'ยังไม่มีข้อมูลการขาย'}</p>
-          </div>
-          <div className="package-donut-shell">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Tooltip content={<DonutTooltip />} />
-                <Pie
-                  data={donutData}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius="62%"
-                  outerRadius="86%"
-                  paddingAngle={4}
-                  stroke="var(--card)"
-                  strokeWidth={4}
-                >
-                  {donutData.map((entry, index) => (
-                    <Cell key={entry.name} fill={colors[index % colors.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="package-donut-center">
-              <b>{bestSeller?.value ?? 0}</b>
-              <span>units</span>
-            </div>
-          </div>
-          <div className="package-donut-legend">
-            {donutData.map((item, index) => (
-              <div key={item.name}>
-                <i style={{ background: colors[index % colors.length] }} />
-                <span>{item.name}</span>
-                <b>{item.value}</b>
-              </div>
-            ))}
-          </div>
-        </aside>
       </div>
     </section>
   );

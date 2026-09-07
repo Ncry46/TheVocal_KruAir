@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PublicLayout } from '@components/layout/PublicLayout';
 import { Button, Spinner } from '@components/ui';
-import { BellIcon, CalendarIcon, CardIcon, ChartIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, PinIcon, TargetIcon } from '@components/icons';
+import { BellIcon, CalendarIcon, CardIcon, ChartIcon, CrownIcon, GraduationIcon, MicIcon, MusicNoteIcon, TargetIcon } from '@components/icons';
 import { SectionDivider } from '@components/SectionDivider';
 import { api } from '../services/apiClient';
 import { useApp } from '../context/AppContext';
@@ -209,17 +209,16 @@ export default function Landing() {
           </div>
 
           {pkgs === null ? (<Spinner />) : (
-            <div
-              className={
-                pkgs.length === 1 ? 'pkg-showcase'
-                  : pkgs.length === 2 ? 'pkg-grid-duo'
-                    : 'grid cols-3'
-              }
-              style={{ marginBottom: 18 }}
-            >
-              {pkgs.map((p, i) => (<div key={p.id} className={`pkg reveal d${i + 1} ${p.id === 'pro' ? 'popular' : ''}`}>
+            <div className={`pkg-list${pkgs.length === 1 ? ' single' : ''}`} style={{ marginBottom: 18 }}>
+              {pkgs.map((p, i) => {
+                const isSingle = pkgs.length === 1;
+                return (
+                <div key={p.id} className={`pkg pkg-h reveal d${i + 1} ${p.id === 'pro' ? 'popular' : ''}${isSingle ? ' single spotlight' : ''}`}>
                   {p.tag && (<div className="crown">
                       <CrownIcon width={13} height={13}/> {p.tag}
+                    </div>)}
+                  {!p.tag && isSingle && (<div className="crown">
+                      <CrownIcon width={13} height={13}/> {language === 'en' ? 'RECOMMENDED TO START' : 'แนะนำสำหรับเริ่มเรียน'}
                     </div>)}
                   <div className="top">
                     <img src={packageImage(p.id)} alt={p.name} loading="lazy"/>
@@ -228,25 +227,49 @@ export default function Landing() {
                     </span>
                   </div>
                   <div className="body">
-                    <div className="nm">{p.name}</div>
-                    <div className="hrs">
-                      {p.hours} <small>{t('landing.hoursUnit')}</small>
-                    </div>
-                    <div className="price">฿{p.price.toLocaleString()}</div>
-                    <div className="per">{p.note}</div>
-                    <Button pink onClick={() => navigate(user?.role === 'student' ? `/app/packages?pkg=${p.id}` : '/register')}>
-                      {t('landing.buyThis')}
-                    </Button>
+                    {isSingle ? (
+                      <div className="spot-col">
+                        <div>
+                          <div className="spot-tag">
+                            <i aria-hidden="true" />{p.name}
+                          </div>
+                          <h3 className="spot-title">{language === 'en' ? 'Trial course' : 'คอร์สทดลองเรียน'}</h3>
+                          <div className="spot-price">
+                            <span className="num">฿{p.price.toLocaleString()}</span>
+                            <span className="unit">/ {language === 'en' ? 'session' : 'ครั้ง'}</span>
+                          </div>
+                          <div className="spot-benefits">
+                            <div><b>✓</b>{language === 'en' ? 'No basics needed' : 'ไม่ต้องมีพื้นฐานก็เรียนได้'}</div>
+                            <div><b>✓</b>{language === 'en' ? 'Pick a day and book right away' : 'เลือกวันและจองเวลาเรียนได้ทันที'}</div>
+                            <div><b>✓</b>{language === 'en' ? '1-on-1 with Kru Air' : 'เรียนตัวต่อตัวกับครูแอร์'}</div>
+                          </div>
+                        </div>
+                        <div className="spot-cta-block">
+                          <Button pink onClick={() => navigate(user?.role === 'student' ? `/app/packages?pkg=${p.id}` : '/register')}>
+                            {t('landing.buyThis')}
+                          </Button>
+                          <button className="link-go" onClick={() => document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })}>
+                            {language === 'en' ? 'How it works →' : 'ดูวิธีเรียน →'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="nm">{p.name}</div>
+                        <div className="hrs">
+                          {p.hours} <small>{t('landing.hoursUnit')}</small>
+                        </div>
+                        <div className="price">฿{p.price.toLocaleString()}</div>
+                        <div className="per">{p.note}</div>
+                        <Button pink onClick={() => navigate(user?.role === 'student' ? `/app/packages?pkg=${p.id}` : '/register')}>
+                          {t('landing.buyThis')}
+                        </Button>
+                      </>
+                    )}
                   </div>
-                </div>))}
+                </div>);
+              })}
             </div>)}
-
-          <div className="termbox reveal">
-            <b>
-              <PinIcon width={14} height={14}/> {t('landing.termsTitle')}
-            </b>{' '}
-            {t('landing.termsBody')}
-          </div>
         </div>
       </section>
 
