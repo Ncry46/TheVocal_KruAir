@@ -65,3 +65,21 @@ export async function deliverDayBeforeReminder(row) {
         `Tomorrow: ${studentLabel(student, 'en')} ${dateLabelEn} ${timeLabelEn}`,
     );
 }
+
+export async function deliverHomeworkDay3Reminder(row) {
+    const date = parseIsoDate(row.slot_iso);
+    const dateLabelTh = chipLabel(date, 'th');
+    const dateLabelEn = chipLabel(date, 'en');
+    const timeLabelTh = lessonTimeRange(row.slot_hhmm, 'th');
+    const timeLabelEn = lessonTimeRange(row.slot_hhmm, 'en');
+
+    await addNotification(
+        row.user_id,
+        'เตือนทำการบ้านก่อนเรียน',
+        `อีก 3 วันมีคลาส ${dateLabelTh} ${timeLabelTh} — อย่าลืมฝึกซ้อม/ทำการบ้านนะครับ`,
+        'amber',
+        'Homework reminder before class',
+        `Class in 3 days: ${dateLabelEn} ${timeLabelEn} — remember to practice / finish homework.`,
+        '/app/homework',
+    );
+}

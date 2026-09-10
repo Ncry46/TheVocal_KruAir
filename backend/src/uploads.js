@@ -21,7 +21,7 @@ const EXT_BY_MIME = {
     webp: 'webp',
 };
 
-export function saveHomeworkAudio(dataUrl) {
+export function parseHomeworkAudioDataUrl(dataUrl) {
     const value = String(dataUrl ?? '').trim();
     const match = value.match(/^data:audio\/([\w.+-]+);base64,(.+)$/);
     if (!match) {
@@ -36,10 +36,19 @@ export function saveHomeworkAudio(dataUrl) {
     if (buffer.length > 12 * 1024 * 1024) {
         throw new Error('ไฟล์เสียงใหญ่เกิน 12 MB');
     }
+    return { buffer, mime, ext, contentType: `audio/${mime}` };
+}
+
+export function saveHomeworkAudioBuffer(buffer, ext) {
     mkdirSync(HOMEWORK_DIR, { recursive: true });
     const filename = `${randomBytes(16).toString('hex')}.${ext}`;
     writeFileSync(join(HOMEWORK_DIR, filename), buffer);
     return `/uploads/homework/${filename}`;
+}
+
+export function saveHomeworkAudio(dataUrl) {
+    const { buffer, ext } = parseHomeworkAudioDataUrl(dataUrl);
+    return saveHomeworkAudioBuffer(buffer, ext);
 }
 
 export function savePaymentSlip(dataUrl) {

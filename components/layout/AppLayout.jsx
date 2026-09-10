@@ -124,13 +124,31 @@ export function AppLayout({ mode }) {
         api.getMoveRequests().then((rs) => setReqCount(rs.filter((r) => r.statusKey === 'pending' || r.status === 'รออนุมัติ' || r.status === 'Pending').length));
     }, [isStaff, language]);
     const unread = notifs?.filter((n) => !n.read).length ?? 0;
-    const toggleBell = async () => {
-        if (!bellOpen && unread > 0) {
-            await api.markNotificationsRead();
-            setNotifs((prev) => prev?.map((n) => ({ ...n, read: true })) ?? null);
+    const toggleBell = () => {
+        const opening = !bellOpen;
+        setBellOpen(opening);
+        if (!opening || unread < 1) {
+            return;
         }
-        setBellOpen((v) => !v);
+        api.markNotificationsRead()
+            .then(() => {
+                setNotifs((prev) => prev?.map((n) => ({ ...n, read: true })) ?? null);
+            })
+            .catch(() => {});
     };
+    useEffect(() => {
+        if (!bellOpen) {
+            return undefined;
+        }
+        const onPointerDown = (event) => {
+            const wrap = event.target?.closest?.('.bell-wrap');
+            if (!wrap) {
+                setBellOpen(false);
+            }
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [bellOpen]);
     const openNotification = (notification) => {
         const link = resolveNotificationLink(notification, mode);
         if (!link) {

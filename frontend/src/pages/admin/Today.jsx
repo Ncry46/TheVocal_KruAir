@@ -6,25 +6,56 @@ import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 
 export default function Today() {
-    const { language, t } = useApp();
+    const { language, t, toast } = useApp();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
+    const [checkInBusy, setCheckInBusy] = useState('');
+
+    const load = () => api.getTeacherToday().then(setData).catch(() => setData({
+        date: '—',
+        pendingLessons: 0,
+        moveRequests: 0,
+        homeworkThisWeek: 0,
+        pendingSignatures: 0,
+        pendingPayments: 0,
+        lessons: [],
+    }));
 
     useEffect(() => {
-        api.getTeacherToday().then(setData).catch(() => setData({
-            date: '—',
-            pendingLessons: 0,
-            moveRequests: 0,
-            homeworkThisWeek: 0,
-            pendingSignatures: 0,
-            pendingPayments: 0,
-            lessons: [],
-        }));
+        load();
     }, [language]);
+
+    const checkIn = async (bookingId) => {
+        if (!bookingId || checkInBusy) {
+            return;
+        }
+        setCheckInBusy(bookingId);
+        try {
+            await api.teacherCheckIn(bookingId);
+            toast(t('schedule.checkInOk'), 'ok');
+            await load();
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('schedule.checkInFailed'));
+        }
+        finally {
+            setCheckInBusy('');
+        }
+    };
 
     if (!data) {
         return <Spinner />;
     }
+
+    const statusLabel = (status) => {
+        if (status === 'done') {
+            return t('schedule.done');
+        }
+        if (status === 'confirmed') {
+            return language === 'en' ? 'Confirmed' : 'ยืนยันแล้ว';
+        }
+        return language === 'en' ? 'Pending' : 'รอยืนยัน';
+    };
 
     const stats = [
         { label: language === 'en' ? 'Pending confirm' : 'รอยืนยัน', value: data.pendingLessons, tone: 'amber', to: '/teacher/calendar' },
@@ -58,22 +89,47 @@ export default function Today() {
         >
           {data.lessons.length === 0 ? (
             <div className="empty">{language === 'en' ? 'No lessons today' : 'วันนี้ยังไม่มีคลาส'}</div>
-          ) : data.lessons.map((lesson) => (
-            <div key={lesson.bookingId} className="toggle-row">
-              <div>
-                <div style={{ fontWeight: 600 }}>{lesson.timeRange || lesson.time} · {lesson.student}</div>
-                <div className="muted" style={{ fontSize: 12 }}>{lesson.lesson}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className={`badge ${lesson.status === 'confirmed' ? 'green' : 'amber'}`}>
-                  {lesson.status === 'confirmed' ? (language === 'en' ? 'Confirmed' : 'ยืนยันแล้ว') : (language === 'en' ? 'Pending' : 'รอยืนยัน')}
-                </span>
-                <Button ghost size="sm" onClick={() => navigate(`/teacher/students/${lesson.studentId}`)}>
-                  {language === 'en' ? 'Profile' : 'โปรไฟล์'}
-                </Button>
-              </div>
+          ) : (
+            <div className="today-lesson-list">
+              {data.lessons.map((lesson) => (
+                <div key={lesson.bookingId} className="today-lesson">
+                  <div className="today-lesson-main">
+                    <div className="today-lesson-title">{lesson.timeRange || lesson.time} · {lesson.student}</div>
+                    <div className="muted today-lesson-sub">{lesson.lesson}</div>
+                    <div className="today-lesson-chips">
+                      <span className={`badge ${lesson.status === 'confirmed' || lesson.status === 'done' ? 'green' : 'amber'}`}>
+                        {statusLabel(lesson.status)}
+                      </span>
+                      <span className={`badge ${lesson.studentCheckedIn ? 'green' : 'amber'}`}>
+                        {lesson.studentCheckedIn ? t('schedule.studentCheckedIn') : t('schedule.studentNotCheckedIn')}
+                      </span>
+                      <span className={`badge ${lesson.studentSigned ? 'green' : 'amber'}`}>
+                        {lesson.studentSigned ? t('schedule.studentSigned') : t('schedule.studentUnsigned')}
+                      </span>
+                      <span className={`badge ${lesson.teacherCheckedIn ? 'green' : 'amber'}`}>
+                        {lesson.teacherCheckedIn ? t('schedule.teacherCheckedIn') : t('schedule.teacherNotCheckedIn')}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="today-lesson-actions">
+                    {lesson.canCheckIn && (
+                      <Button
+                        green
+                        size="sm"
+                        disabled={checkInBusy === lesson.bookingId}
+                        onClick={() => checkIn(lesson.bookingId)}
+                      >
+                        {checkInBusy === lesson.bookingId ? t('schedule.checkingIn') : t('schedule.checkIn')}
+                      </Button>
+                    )}
+                    <Button ghost size="sm" onClick={() => navigate(`/teacher/students/${lesson.studentId}`)}>
+                      {language === 'en' ? 'Profile' : 'โปรไฟล์'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </Card>
 
         <div className="quick-links" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

@@ -92,7 +92,7 @@ getPool()
         await ensureRecurringScheduleSchema();
         console.log(`Connected to SQL Server with ${getAuthMode()}`);
         const tick = () => runSchoolJobs().then((result) => {
-            if (result.expired || result.reminded || result.lowHours) {
+            if (result.expired || result.reminded || result.homeworkReminded || result.lowHours || result.expiry) {
                 console.log('school jobs', result);
             }
         }).catch((err) => {

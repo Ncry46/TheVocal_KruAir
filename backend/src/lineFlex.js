@@ -39,11 +39,13 @@ export function flexPackageStatus(pkg, lang = 'th') {
         return bubble([text(noPkg)], { headerText: header });
     }
     const leftLabel = lang === 'en' ? 'Hours left' : 'ชั่วโมงคงเหลือ';
-    const expiresLabel = lang === 'en' ? 'Expires' : 'หมดอายุ';
+    const expiresLine = pkg.neverExpires || !pkg.expiresAt || pkg.expiresAt === '—'
+        ? (lang === 'en' ? 'No expiry' : 'ไม่มีหมดอายุ')
+        : `${lang === 'en' ? 'Expires' : 'หมดอายุ'}: ${pkg.expiresAt}`;
     return bubble([
         text(pkg.name, { weight: 'bold', size: 'md' }),
         text(`${leftLabel}: ${pkg.left} / ${pkg.hours}`, { size: 'sm' }),
-        text(`${expiresLabel}: ${pkg.expiresAt}`, { size: 'sm', color: '#888888' }),
+        text(expiresLine, { size: 'sm', color: '#888888' }),
     ], { headerText: header });
 }
 

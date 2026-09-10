@@ -78,11 +78,15 @@ export function buildGoogleConnectUrl(userId, returnTo = 'teacher', redirectUri 
     if (!isGoogleCalendarConfigured()) {
         throw new Error('Google Calendar ยังไม่ได้ตั้งค่าในระบบ');
     }
+    // Teachers also get drive.file so homework can upload into their Drive.
+    const scope = returnTo === 'teacher'
+        ? 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file'
+        : 'https://www.googleapis.com/auth/calendar.events';
     const params = new URLSearchParams({
         client_id: CLIENT_ID,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: 'https://www.googleapis.com/auth/calendar.events',
+        scope,
         access_type: 'offline',
         prompt: 'consent',
         state: buildGoogleOAuthState(userId, returnTo, redirectUri),
@@ -201,6 +205,8 @@ async function getValidAccessToken(userId) {
     }
     return refreshAccessToken(userId, row.refresh_token);
 }
+
+export { getValidAccessToken };
 
 function eventPayloadFromBooking(row, { forStudent = false } = {}) {
     const title = forStudent

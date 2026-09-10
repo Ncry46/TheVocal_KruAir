@@ -1,18 +1,32 @@
 import { chipLabel, lessonTimeRange } from './lang.js';
 import { parseIsoDate } from './dates.js';
-import { hoursUntilSlot, shouldExpirePending, shouldSendDayBeforeReminder } from './bookingPolicy.js';
+import {
+    addCalendarDaysIso,
+    bangkokDateIso,
+    DAY1_REMINDER_HOUR,
+    DAY1_REMINDER_MINUTE,
+    HOMEWORK_D3_REMINDER_HOUR,
+    HOMEWORK_D3_REMINDER_MINUTE,
+    isActiveLessonStatus,
+    shouldExpirePending,
+    shouldRunBangkokDailyJob,
+} from './bookingPolicy.js';
 import { LOW_HOURS_THRESHOLD, packageHoursLeft } from './packagePolicy.js';
-import { deliverDayBeforeReminder } from './lessonReminders.js';
+import { deliverDayBeforeReminder, deliverHomeworkDay3Reminder } from './lessonReminders.js';
 import { addNotification, cancelLessonBooking, findUserById, notifySlotTeacher, query, studentLabel } from './store.js';
+
 export const jobState = {
     lastRunAt: null,
-    lastResult: { expired: 0, reminded: 0, lowHours: 0, expiry: 0 },
+    lastResult: { expired: 0, reminded: 0, homeworkReminded: 0, lowHours: 0, expiry: 0 },
+    lastDay1ReminderDate: null,
+    lastHomeworkD3Date: null,
     enabled: true,
 };
 
 async function loadActiveLessons() {
     const result = await query(
-        `SELECT b.id, b.public_id, b.user_id, b.slot_id, b.status, b.confirm_deadline, b.reminder_sent_at,
+        `SELECT b.id, b.public_id, b.user_id, b.slot_id, b.status, b.confirm_deadline,
+                b.reminder_sent_at, b.homework_reminder_sent_at,
                 CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
                 CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
                 s.teacher_id
@@ -62,21 +76,62 @@ export async function expireUnconfirmedBookings(now = new Date()) {
     return expired;
 }
 
+/** Day-1: lessons with slot_date = tomorrow (Bangkok). Intended to run ~09:00. */
 export async function sendDayBeforeReminders(now = new Date()) {
-    const rows = await loadActiveLessons();
+    const tomorrow = addCalendarDaysIso(bangkokDateIso(now), 1);
+    const result = await query(
+        `SELECT b.id, b.public_id, b.user_id, b.slot_id, b.status, b.reminder_sent_at,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                s.teacher_id
+         FROM dbo.bookings b
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         WHERE b.status IN (N'pending', N'confirmed')
+           AND b.reminder_sent_at IS NULL
+           AND CONVERT(varchar(10), s.slot_date, 23) = @dayIso
+         ORDER BY s.slot_time ASC`,
+        { dayIso: tomorrow },
+    );
     let reminded = 0;
-    for (const row of rows) {
-        const hoursUntil = hoursUntilSlot(row.slot_iso, row.slot_hhmm, now);
-        if (!shouldSendDayBeforeReminder({
-            status: row.status,
-            hoursUntil,
-            reminderSentAt: row.reminder_sent_at,
-        })) {
+    for (const row of result.recordset) {
+        if (!isActiveLessonStatus(row.status) || row.reminder_sent_at) {
             continue;
         }
         await deliverDayBeforeReminder(row);
         await query(
             `UPDATE dbo.bookings SET reminder_sent_at = SYSUTCDATETIME() WHERE id = @id AND reminder_sent_at IS NULL`,
+            { id: row.id },
+        );
+        reminded += 1;
+    }
+    return reminded;
+}
+
+/** Day-3: lessons with slot_date = today+3. Intended to run ~09:30 — homework/practice nudge. */
+export async function sendHomeworkDay3Reminders(now = new Date()) {
+    const inThreeDays = addCalendarDaysIso(bangkokDateIso(now), 3);
+    const result = await query(
+        `SELECT b.id, b.public_id, b.user_id, b.slot_id, b.status, b.homework_reminder_sent_at,
+                CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
+                CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
+                s.teacher_id
+         FROM dbo.bookings b
+         JOIN dbo.teacher_availability s ON s.id = b.slot_id
+         WHERE b.status IN (N'pending', N'confirmed')
+           AND b.homework_reminder_sent_at IS NULL
+           AND CONVERT(varchar(10), s.slot_date, 23) = @dayIso
+         ORDER BY s.slot_time ASC`,
+        { dayIso: inThreeDays },
+    );
+    let reminded = 0;
+    for (const row of result.recordset) {
+        if (!isActiveLessonStatus(row.status) || row.homework_reminder_sent_at) {
+            continue;
+        }
+        await deliverHomeworkDay3Reminder(row);
+        await query(
+            `UPDATE dbo.bookings SET homework_reminder_sent_at = SYSUTCDATETIME()
+             WHERE id = @id AND homework_reminder_sent_at IS NULL`,
             { id: row.id },
         );
         reminded += 1;
@@ -90,7 +145,7 @@ export async function sendLowHoursReminders() {
          FROM dbo.user_packages up
          JOIN dbo.users u ON u.id = up.user_id
          WHERE up.status = N'active'
-           AND up.expires_at > SYSUTCDATETIME()
+           AND (up.expires_at IS NULL OR up.expires_at > SYSUTCDATETIME())
            AND up.low_hours_notified_at IS NULL
            AND (up.hours_total - up.hours_used) <= @threshold
            AND (up.hours_total - up.hours_used) > 0
@@ -159,10 +214,29 @@ export async function sendPackageExpiryReminders(now = new Date()) {
 
 export async function runSchoolJobs(now = new Date()) {
     const expired = await expireUnconfirmedBookings(now);
-    const reminded = await sendDayBeforeReminders(now);
+    let reminded = 0;
+    let homeworkReminded = 0;
+
+    const today = bangkokDateIso(now);
+    if (shouldRunBangkokDailyJob(now, {
+        hour: DAY1_REMINDER_HOUR,
+        minute: DAY1_REMINDER_MINUTE,
+    }, jobState.lastDay1ReminderDate)) {
+        reminded = await sendDayBeforeReminders(now);
+        jobState.lastDay1ReminderDate = today;
+    }
+
+    if (shouldRunBangkokDailyJob(now, {
+        hour: HOMEWORK_D3_REMINDER_HOUR,
+        minute: HOMEWORK_D3_REMINDER_MINUTE,
+    }, jobState.lastHomeworkD3Date)) {
+        homeworkReminded = await sendHomeworkDay3Reminders(now);
+        jobState.lastHomeworkD3Date = today;
+    }
+
     const lowHours = await sendLowHoursReminders();
     const expiry = await sendPackageExpiryReminders(now);
     jobState.lastRunAt = now.toISOString();
-    jobState.lastResult = { expired, reminded, lowHours, expiry };
+    jobState.lastResult = { expired, reminded, homeworkReminded, lowHours, expiry };
     return jobState.lastResult;
 }

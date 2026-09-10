@@ -50,7 +50,7 @@ describe('verifyLineSignature', () => {
 
 describe('flexPackageStatus', () => {
     it('renders flex message for active package', () => {
-        const msg = flexPackageStatus({ name: 'Pro', hours: 20, used: 5, left: 15, expiresAt: '1 มี.ค. 2027' }, 'th');
+        const msg = flexPackageStatus({ name: 'Pro', hours: 20, used: 5, left: 15, expiresAt: 'ไม่มีหมดอายุ', neverExpires: true }, 'th');
         assert.equal(msg.type, 'flex');
         assert.match(msg.altText, /VOCALITY|แพ็กเกจ/);
     });
