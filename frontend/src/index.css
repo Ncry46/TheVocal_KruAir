@@ -1461,7 +1461,7 @@ button.pkg { width: 100%; font: inherit; color: inherit; text-align: inherit; pa
   width: 46%;
   min-height: 360px;
 }
-.pkg-h.single .body { padding: 0; }
+.pkg-h.single .body { padding: 0; align-items: stretch; }
 .pkg-h.single .spot-col {
   flex: 1;
   min-width: 0;
@@ -1470,28 +1470,9 @@ button.pkg { width: 100%; font: inherit; color: inherit; text-align: inherit; pa
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 24px;
-}
-.spot-tag {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #92400e;
-  background: linear-gradient(135deg, #fffbeb, #fef3c7);
-  border: 1.5px solid rgba(217, 119, 6, 0.45);
-  box-shadow: 0 4px 14px -6px rgba(217, 119, 6, 0.4);
-  padding: 7px 16px;
-  border-radius: 999px;
-  margin-bottom: 8px;
-}
-.spot-tag i {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #d97706;
-  display: inline-block;
+  text-align: center;
+  gap: 24px;
 }
 .spot-title {
   font-size: 20px;
@@ -1500,26 +1481,51 @@ button.pkg { width: 100%; font: inherit; color: inherit; text-align: inherit; pa
   margin: 4px 0 0;
   line-height: 1.4;
 }
-.spot-price {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 8px 0 16px;
+.spot-sub {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #64748b;
 }
-.spot-price .num {
+.spot-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 16px;
+  padding: 18px 8px;
+  border: 1px solid #e9eef5;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+.spot-info-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 12px;
+  min-width: 0;
+}
+.spot-info-cell + .spot-info-cell { border-left: 1px solid #e4eaf2; }
+.spot-big {
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--navy-mid);
-  line-height: 1;
+  line-height: 1.2;
 }
-.spot-price .unit { font-size: 12px; color: #94a3b8; }
+.spot-big small { font-size: 14px; font-weight: 600; }
+.spot-label { font-size: 12px; font-weight: 600; color: #475569; }
+.spot-sub2 { font-size: 11.5px; color: #94a3b8; }
 .spot-benefits {
   display: grid;
   gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
   border-top: 1px solid #f1f5f9;
-  padding-top: 16px;
+  padding: 16px 8px 0;
   font-size: 14px;
   color: #475569;
   line-height: 1.6;
@@ -1533,6 +1539,7 @@ button.pkg { width: 100%; font: inherit; color: inherit; text-align: inherit; pa
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
 }
 .spot-cta-block .btn { width: 100%; padding: 12px 24px; font-size: 14px; border-radius: 12px; }
 .spot-cta-block .link-go {
@@ -1565,7 +1572,7 @@ button.pkg { width: 100%; font: inherit; color: inherit; text-align: inherit; pa
 .link-go:hover { color: var(--ink); }
 @media (max-width: 720px) {
   .pkg-h.single .spot-col { padding: 26px 24px; }
-  .spot-price .num { font-size: 32px; }
+  .spot-big { font-size: 24px; }
 }
 @media (max-width: 620px) {
   .pkg-h { flex-direction: column; min-height: 0; }
@@ -3899,6 +3906,22 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
 @media (max-width: 520px) {
   .kpi-grid { grid-template-columns: 1fr; }
 }
+
+/* today page: 5 stat cards share the row, no orphan */
+.kpi-grid.kpi-grid-5 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.stat-card { display: flex; align-items: center; gap: 12px; }
+.stat-ic {
+  flex: none;
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+}
+.stat-ic.amber { background: rgba(217, 119, 6, 0.12); color: #92600a; }
+.stat-ic.pink { background: rgba(252, 0, 122, 0.1); color: var(--wine); }
+.stat-ic.blue { background: rgba(42, 67, 104, 0.1); color: var(--navy-mid); }
+.stat-ic.violet { background: rgba(78, 63, 140, 0.12); color: #4e3f8c; }
+.stat-ic.green { background: rgba(31, 122, 92, 0.12); color: #15634b; }
+.stat-tx { display: flex; flex-direction: column; min-width: 0; }
 
 .sched-layout {
   display: grid;

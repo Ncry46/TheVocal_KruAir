@@ -229,14 +229,24 @@ export default function Landing() {
                   <div className="body">
                     {isSingle ? (
                       <div className="spot-col">
-                        <div>
-                          <div className="spot-tag">
-                            <i aria-hidden="true" />{p.name}
-                          </div>
+                        <div className="spot-top-block">
                           <h3 className="spot-title">{language === 'en' ? 'Trial course' : 'คอร์สทดลองเรียน'}</h3>
-                          <div className="spot-price">
-                            <span className="num">฿{p.price.toLocaleString()}</span>
-                            <span className="unit">/ {language === 'en' ? 'session' : 'ครั้ง'}</span>
+                          <p className="spot-sub">
+                            {language === 'en'
+                              ? 'Discover your vocal potential with a personal development plan'
+                              : 'ค้นหาศักยภาพเสียงของคุณ พร้อมแผนพัฒนาการร้องเฉพาะบุคคล'}
+                          </p>
+                          <div className="spot-info">
+                            <div className="spot-info-cell">
+                              <span className="spot-label">{language === 'en' ? 'Duration' : 'ระยะเวลา'}</span>
+                              <span className="spot-big">{p.hours} <small>{t('landing.hoursUnit')}</small></span>
+                              <span className="spot-sub2">{language === 'en' ? 'Full 1-on-1 session' : 'เต็มเวลาตัวต่อตัว'}</span>
+                            </div>
+                            <div className="spot-info-cell">
+                              <span className="spot-label">{language === 'en' ? 'Course fee' : 'ค่าเรียนของคอร์ส'}</span>
+                              <span className="spot-big">฿{p.price.toLocaleString()}</span>
+                              <span className="spot-sub2">/ {language === 'en' ? 'session' : 'ครั้ง'}</span>
+                            </div>
                           </div>
                           <div className="spot-benefits">
                             <div><b>✓</b>{language === 'en' ? 'No basics needed' : 'ไม่ต้องมีพื้นฐานก็เรียนได้'}</div>

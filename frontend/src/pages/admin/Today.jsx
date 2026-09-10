@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Spinner } from '@components/ui';
-import { BellIcon, CalendarIcon, GraduationIcon, RefreshIcon, WalletIcon } from '@components/icons';
+import { BellIcon, CalendarIcon, CheckIcon, GraduationIcon, MusicNoteIcon, RefreshIcon, WalletIcon } from '@components/icons';
 import { api } from '@app/services/apiClient';
 import { useApp } from '@app/context/AppContext';
 
@@ -58,11 +58,11 @@ export default function Today() {
     };
 
     const stats = [
-        { label: language === 'en' ? 'Pending confirm' : 'รอยืนยัน', value: data.pendingLessons, tone: 'amber', to: '/teacher/calendar' },
-        { label: language === 'en' ? 'Move requests' : 'คำขอเลื่อนนัด', value: data.moveRequests, tone: 'pink', to: '/teacher/requests' },
-        { label: language === 'en' ? 'Awaiting signature' : 'รอลงชื่อ', value: data.pendingSignatures, tone: 'blue', to: '/teacher/calendar' },
-        { label: language === 'en' ? 'Homework audio' : 'เสียงการบ้าน', value: data.homeworkThisWeek, tone: 'blue', to: '/teacher/calendar' },
-        { label: language === 'en' ? 'Pending payments' : 'รอตรวจโอน', value: data.pendingPayments, tone: 'green', to: '/teacher/payments' },
+        { label: language === 'en' ? 'Pending confirm' : 'รอยืนยัน', value: data.pendingLessons, tone: 'amber', icon: <BellIcon width={18} height={18}/>, to: '/teacher/calendar' },
+        { label: language === 'en' ? 'Move requests' : 'คำขอเลื่อนนัด', value: data.moveRequests, tone: 'pink', icon: <RefreshIcon width={18} height={18}/>, to: '/teacher/requests' },
+        { label: language === 'en' ? 'Awaiting signature' : 'รอลงชื่อ', value: data.pendingSignatures, tone: 'blue', icon: <CheckIcon width={18} height={18}/>, to: '/teacher/calendar' },
+        { label: language === 'en' ? 'Homework audio' : 'เสียงการบ้าน', value: data.homeworkThisWeek, tone: 'violet', icon: <MusicNoteIcon width={18} height={18}/>, to: '/teacher/calendar' },
+        { label: language === 'en' ? 'Pending payments' : 'รอตรวจโอน', value: data.pendingPayments, tone: 'green', icon: <WalletIcon width={18} height={18}/>, to: '/teacher/payments' },
     ];
 
     return (
@@ -72,12 +72,15 @@ export default function Today() {
           <b>{language === 'en' ? 'Today' : 'วันนี้'} · {data.date}</b>
         </div>
 
-        <div className="kpi-grid">
+        <div className="kpi-grid kpi-grid-5">
           {stats.map((item) => (
             <Card key={item.label}>
-              <button type="button" className="kpi-card" onClick={() => navigate(item.to)} style={{ width: '100%', textAlign: 'left', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>
-                <div className="muted" style={{ fontSize: 12 }}>{item.label}</div>
-                <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>{item.value}</div>
+              <button type="button" className="kpi-card stat-card" onClick={() => navigate(item.to)} style={{ width: '100%', textAlign: 'left', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>
+                <span className={`stat-ic ${item.tone}`}>{item.icon}</span>
+                <span className="stat-tx">
+                  <span className="muted" style={{ fontSize: 12 }}>{item.label}</span>
+                  <span style={{ fontSize: 28, fontWeight: 700, marginTop: 2, lineHeight: 1.15 }}>{item.value}</span>
+                </span>
               </button>
             </Card>
           ))}

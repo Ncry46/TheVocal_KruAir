@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Field, Input } from '@components/ui';
 import { useApp } from '../context/AppContext';
-import { homePath } from '@app/utils/avatar';
 import { beginLineLogin } from '../services/lineAuth';
 
 export default function Login() {
@@ -37,7 +36,7 @@ export default function Login() {
                 if (!cancelled) {
                     const target = next && next.startsWith('/') && !next.startsWith('//')
                         ? next
-                        : homePath(session);
+                        : '/';
                     navigate(target, { replace: true });
                 }
             }
@@ -57,8 +56,8 @@ export default function Login() {
         e.preventDefault();
         setBusy(true);
         try {
-            const session = await login({ id, password });
-            navigate(homePath(session), { replace: true });
+            await login({ id, password });
+            navigate('/', { replace: true });
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('auth.loginFailed'));
