@@ -154,7 +154,7 @@ IF OBJECT_ID(N'dbo.user_packages', N'U') IS NULL
         package_id NVARCHAR(20) NOT NULL,
         hours_total INT NOT NULL,
         hours_used INT NOT NULL CONSTRAINT DF_up_used DEFAULT 0,
-        expires_at DATETIME2 NOT NULL,
+        expires_at DATETIME2 NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_up_status DEFAULT N'active',
         transaction_id INT NULL,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_up_created DEFAULT SYSUTCDATETIME()

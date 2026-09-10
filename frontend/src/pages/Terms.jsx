@@ -47,7 +47,7 @@ export default function Terms() {
             <h2>{th ? '4. แพ็กเกจและการชำระเงิน' : '4. Packages and payment'}</h2>
             <ul>
               <li>{th ? 'นับชั่วโมงเมื่อเข้ารับจริง 1 ชั่วโมงต่อครั้ง' : 'Hours are counted upon actual attendance: 1 hour per session.'}</li>
-              <li>{th ? 'แพ็กเกจมีอายุ 6 เดือน นับจากวันที่ซื้อ' : 'Packages expire 6 months after purchase.'}</li>
+              <li>{th ? 'แพ็กเกจไม่มีวันหมดอายุ ใช้ได้จนกว่าชั่วโมงจะหมด' : 'Packages do not expire — use until hours run out.'}</li>
               <li>{th ? 'ไม่สามารถโอนสิทธิ์หรือคืนเงินได้ เว้นแต่กฎหมายกำหนดเป็นอย่างอื่น' : 'Packages are non-transferable and non-refundable except where required by law.'}</li>
               <li>{th ? 'ใช้ได้เฉพาะคอร์สของครูแอร์เท่านั้น' : 'Valid only for Kru Air courses.'}</li>
               <li>

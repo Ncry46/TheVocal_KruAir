@@ -260,8 +260,11 @@ export const api = {
     getPendingSignatures() {
         return request('/me/signatures/pending');
     },
-    signLesson(bookingId, signature) {
-        return request(`/me/signatures/${encodeURIComponent(bookingId)}`, { method: 'POST', body: JSON.stringify({ signature }) });
+    signLesson(bookingId, signature, kind = 'checkout') {
+        return request(`/me/signatures/${encodeURIComponent(bookingId)}`, {
+            method: 'POST',
+            body: JSON.stringify({ signature, kind }),
+        });
     },
     getCalendarIcsUrl() {
         return '/api/me/calendar.ics';
@@ -403,5 +406,8 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ outcome, note, feedbackAudioUrl }),
         });
+    },
+    teacherCheckIn(bookingId) {
+        return request(`/teacher/bookings/${encodeURIComponent(bookingId)}/check-in`, { method: 'POST' });
     },
 };

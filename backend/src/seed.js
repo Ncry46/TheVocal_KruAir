@@ -103,20 +103,19 @@ async function seed() {
     const minId = ids['stu-003'];
     const tonId = ids['stu-004'];
 
-    const mintExpires = addDays(new Date(), 180);
     const mintPkg = await query(
         `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status)
          OUTPUT INSERTED.id
-         VALUES (@userId, 'pro', 20, 1, @expires, 'active')`,
-        { userId: mintId, expires: mintExpires.toISOString() },
+         VALUES (@userId, 'pro', 20, 1, NULL, 'active')`,
+        { userId: mintId },
     );
     await query(
         `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status)
          VALUES
-         (@fern, 'pro', 20, 5, @expires, 'active'),
-         (@min, 'beginner', 10, 2, @expires, 'active'),
-         (@ton, 'master', 30, 0, @expires, 'active')`,
-        { fern: fernId, min: minId, ton: tonId, expires: mintExpires.toISOString() },
+         (@fern, 'pro', 20, 5, NULL, 'active'),
+         (@min, 'beginner', 10, 2, NULL, 'active'),
+         (@ton, 'master', 30, 0, NULL, 'active')`,
+        { fern: fernId, min: minId, ton: tonId },
     );
 
     await query(

@@ -13,6 +13,94 @@ const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'
 const TH_WEEKDAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 const EN_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/** Normalize typed time like 11, 1100, 11.00 → 11:00 */
+function normalizeSlotTime(value) {
+    const raw = String(value || '').trim();
+    if (!raw) {
+        return '';
+    }
+    const digits = raw.replace(/\D/g, '');
+    if (/^\d{3,4}$/.test(digits) && !raw.includes(':') && !raw.includes('.')) {
+        const padded = digits.padStart(4, '0');
+        const hour = Number(padded.slice(0, 2));
+        const minute = Number(padded.slice(2));
+        if (hour <= 23 && minute <= 59) {
+            return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        }
+    }
+    const match = raw.match(/^(\d{1,2})(?::|\.)?(\d{2})?$/);
+    if (!match) {
+        return raw;
+    }
+    const hour = Number(match[1]);
+    const minute = match[2] == null || match[2] === '' ? 0 : Number(match[2]);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+        return raw;
+    }
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+/** Group selected slot times into consecutive booking blocks. */
+function groupConsecutiveTimes(times, orderedSlots) {
+    const order = orderedSlots.length ? orderedSlots : [...times].sort();
+    const selected = [...new Set(times)].filter((time) => order.includes(time));
+    selected.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    const blocks = [];
+    for (const time of selected) {
+        const index = order.indexOf(time);
+        const last = blocks[blocks.length - 1];
+        if (last && order.indexOf(last.start) + last.hours === index) {
+            last.hours += 1;
+            last.end = plus1(time);
+        }
+        else {
+            blocks.push({ start: time, hours: 1, end: plus1(time) });
+        }
+    }
+    return blocks;
+}
+
+function formatTimeBlocks(blocks) {
+    return blocks.map((block) => (
+        block.hours > 1
+            ? `${block.start}–${block.end} (${block.hours})`
+            : `${block.start}–${block.end}`
+    )).join(' · ');
+}
+
+/** Keep digits only and format as HH:MM while typing (e.g. 1100 → 11:00). */
+function digitsTimeMask(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
+    if (!digits) {
+        return '';
+    }
+    if (digits.length <= 2) {
+        return digits;
+    }
+    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+/** On blur, force full HH:MM (11 → 11:00). */
+function finalizeTimeMask(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
+    if (!digits) {
+        return '';
+    }
+    if (digits.length <= 2) {
+        const hour = Number(digits);
+        if (!Number.isInteger(hour) || hour > 23) {
+            return digits;
+        }
+        return `${String(hour).padStart(2, '0')}:00`;
+    }
+    const hour = Number(digits.slice(0, 2));
+    const minute = Number(digits.slice(2).padEnd(2, '0'));
+    if (hour > 23 || minute > 59) {
+        return digitsTimeMask(value);
+    }
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 function toIso(year, month, day) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
@@ -39,6 +127,7 @@ export default function Schedule() {
     const [logNote, setLogNote] = useState('');
     const [logAudioUrl, setLogAudioUrl] = useState('');
     const [logBusy, setLogBusy] = useState(false);
+    const [checkInBusy, setCheckInBusy] = useState(false);
     const [slotBusy, setSlotBusy] = useState(false);
     const [addTime, setAddTime] = useState('');
     const [bulkOpen, setBulkOpen] = useState(false);
@@ -46,7 +135,8 @@ export default function Schedule() {
     const [bulkTo, setBulkTo] = useState('');
     const [bookOpen, setBookOpen] = useState(false);
     const [students, setStudents] = useState([]);
-    const [bookForm, setBookForm] = useState({ studentId: '', time: '', hours: '1', topic: '' });
+    const [bookForm, setBookForm] = useState({ studentIds: [], times: [], topic: '', startDraft: '', endDraft: '' });
+    const [studentFilter, setStudentFilter] = useState('');
     const [bookBusy, setBookBusy] = useState(false);
     const [homeworkSubmissions, setHomeworkSubmissions] = useState([]);
     const [signatureRows, setSignatureRows] = useState({ pending: [], signed: [] });
@@ -123,17 +213,59 @@ export default function Schedule() {
     const slotTimes = week?.slotTimes ?? [];
     const dayLessons = useMemo(() => lessonsByDate[selectedIso] ?? [], [lessonsByDate, selectedIso]);
     const daySlots = useMemo(() => slotsByDate[selectedIso] ?? [], [slotsByDate, selectedIso]);
-    const displaySlots = useMemo(() => daySlots.filter((slot) => {
-        if (slot.status !== 'booked' || !slot.bookingId) {
-            return true;
+    const displayRows = useMemo(() => {
+        const rows = dayLessons.map((lesson) => ({
+            key: `lesson-${lesson.bookingId}`,
+            kind: 'lesson',
+            lesson,
+            time: lesson.time,
+            timeRange: lesson.timeRange,
+        }));
+        for (const slot of daySlots) {
+            const hasLesson = dayLessons.some((lesson) => lesson.slotId === slot.id || lesson.time === slot.time);
+            if (!hasLesson) {
+                rows.push({
+                    key: `slot-${slot.id}`,
+                    kind: 'slot',
+                    slot,
+                    time: slot.time,
+                    timeRange: `${slot.time}–${plus1(slot.time)}${language === 'en' ? '' : ' น.'}`,
+                });
+            }
         }
-        return dayLessons.some((lesson) => lesson.bookingId === slot.bookingId && lesson.slotId === slot.id);
-    }), [daySlots, dayLessons]);
+        return rows.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    }, [dayLessons, daySlots, language]);
+    const hourGroups = useMemo(() => {
+        const map = new Map();
+        for (const row of displayRows) {
+            if (!map.has(row.time)) {
+                map.set(row.time, {
+                    time: row.time,
+                    timeRange: row.timeRange,
+                    lessons: [],
+                    slot: null,
+                });
+            }
+            const group = map.get(row.time);
+            if (row.kind === 'lesson') {
+                group.lessons.push(row.lesson);
+                group.timeRange = row.timeRange || group.timeRange;
+            }
+            else {
+                group.slot = row.slot;
+            }
+        }
+        return Array.from(map.values());
+    }, [displayRows]);
     const unusedTimes = slotTimes.filter((time) => !daySlots.some((slot) => slot.time === time));
     const openTimes = slotTimes.filter((time) => {
         const slot = daySlots.find((item) => item.time === time);
-        return !slot || slot.status === 'open';
+        return !slot || slot.status === 'open' || slot.status === 'booked';
     });
+    const toggleSlots = useMemo(
+        () => daySlots.filter((slot) => slot.status === 'open' || slot.status === 'closed'),
+        [daySlots],
+    );
 
     const signatureYearOptions = useMemo(
         () => collectSignatureYears([...signatureRows.pending, ...signatureRows.signed], today.getFullYear()),
@@ -212,11 +344,29 @@ export default function Schedule() {
         }
     };
 
+    const submitCheckIn = async () => {
+        if (!selectedLesson?.bookingId || checkInBusy) {
+            return;
+        }
+        setCheckInBusy(true);
+        try {
+            await api.teacherCheckIn(selectedLesson.bookingId);
+            toast(t('schedule.checkInOk'), 'ok');
+            await load();
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : t('schedule.checkInFailed'));
+        }
+        finally {
+            setCheckInBusy(false);
+        }
+    };
+
     const setSlot = async (slot, action) => {
         if (!slot?.id || slotBusy) {
             return;
         }
-        if (action === 'close' && slot.status === 'booked') {
+        if (action === 'close' && (slot.status === 'booked' || dayLessons.some((lesson) => lesson.slotId === slot.id || lesson.time === slot.time))) {
             if (!window.confirm(t('schedule.closeBookedConfirm'))) {
                 return;
             }
@@ -313,7 +463,8 @@ export default function Schedule() {
     };
 
     const openBookModal = async () => {
-        setBookForm({ studentId: '', time: openTimes[0] || '', hours: '1', topic: '' });
+        setBookForm({ studentIds: [], times: [], topic: '', startDraft: '', endDraft: '' });
+        setStudentFilter('');
         setBookOpen(true);
         try {
             const rows = await api.getStudents();
@@ -324,21 +475,158 @@ export default function Schedule() {
         }
     };
 
+    const toggleBookStudent = (studentId) => {
+        const id = String(studentId);
+        setBookForm((current) => {
+            const selected = current.studentIds.includes(id)
+                ? current.studentIds.filter((item) => item !== id)
+                : [...current.studentIds, id];
+            return { ...current, studentIds: selected };
+        });
+    };
+
+    const toggleBookTime = (time) => {
+        setBookForm((current) => {
+            const selected = current.times.includes(time)
+                ? current.times.filter((item) => item !== time)
+                : [...current.times, time];
+            return { ...current, times: selected };
+        });
+    };
+
+    const setTimeDraft = (field, value) => {
+        setBookForm((current) => ({ ...current, [field]: digitsTimeMask(value) }));
+    };
+
+    const applyTimeRangeFromDrafts = (startDraft, endDraft, currentTimes) => {
+        const startRaw = finalizeTimeMask(startDraft);
+        const endRaw = finalizeTimeMask(endDraft);
+        const startDigits = startRaw.replace(/\D/g, '');
+        const endDigits = endRaw.replace(/\D/g, '');
+        if (!startRaw && !endRaw) {
+            return { startDraft: '', endDraft: '', times: currentTimes, toast: null };
+        }
+        if (startDigits.length < 3 || endDigits.length < 3) {
+            return { startDraft: startRaw, endDraft: endRaw, times: currentTimes, toast: null };
+        }
+        const start = normalizeSlotTime(startRaw);
+        const end = normalizeSlotTime(endRaw);
+        if (!start || !end) {
+            return { startDraft: startRaw, endDraft: endRaw, times: currentTimes, toast: 'needStartEnd' };
+        }
+        if (!slotTimes.includes(start)) {
+            return { startDraft: start, endDraft: endRaw, times: currentTimes, toast: 'badTime' };
+        }
+        if (start >= end) {
+            return { startDraft: start, endDraft: end, times: currentTimes, toast: 'endAfterStart' };
+        }
+        const range = slotTimes.filter((time) => time >= start && time < end);
+        if (!range.length) {
+            return { startDraft: start, endDraft: end, times: currentTimes, toast: 'badTime' };
+        }
+        if (range.every((time) => daySlots.some((slot) => slot.time === time && slot.status === 'closed'))) {
+            return { startDraft: start, endDraft: end, times: currentTimes, toast: 'timeClosed' };
+        }
+        const openRange = range.filter((time) => !daySlots.some((slot) => slot.time === time && slot.status === 'closed'));
+        return {
+            startDraft: start,
+            endDraft: end,
+            times: [...new Set([...currentTimes, ...openRange])],
+            toast: null,
+        };
+    };
+
+    const blurTimeDraft = (field) => {
+        const drafted = {
+            ...bookForm,
+            [field]: finalizeTimeMask(bookForm[field]),
+        };
+        const next = applyTimeRangeFromDrafts(drafted.startDraft, drafted.endDraft, drafted.times);
+        setBookForm({
+            ...drafted,
+            startDraft: next.startDraft,
+            endDraft: next.endDraft,
+            times: next.times,
+        });
+        if (next.toast === 'needStartEnd') {
+            toast(t('schedule.needStartEnd'));
+        }
+        else if (next.toast === 'badTime') {
+            toast(t('schedule.badTime'));
+        }
+        else if (next.toast === 'endAfterStart') {
+            toast(t('schedule.endAfterStart'));
+        }
+        else if (next.toast === 'timeClosed') {
+            toast(t('schedule.timeClosed'));
+        }
+    };
+
+    const bookBlocks = useMemo(
+        () => groupConsecutiveTimes(bookForm.times, slotTimes),
+        [bookForm.times, slotTimes],
+    );
+    const bookHoursTotal = bookBlocks.reduce((sum, block) => sum + block.hours, 0);
+
     const submitBook = async () => {
-        if (!bookForm.studentId || !bookForm.time) {
+        if (!bookForm.studentIds.length || !bookBlocks.length) {
             toast(t('schedule.needStudent'));
             return;
         }
+        for (const block of bookBlocks) {
+            const closed = daySlots.some((slot) => slot.time === block.start && slot.status === 'closed');
+            if (closed) {
+                toast(t('schedule.timeClosed'));
+                return;
+            }
+        }
         setBookBusy(true);
         try {
-            await api.createTeacherBooking({
-                studentId: Number(bookForm.studentId),
-                day: selectedIso,
-                time: bookForm.time,
-                hours: Number(bookForm.hours) || 1,
-                topic: bookForm.topic.trim() || undefined,
-            });
-            toast(t('schedule.bookOk'), 'ok');
+            let createdCount = 0;
+            const failed = [];
+            const noLineNames = [];
+            for (const block of bookBlocks) {
+                const result = await api.createTeacherBooking({
+                    studentIds: bookForm.studentIds.map((id) => Number(id)),
+                    day: selectedIso,
+                    time: block.start,
+                    hours: block.hours,
+                    topic: bookForm.topic.trim() || undefined,
+                });
+                createdCount += result?.created?.length || 0;
+                if (result?.failed?.length) {
+                    failed.push(...result.failed);
+                }
+                for (const row of result?.created || []) {
+                    if (row.lineLinked === false && row.name) {
+                        noLineNames.push(row.name);
+                    }
+                }
+            }
+            if (failed.length) {
+                const names = [...new Set(failed.map((row) => row.name))].join(', ');
+                toast(
+                    t('schedule.bookPartial')
+                        .replace('{ok}', String(createdCount))
+                        .replace('{fail}', String(failed.length))
+                        .replace('{names}', names),
+                    'ok',
+                );
+            }
+            else {
+                toast(
+                    createdCount > 1
+                        ? t('schedule.bookOkMany').replace('{n}', String(createdCount))
+                        : t('schedule.bookOk'),
+                    'ok',
+                );
+            }
+            const uniqueNoLine = [...new Set(noLineNames)];
+            if (uniqueNoLine.length) {
+                toast(
+                    t('schedule.bookNoLine').replace('{names}', uniqueNoLine.join(', ')),
+                );
+            }
             setBookOpen(false);
             await load();
         }
@@ -443,82 +731,133 @@ export default function Schedule() {
           action={<Button pink size="sm" onClick={openBookModal}>{t('schedule.bookStudent')}</Button>}
         >
           <div className="sched-day-body">
-          {displaySlots.length === 0 ? (
+          {hourGroups.length === 0 ? (
             <div className="empty">{t('schedule.emptySlots')}</div>
           ) : (
             <div className="sched-list">
-              {displaySlots.map((slot) => {
-                  const lesson = dayLessons.find((item) => item.bookingId === slot.bookingId);
-                  const active = selectedLesson?.bookingId && selectedLesson.bookingId === slot.bookingId;
-                  const timeLabel = lesson?.timeRange
-                      || `${slot.time}–${plus1(slot.time)}${language === 'en' ? '' : ' น.'}`;
-                  return (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      className={`sched-lesson ${slot.status} ${active ? 'on' : ''}`}
-                      onClick={() => setSelectedLesson(lesson || null)}
-                    >
-                      <div className="sched-time">{timeLabel}</div>
-                      <div className="sched-meta">
-                        <b>{lesson ? `${lesson.student}${lesson.hours > 1 ? ` · ${lesson.hours} ${language === 'en' ? 'hrs' : 'ชม.'}` : ''}` : (slot.status === 'closed' ? t('schedule.slotClosed') : t('schedule.slotOpen'))}</b>
-                        <span>{lesson ? lesson.lesson : t('schedule.noStudent')}</span>
-                      </div>
-                      <span className={`dp-badge ${slot.status === 'booked' ? (lesson?.status || 'pending') : slot.status}`}>
-                        {slot.status === 'booked'
-                            ? (lesson?.status === 'confirmed' ? t('schedule.confirmed') : t('schedule.awaiting'))
-                            : slot.status === 'closed' ? t('schedule.closed') : t('schedule.open')}
-                      </span>
-                    </button>
-                  );
-              })}
-            </div>
-          )}
-
-          <div className="slot-add">
-            <select className="input" value={addTime} onChange={(event) => setAddTime(event.target.value)}>
-              <option value="">{t('schedule.pickTime')}</option>
-              {unusedTimes.map((time) => <option key={time} value={time}>{time}</option>)}
-            </select>
-            <Button ghost onClick={addSlot} disabled={!addTime || slotBusy}>{t('schedule.addSlot')}</Button>
-          </div>
-
-          {selectedLesson && (
-            <div className="dp-actions" style={{ marginTop: 16 }}>
-              {selectedLesson.status === 'confirmed' ? (<>
-                  <Button green onClick={() => { setLogNote(''); setLogAudioUrl(''); setLogOpen(true); }}>
-                    <CheckIcon width={14} height={14}/> {t('schedule.log')}
-                  </Button>
-                  <Button danger onClick={() => submitLog('no_show')} disabled={logBusy}>
-                    {t('schedule.noShow')}
-                  </Button>
-                </>) : (
-                <Button ghost onClick={remind} disabled={slotBusy}>
-                  {t('schedule.remind')}
-                </Button>
-              )}
-              <Button ghost onClick={() => { setMoveDay(selectedIso); setMoveTime(selectedLesson.time); setMoveOpen(true); }} disabled={slotBusy}>
-                {language === 'en' ? 'Reschedule' : 'เลื่อนนัด'}
-              </Button>
-              <Button danger onClick={cancelLesson} disabled={slotBusy}>{t('schedule.cancelLesson')}</Button>
-            </div>
-          )}
-
-          {daySlots.filter((slot) => slot.status === 'open' || slot.status === 'closed').length > 0 && (
-            <div className="slot-toggles">
-              {daySlots.filter((slot) => slot.status !== 'booked').map((slot) => (
-                <button
-                  key={`t${slot.id}`}
-                  type="button"
-                  className={`slot-toggle ${slot.status}`}
-                  disabled={slotBusy}
-                  onClick={() => setSlot(slot, slot.status === 'closed' ? 'open' : 'close')}
-                >
-                  {slot.time} · {slot.status === 'closed' ? t('schedule.open') : t('schedule.close')}
-                </button>
+              {hourGroups.map((group) => (
+                <section key={group.time} className="sched-hour">
+                  <div className="sched-hour-label">{group.timeRange}</div>
+                  <div className="sched-hour-rows">
+                    {group.lessons.map((lesson) => {
+                      const active = selectedLesson?.bookingId === lesson.bookingId;
+                      return (
+                        <button
+                          key={lesson.bookingId}
+                          type="button"
+                          className={`sched-lesson student${active ? ' on' : ''}`}
+                          onClick={() => setSelectedLesson(lesson)}
+                        >
+                          <div className="sched-meta">
+                            <b>{`${lesson.student}${lesson.hours > 1 ? ` · ${lesson.hours} ${language === 'en' ? 'hrs' : 'ชม.'}` : ''}`}</b>
+                            <span>{lesson.lesson}</span>
+                          </div>
+                          <span className={`dp-badge ${lesson.status || 'pending'}`}>
+                            {lesson.status === 'confirmed' || lesson.status === 'done'
+                                ? (lesson.status === 'done' ? t('schedule.done') : t('schedule.confirmed'))
+                                : t('schedule.awaiting')}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {group.lessons.length === 0 && group.slot && (
+                      <button
+                        type="button"
+                        className={`sched-lesson empty-slot ${group.slot.status}`}
+                        onClick={() => setSelectedLesson(null)}
+                      >
+                        <div className="sched-meta">
+                          <b>{group.slot.status === 'closed' ? t('schedule.slotClosed') : t('schedule.slotOpen')}</b>
+                          <span>{t('schedule.noStudent')}</span>
+                        </div>
+                        <span className={`dp-badge ${group.slot.status}`}>
+                          {group.slot.status === 'closed' ? t('schedule.closed') : t('schedule.open')}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </section>
               ))}
             </div>
           )}
+
+          {selectedLesson && (
+            <div className="sched-detail">
+              <div className="sched-detail-head">
+                <div>
+                  <div className="sched-detail-name">{selectedLesson.student}</div>
+                  <div className="muted sched-detail-sub">
+                    {selectedLesson.timeRange || selectedLesson.time} · {selectedLesson.lesson}
+                  </div>
+                </div>
+              </div>
+              <div className="sched-detail-chips">
+                <span className={`badge ${selectedLesson.studentCheckedIn ? 'green' : 'amber'}`}>
+                  {selectedLesson.studentCheckedIn ? t('schedule.studentCheckedIn') : t('schedule.studentNotCheckedIn')}
+                </span>
+                <span className={`badge ${selectedLesson.studentSigned ? 'green' : 'amber'}`}>
+                  {selectedLesson.studentSigned ? t('schedule.studentSigned') : t('schedule.studentUnsigned')}
+                </span>
+                <span className={`badge ${selectedLesson.teacherCheckedIn ? 'green' : 'amber'}`}>
+                  {selectedLesson.teacherCheckedIn ? t('schedule.teacherCheckedIn') : t('schedule.teacherNotCheckedIn')}
+                </span>
+              </div>
+              <div className="sched-detail-actions">
+                {selectedLesson.canCheckIn && (
+                  <Button green size="sm" onClick={submitCheckIn} disabled={checkInBusy}>
+                    {checkInBusy ? t('schedule.checkingIn') : t('schedule.checkIn')}
+                  </Button>
+                )}
+                {selectedLesson.status === 'confirmed' || selectedLesson.status === 'done' ? (
+                  <>
+                    <Button green size="sm" onClick={() => { setLogNote(''); setLogAudioUrl(''); setLogOpen(true); }}>
+                      <CheckIcon width={14} height={14}/> {t('schedule.log')}
+                    </Button>
+                    {selectedLesson.status !== 'done' && (
+                      <Button danger size="sm" onClick={() => submitLog('no_show')} disabled={logBusy}>
+                        {t('schedule.noShow')}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button ghost size="sm" onClick={remind} disabled={slotBusy}>
+                    {t('schedule.remind')}
+                  </Button>
+                )}
+                <Button ghost size="sm" onClick={() => { setMoveDay(selectedIso); setMoveTime(selectedLesson.time); setMoveOpen(true); }} disabled={slotBusy}>
+                  {language === 'en' ? 'Reschedule' : 'เลื่อนนัด'}
+                </Button>
+                {selectedLesson.status !== 'done' && (
+                  <Button danger size="sm" onClick={cancelLesson} disabled={slotBusy}>{t('schedule.cancelLesson')}</Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="sched-day-footer">
+            <div className="slot-add">
+              <select className="input" value={addTime} onChange={(event) => setAddTime(event.target.value)}>
+                <option value="">{t('schedule.pickTime')}</option>
+                {unusedTimes.map((time) => <option key={time} value={time}>{time}</option>)}
+              </select>
+              <Button ghost size="sm" onClick={addSlot} disabled={!addTime || slotBusy}>{t('schedule.addSlot')}</Button>
+            </div>
+            {toggleSlots.length > 0 && (
+              <div className="slot-toggles">
+                {toggleSlots.map((slot) => (
+                  <button
+                    key={`t${slot.id}`}
+                    type="button"
+                    className={`slot-toggle ${slot.status}`}
+                    disabled={slotBusy}
+                    onClick={() => setSlot(slot, slot.status === 'closed' ? 'open' : 'close')}
+                  >
+                    {slot.time} · {slot.status === 'closed' ? t('schedule.open') : t('schedule.close')}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           </div>
         </Card>
       </div>
@@ -572,38 +911,121 @@ export default function Schedule() {
       </Modal>
 
       <Modal open={bookOpen} onClose={() => setBookOpen(false)} title={t('schedule.bookTitle')}>
-        <Field label={t('schedule.pickStudent')} required>
-          <select
-            className="input"
-            value={bookForm.studentId}
-            onChange={(e) => setBookForm((current) => ({ ...current, studentId: e.target.value }))}
-          >
-            <option value="">{t('schedule.pickStudent')}</option>
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name} · {student.left} {language === 'en' ? 'hrs left' : 'ชม. เหลือ'}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t('schedule.pickTime')} required>
-          <select
-            className="input"
-            value={bookForm.time}
-            onChange={(e) => setBookForm((current) => ({ ...current, time: e.target.value }))}
-          >
-            <option value="">{t('schedule.pickTime')}</option>
-            {openTimes.map((time) => <option key={time} value={time}>{time}</option>)}
-          </select>
-        </Field>
-        <Field label={t('schedule.bookHours')} required>
+        <Field label={t('schedule.pickStudents')} required>
           <Input
-            type="number"
-            min="1"
-            max="10"
-            value={bookForm.hours}
-            onChange={(e) => setBookForm((current) => ({ ...current, hours: e.target.value }))}
+            value={studentFilter}
+            onChange={(e) => setStudentFilter(e.target.value)}
+            placeholder={t('schedule.searchStudent')}
           />
+          <div className="book-student-list">
+            {students
+              .filter((student) => {
+                  const q = studentFilter.trim().toLowerCase();
+                  if (!q) {
+                      return true;
+                  }
+                  const hay = `${student.name || ''} ${student.nickname || ''}`.toLowerCase();
+                  return hay.includes(q);
+              })
+              .map((student) => {
+                  const id = String(student.id);
+                  const checked = bookForm.studentIds.includes(id);
+                  return (
+                    <label key={student.id} className={`book-student-row${checked ? ' on' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleBookStudent(student.id)}
+                      />
+                      <span className="book-student-name">{student.name || student.nickname}</span>
+                      <span className="muted book-student-hours">
+                        {student.left} {language === 'en' ? 'hrs left' : 'ชม. เหลือ'}
+                      </span>
+                    </label>
+                  );
+              })}
+            {students.length === 0 && (
+              <div className="empty" style={{ padding: 12 }}>{t('schedule.noStudents')}</div>
+            )}
+          </div>
+          {bookForm.studentIds.length > 0 && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              {t('schedule.selectedCount').replace('{n}', String(bookForm.studentIds.length))}
+            </div>
+          )}
+        </Field>
+        <Field label={t('schedule.pickTimes')} required>
+          <div className="time-slots-grid book-time-grid">
+            {slotTimes.map((time) => {
+              const closed = daySlots.some((slot) => slot.time === time && slot.status === 'closed');
+              const selected = bookForm.times.includes(time);
+              return (
+                <button
+                  key={time}
+                  type="button"
+                  disabled={closed}
+                  className={`time-slot${selected ? ' on' : ''}${closed ? ' full' : ''}`}
+                  onClick={() => toggleBookTime(time)}
+                >
+                  <span className="ts-time">{time}</span>
+                  <span className="ts-end">–{plus1(time)}</span>
+                  {closed && <span className="ts-full">{t('schedule.closed')}</span>}
+                  {selected && !closed && <span className="ts-full">{t('schedule.timePicked')}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="book-time-type book-time-range">
+            <label className="book-time-field">
+              <span className="book-time-type-label">{t('schedule.timeStart')}</span>
+              <Input
+                className="input book-time-input"
+                inputMode="numeric"
+                pattern="[0-9:]*"
+                value={bookForm.startDraft}
+                placeholder={t('schedule.timeStartPlaceholder')}
+                onChange={(e) => setTimeDraft('startDraft', e.target.value)}
+                onBlur={() => blurTimeDraft('startDraft')}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        blurTimeDraft('startDraft');
+                    }
+                }}
+                autoComplete="off"
+              />
+            </label>
+            <span className="book-time-range-sep" aria-hidden="true">→</span>
+            <label className="book-time-field">
+              <span className="book-time-type-label">{t('schedule.timeEnd')}</span>
+              <Input
+                className="input book-time-input"
+                inputMode="numeric"
+                pattern="[0-9:]*"
+                value={bookForm.endDraft}
+                placeholder={t('schedule.timeEndPlaceholder')}
+                onChange={(e) => setTimeDraft('endDraft', e.target.value)}
+                onBlur={() => blurTimeDraft('endDraft')}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        blurTimeDraft('endDraft');
+                    }
+                }}
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <div className="muted book-time-hint">{t('schedule.timeRangeHint')}</div>
+          {bookBlocks.length > 0 ? (
+            <div className="book-time-summary">
+              {t('schedule.timeSummary')
+                  .replace('{hours}', String(bookHoursTotal))
+                  .replace('{ranges}', formatTimeBlocks(bookBlocks))}
+            </div>
+          ) : (
+            <div className="muted book-time-hint">{t('schedule.timeHint')}</div>
+          )}
         </Field>
         <Field label={t('schedule.bookTopic')}>
           <Input value={bookForm.topic} onChange={(e) => setBookForm((current) => ({ ...current, topic: e.target.value }))}/>

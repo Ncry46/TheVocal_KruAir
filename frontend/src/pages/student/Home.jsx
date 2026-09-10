@@ -79,7 +79,7 @@ export default function Home() {
             buyMore: 'Buy more ->',
             used: 'Used',
             remaining: 'Remaining',
-            packageTip: 'Hours deducted when you sign after the lesson · packages expire in 6 months',
+            packageTip: 'Hours deducted when you sign after the lesson · packages do not expire',
             linePush: 'LINE: not connected',
             moveTitle: 'Request lesson move',
             moveHelp: 'Choose a new date and time. Kru Air will confirm within 24 hours.',
@@ -127,7 +127,7 @@ export default function Home() {
             buyMore: 'ซื้อเพิ่ม →',
             used: 'ใช้แล้ว',
             remaining: 'คงเหลือ',
-            packageTip: 'หักชั่วโมงเมื่อลงชื่อหลังเรียน · แพ็กเกจหมดอายุ 6 เดือน',
+            packageTip: 'หักชั่วโมงเมื่อลงชื่อหลังเรียน · แพ็กเกจไม่มีวันหมดอายุ',
             linePush: 'LINE: ยังไม่เชื่อม',
             moveTitle: 'ขอเลื่อนนัด',
             moveHelp: 'เลือกวัน-เวลาใหม่ — ครูแอร์จะยืนยันคำขอภายใน 24 ชม.',
@@ -276,7 +276,15 @@ export default function Home() {
       </div>
 
       <div className="grid cols-3 kpi-row" style={{ marginBottom: 18 }}>
-        <Kpi tone="green" icon={<ClockIcon width={19} height={19}/>} value={String(status.left)} label={copy.hoursLeft} sub={`${status.name} · ${language === 'en' ? 'expires' : 'หมดอายุ'} ${status.expiresAt}`}/>
+        <Kpi
+          tone="green"
+          icon={<ClockIcon width={19} height={19}/>}
+          value={String(status.left)}
+          label={copy.hoursLeft}
+          sub={`${status.name} · ${status.neverExpires
+            ? (language === 'en' ? 'no expiry' : 'ไม่มีหมดอายุ')
+            : `${language === 'en' ? 'expires' : 'หมดอายุ'} ${status.expiresAt}`}`}
+        />
         <Kpi tone="pink" icon={<MusicNoteIcon width={19} height={19}/>} value="12" label={copy.studied} sub={copy.classes}/>
         <Kpi tone="blue" icon={<BellIcon width={19} height={19}/>} value={next ? '1' : '0'} label={copy.upcoming} sub={next ? `${next.date} ${next.time}` : copy.none}/>
       </div>

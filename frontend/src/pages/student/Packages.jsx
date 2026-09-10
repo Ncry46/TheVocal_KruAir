@@ -142,7 +142,6 @@ export default function Packages() {
                 : pkgs.length === 2 ? 'pkg-grid-duo'
                   : 'grid cols-3'
             }
-            style={{ marginBottom: 16 }}
           >
             {pkgs.map((item) => (
               <button
@@ -254,7 +253,7 @@ export default function Packages() {
             )}
           </Field>
 
-          <div className="sumpanel" style={{ margin: '16px 0' }}>
+          <div className="sumpanel">
             <div className="sumrow">
               <span className="muted">{pkg?.name}</span>
               <b>฿{(pkg?.price ?? 0).toLocaleString()}</b>

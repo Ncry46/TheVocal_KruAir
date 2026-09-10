@@ -420,7 +420,7 @@ export async function confirmPendingPurchase(refNo, teacherId, enrollmentPublicI
             const pkgInsert = await run(
                 `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status, transaction_id)
                  OUTPUT INSERTED.id
-                 VALUES (@userId, @pkgId, @hours, 0, DATEADD(month, 6, SYSUTCDATETIME()), N'active', @txId)`,
+                 VALUES (@userId, @pkgId, @hours, 0, NULL, N'active', @txId)`,
                 { userId: tx.user_id, pkgId, hours, txId: tx.id },
             );
             const userPackageId = pkgInsert.recordset[0]?.id;

@@ -178,15 +178,18 @@ export function localizePackage(row, lang) {
 
 export function packageStatusFromRow(row, lang = 'th') {
     if (!row) {
-        return { name: '—', hours: 0, used: 0, left: 0, expiresAt: '—' };
+        return { name: '—', hours: 0, used: 0, left: 0, expiresAt: '—', neverExpires: true };
     }
-    const expires = new Date(row.expires_at);
+    const neverExpires = !row.expires_at;
     return {
         name: pick(row, 'package_name', lang) ?? row.package_name,
         hours: row.hours_total,
         used: row.hours_used,
         left: Math.max(0, row.hours_total - row.hours_used),
-        expiresAt: formatDate(expires, lang),
+        expiresAt: neverExpires
+            ? (lang === 'en' ? 'No expiry' : 'ไม่มีหมดอายุ')
+            : formatDate(new Date(row.expires_at), lang),
+        neverExpires,
     };
 }
 
