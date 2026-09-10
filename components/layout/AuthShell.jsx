@@ -11,7 +11,7 @@ export function AuthShell({ children, wide = false }) {
         <div className={`authwrap auth-split${wide ? ' auth-wide' : ''}`}>
           <aside className="auth-brand-panel">
             <div className="auth-brand-inner">
-            <BrandLogo light stacked size={72}/>
+            <BrandLogo light size={56}/>
               <p className="auth-panel-lead">{t('auth.panelSub')}</p>
               {items.length > 0 && (
                 <ul className="auth-panel-list">

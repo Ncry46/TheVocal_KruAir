@@ -121,7 +121,7 @@ export function PublicLayout({ children, footer = true }) {
       {footer && (<footer>
         <div className="wrap footer-grid">
           <div>
-            <BrandLogo light stacked size={44} style={{ marginBottom: 14 }} onClick={goHome}/>
+            <BrandLogo light size={40} style={{ marginBottom: 14 }} onClick={goHome}/>
             <p style={{ fontSize: 12, lineHeight: 1.7, color: 'rgba(255,255,255,0.55)', maxWidth: 300 }}>
               {t('public.footerText')}
             </p>
