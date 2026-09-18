@@ -45,6 +45,7 @@ const NAV = {
                 { to: '/teacher/payment-links', icon: <WalletIcon width={18} height={18}/>, label: 'nav.paymentLinks' },
                 { to: '/teacher/users', icon: <UserIcon width={18} height={18}/>, label: 'nav.manageUsers' },
                 { to: '/teacher/vouchers', icon: <TicketIcon width={18} height={18}/>, label: 'nav.vouchers' },
+                { to: '/teacher/packages', icon: <CartIcon width={18} height={18}/>, label: 'nav.managePackages' },
             ],
         },
         {
@@ -73,6 +74,7 @@ const PAGE_TITLES = {
     '/teacher/payment-links': { title: 'nav.paymentLinks', sub: 'pages.paymentLinksSub' },
     '/teacher/users': { title: 'nav.manageUsers', sub: 'pages.usersSub' },
     '/teacher/vouchers': { title: 'nav.vouchers', sub: 'pages.vouchersSub' },
+    '/teacher/packages': { title: 'nav.managePackages', sub: 'pages.managePackagesSub' },
     '/teacher/settings': { title: 'nav.settings', sub: 'pages.settingsSub' },
     '/teacher/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
 };
@@ -160,6 +162,46 @@ export function AppLayout({ mode }) {
     const toggleGroup = (groupKey) => {
         setOpenGroup((current) => (current === groupKey ? '' : groupKey));
     };
+    const renderGroup = (group) => {
+        const isOpen = openGroup === group.group;
+        const isActiveGroup = groupContainsPath(group, location.pathname);
+        const groupBadge = group.items.some((item) => item.to === '/teacher/requests') && reqCount > 0
+            ? reqCount
+            : 0;
+        return (
+          <div key={group.group} className={`side-nav-group${isOpen ? ' open' : ''}${isActiveGroup ? ' active' : ''}`}>
+            <button
+              type="button"
+              className="grp"
+              aria-expanded={isOpen}
+              onClick={() => toggleGroup(group.group)}
+            >
+              <span className="grp-label">{t(group.group)}</span>
+              {groupBadge > 0 && !isOpen && <span className="nav-badge">{groupBadge}</span>}
+              <span className="grp-chevron" aria-hidden="true"/>
+            </button>
+            {isOpen && (
+              <div className="side-nav-items">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) => (isActive ? 'on' : '')}
+                    onClick={closeSidebar}
+                  >
+                    <span className="ic">{item.icon}</span>
+                    {t(item.label)}
+                    {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+    };
+    const mainGroups = navGroups.filter((group) => group.group !== 'nav.system');
+    const systemGroups = navGroups.filter((group) => group.group === 'nav.system');
     return (<div className="app">
       <aside className={`side ${sidebarOpen ? 'open' : ''}`}>
         <div className="side-brand">
@@ -172,53 +214,24 @@ export function AppLayout({ mode }) {
         </div>
 
         <nav className="side-nav">
-          {navGroups.map((group) => {
-              const isOpen = openGroup === group.group;
-              const isActiveGroup = groupContainsPath(group, location.pathname);
-              const groupBadge = group.items.some((item) => item.to === '/teacher/requests') && reqCount > 0
-                  ? reqCount
-                  : 0;
-              return (
-                <div key={group.group} className={`side-nav-group${isOpen ? ' open' : ''}${isActiveGroup ? ' active' : ''}`}>
-                  <button
-                    type="button"
-                    className="grp"
-                    aria-expanded={isOpen}
-                    onClick={() => toggleGroup(group.group)}
-                  >
-                    <span className="grp-label">{t(group.group)}</span>
-                    {groupBadge > 0 && !isOpen && <span className="nav-badge">{groupBadge}</span>}
-                    <span className="grp-chevron" aria-hidden="true"/>
-                  </button>
-                  {isOpen && (
-                    <div className="side-nav-items">
-                      {group.items.map((item) => (
-                        <NavLink
-                          key={item.to}
-                          to={item.to}
-                          end={item.end}
-                          className={({ isActive }) => (isActive ? 'on' : '')}
-                          onClick={closeSidebar}
-                        >
-                          <span className="ic">{item.icon}</span>
-                          {t(item.label)}
-                          {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-          })}
+          {mainGroups.map((group) => renderGroup(group))}
         </nav>
 
         <div className="foot">
           <div className="status">
             <span className="dot"/> {language === 'en' ? 'Online' : 'ระบบออนไลน์'} · v0.1
           </div>
-          <button className="back-site" onClick={() => { navigate('/'); closeSidebar(); }}>
-            <HomeIcon width={15} height={15}/> {t('common.backToSite')}
-          </button>
+          {systemGroups.flatMap((group) => group.items).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={closeSidebar}
+              className={({ isActive }) => `back-site foot-link${isActive ? ' on' : ''}`}
+            >
+              {item.icon}{t(item.label)}
+            </NavLink>
+          ))}
           <button className="logout" onClick={() => {
             logout();
             navigate('/');

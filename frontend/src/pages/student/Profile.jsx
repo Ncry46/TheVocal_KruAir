@@ -182,15 +182,6 @@ export default function Profile() {
               <div className="avatar-lg">
                 <img src={avatarSrc(user)} alt={user?.nickname ?? ''}/>
               </div>
-              <Button
-                ghost
-                size="sm"
-                type="button"
-                disabled={avatarBusy}
-                onClick={() => setPickingAvatar((open) => !open)}
-              >
-                {pickingAvatar ? t('profile.cancelAvatar') : t('profile.changeAvatar')}
-              </Button>
             </div>
             <div className="profile-hero-meta">
               <div className="profile-name">{user?.nickname}</div>
@@ -199,11 +190,22 @@ export default function Profile() {
                 <Badge tone="blue">{roleLabel}</Badge>
                 {user?.email && <Badge tone="green">{user.email}</Badge>}
               </div>
-              {!editing && (
+              <div className="profile-hero-actions">
+                {!editing && (
                 <Button pink onClick={startEdit}>
                   {t('profile.edit')}
                 </Button>
-              )}
+                )}
+                <Button
+                  ghost
+                  size="sm"
+                  type="button"
+                  disabled={avatarBusy}
+                  onClick={() => setPickingAvatar((open) => !open)}
+                >
+                  {pickingAvatar ? t('profile.cancelAvatar') : t('profile.changeAvatar')}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -236,12 +238,14 @@ export default function Profile() {
           {editing ? (
             <Card title={t('profile.edit')}>
               <form onSubmit={save}>
-                <Field label={t('profile.name')} required>
-                  <Input value={name} onChange={(event) => setName(event.target.value)}/>
-                </Field>
-                <Field label={t('profile.nameEn')} required>
-                  <Input placeholder={t('profile.nameEnPlaceholder')} value={nameEn} onChange={(event) => setNameEn(event.target.value)}/>
-                </Field>
+                <div className="two-col">
+                  <Field label={t('profile.name')} required>
+                    <Input value={name} onChange={(event) => setName(event.target.value)}/>
+                  </Field>
+                  <Field label={t('profile.nameEn')} required>
+                    <Input placeholder={t('profile.nameEnPlaceholder')} value={nameEn} onChange={(event) => setNameEn(event.target.value)}/>
+                  </Field>
+                </div>
                 <div className="two-col">
                   <Field label={t('profile.nickname')} required>
                     <Input value={nickname} onChange={(event) => setNickname(event.target.value)}/>
@@ -258,17 +262,19 @@ export default function Profile() {
                     <Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)}/>
                   </Field>
                 </div>
-                <Field label={t('profile.emergency')}>
-                  <Input value={emergencyContact} onChange={(event) => setEmergencyContact(event.target.value)}/>
-                </Field>
-                <Field label={t('profile.education')}>
-                  <select className="input" value={education} onChange={(event) => setEducation(event.target.value)}>
-                    <option value="">{t('auth.select')}</option>
-                    {EDUCATION_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>{language === 'en' ? item.en : item.th}</option>
-                    ))}
-                  </select>
-                </Field>
+                <div className="two-col">
+                  <Field label={t('profile.emergency')}>
+                    <Input value={emergencyContact} onChange={(event) => setEmergencyContact(event.target.value)}/>
+                  </Field>
+                  <Field label={t('profile.education')}>
+                    <select className="input" value={education} onChange={(event) => setEducation(event.target.value)}>
+                      <option value="">{t('auth.select')}</option>
+                      {EDUCATION_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>{language === 'en' ? item.en : item.th}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
                 <Field label={t('profile.genres')}>
                   <div className="genre-row">
                     {GENRES.map((genre) => (
@@ -295,12 +301,14 @@ export default function Profile() {
             </Card>
           ) : (
             <Card title={t('profile.member')}>
-              {rows.map(([label, value]) => (
-                <div className="info-row" key={label}>
-                  <span className="muted">{label}</span>
-                  <b>{value}</b>
-                </div>
-              ))}
+              <div className="info-grid">
+                {rows.map(([label, value]) => (
+                  <div className="info-item" key={label}>
+                    <span className="muted">{label}</span>
+                    <b className={!value || value === '—' ? 'is-empty' : ''}>{value || '—'}</b>
+                  </div>
+                ))}
+              </div>
               <div className="termbox" style={{ marginTop: 14 }}>
                 {t('profile.pdpa')}
               </div>

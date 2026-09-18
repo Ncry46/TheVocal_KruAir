@@ -49,6 +49,7 @@ export const translations = {
       manageStudents: 'จัดการนักเรียน',
       manageUsers: 'จัดการผู้ใช้',
       vouchers: 'จัดการวอเชอร์',
+      managePackages: 'จัดการแพ็กเกจ',
       system: 'ระบบ',
       settings: 'ตั้งค่าระบบ',
     },
@@ -79,6 +80,7 @@ export const translations = {
       manageStudentsSub: 'เพิ่ม/แก้ไข/ลบ นักเรียน',
       usersSub: 'ครู นักเรียน และแอดมินทั้งหมด',
       vouchersSub: 'สร้างและจัดการส่วนลด',
+      managePackagesSub: 'แพ็กเกจคอร์สและบัญชีรับเงิน',
       settingsSub: 'การตั้งค่าทั่วไป',
     },
     auth: {
@@ -957,6 +959,7 @@ export const translations = {
       manageStudents: 'Manage students',
       manageUsers: 'Manage users',
       vouchers: 'Vouchers',
+      managePackages: 'Manage packages',
       system: 'System',
       settings: 'Settings',
     },
@@ -987,6 +990,7 @@ export const translations = {
       manageStudentsSub: 'Add / edit / remove students',
       usersSub: 'Teachers, students, and admins',
       vouchersSub: 'Create and manage discounts',
+      managePackagesSub: 'Course packages and payment accounts',
       settingsSub: 'General settings',
     },
     auth: {

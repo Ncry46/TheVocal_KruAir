@@ -22,6 +22,7 @@ const Requests = lazy(() => import('./pages/admin/Requests'));
 const Students = lazy(() => import('./pages/admin/Students'));
 const Sales = lazy(() => import('./pages/admin/Sales'));
 const Users = lazy(() => import('./pages/admin/Users'));
+const AdminPackages = lazy(() => import('./pages/admin/Packages'));
 const Vouchers = lazy(() => import('./pages/admin/Vouchers'));
 const AdminPayments = lazy(() => import('./pages/admin/Payments'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
@@ -85,6 +86,7 @@ export default function App() {
               <Route path="payments" element={<AdminPayments />}/>
               <Route path="payment-links" element={<PaymentLinks />}/>
               <Route path="users" element={<Users />}/>
+              <Route path="packages" element={<AdminPackages />}/>
               <Route path="vouchers" element={<Vouchers />}/>
               <Route path="settings" element={<Settings />}/>
               <Route path="profile" element={<Profile />}/>
