@@ -151,7 +151,22 @@ export default function Schedule() {
     const [moveTime, setMoveTime] = useState('');
     const [moveBusy, setMoveBusy] = useState(false);
 
-    const load = () => api.getTeacherSchedule(year, month + 1, user?.role === 'admin' ? teacherFilter : '').then(setWeek);
+    const load = () => api.getTeacherSchedule(year, month + 1, user?.role === 'admin' ? teacherFilter : '')
+        .then(setWeek)
+        .catch((err) => {
+            setWeek({
+                title: language === 'en'
+                    ? `Schedule · ${EN_MONTHS[month]} ${year}`
+                    : `ตารางสอน · ${TH_MONTHS[month]} ${year + 543}`,
+                year,
+                month: month + 1,
+                pendingCount: 0,
+                lessonsByDate: {},
+                slotsByDate: {},
+                slotTimes: ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'],
+            });
+            toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not load schedule' : 'โหลดตารางสอนไม่สำเร็จ'));
+        });
 
     useEffect(() => {
         const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;

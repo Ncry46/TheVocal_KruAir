@@ -127,7 +127,7 @@ export default function Booking() {
     const [teachers, setTeachers] = useState([]);
     const [teacherId, setTeacherId] = useState('');
 
-    const loadDays = (id = teacherId) => api.getDays(id).then(setDays);
+    const loadDays = (id = teacherId) => api.getDays(id).then(setDays).catch(() => setDays([]));
 
     useEffect(() => {
         loadDays();

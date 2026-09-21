@@ -12,7 +12,7 @@ export default function Users() {
     const [q, setQ] = useState('');
     const [filter, setFilter] = useState('all');
 
-    const load = () => api.getUsers().then(setRows);
+    const load = () => api.getUsers().then(setRows).catch(() => setRows([]));
 
     useEffect(() => {
         load();

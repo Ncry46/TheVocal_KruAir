@@ -19,7 +19,7 @@ export default function Vouchers() {
     const [form, setForm] = useState(EMPTY_FORM);
     const [busy, setBusy] = useState(false);
 
-    const load = () => api.getVouchers().then(setRows);
+    const load = () => api.getVouchers().then(setRows).catch(() => setRows([]));
 
     useEffect(() => {
         load();

@@ -51,7 +51,7 @@ export default function Students() {
     const [form, setForm] = useState(EMPTY_OFFER);
     const [busy, setBusy] = useState(false);
 
-    const load = () => api.getStudents().then(setRows);
+    const load = () => api.getStudents().then(setRows).catch(() => setRows([]));
 
     useEffect(() => {
         load();

@@ -7,7 +7,7 @@ export default function Requests() {
     const { language, toast } = useApp();
     const [requests, setRequests] = useState(null);
     useEffect(() => {
-        api.getMoveRequests().then(setRequests);
+        api.getMoveRequests().then(setRequests).catch(() => setRequests([]));
     }, [language]);
     const decide = async (r, approve) => {
         await api.decideMove(r.id, approve);
