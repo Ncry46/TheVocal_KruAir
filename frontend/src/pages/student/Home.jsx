@@ -27,10 +27,24 @@ export default function Home() {
     const [days, setDays] = useState([]);
     const [slots, setSlots] = useState(null);
     useEffect(() => {
-        api.getPackageStatus().then(setStatus);
-        api.getHistory().then(setHist);
-        api.getMyLessons().then(setLessons);
-        api.getDays().then(setDays);
+        let cancelled = false;
+        Promise.all([
+            api.getPackageStatus().catch(() => ({ name: '—', hours: 0, used: 0, left: 0, expiresAt: '—', neverExpires: true })),
+            api.getHistory().catch(() => []),
+            api.getMyLessons().catch(() => []),
+            api.getDays().catch(() => []),
+        ]).then(([pkgStatus, history, myLessons, openDays]) => {
+            if (cancelled) {
+                return;
+            }
+            setStatus(pkgStatus);
+            setHist(history);
+            setLessons(myLessons);
+            setDays(openDays);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [language]);
     useEffect(() => {
         if (!moveOpen)
@@ -38,7 +52,7 @@ export default function Home() {
         setSlots(null);
         setMoveTime('');
         if (moveDay)
-            api.getSlots(moveDay).then(setSlots);
+            api.getSlots(moveDay).then(setSlots).catch(() => setSlots([]));
     }, [moveDay, moveOpen, language]);
     if (!status || !hist || !lessons)
         return <Skeleton />;
@@ -67,7 +81,7 @@ export default function Home() {
             booking: 'Book a lesson',
             buy: 'Buy package',
             studied: 'Completed',
-            classes: '12 classes total',
+            classes: hist.length === 1 ? '1 class total' : `${hist.length} classes total`,
             upcoming: 'Upcoming',
             none: 'No booking yet',
             latestHistory: 'Latest history',
@@ -115,7 +129,7 @@ export default function Home() {
             booking: 'จองเวลาเรียน',
             buy: 'ซื้อแพ็กเกจ',
             studied: 'เรียนแล้ว',
-            classes: 'ทั้งหมด 12 คลาส',
+            classes: `ทั้งหมด ${hist.length} คลาส`,
             upcoming: 'นัดถัดไป',
             none: 'ยังไม่มีนัด',
             latestHistory: 'ประวัติล่าสุด',
@@ -155,6 +169,9 @@ export default function Home() {
             await api.confirmLesson(next.id);
             toast(copy.confirmToast, 'ok');
             setLessons(await api.getMyLessons());
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : copy.confirm);
         }
         finally {
             setConfirming(false);
@@ -214,6 +231,9 @@ export default function Home() {
             toast(copy.moveToast, 'ok');
             setMoveOpen(false);
             setLessons(await api.getMyLessons());
+        }
+        catch (err) {
+            toast(err instanceof Error ? err.message : copy.sendMove);
         }
         finally {
             setMoveBusy(false);
@@ -285,7 +305,7 @@ export default function Home() {
             ? (language === 'en' ? 'no expiry' : 'ไม่มีหมดอายุ')
             : `${language === 'en' ? 'expires' : 'หมดอายุ'} ${status.expiresAt}`}`}
         />
-        <Kpi tone="pink" icon={<MusicNoteIcon width={19} height={19}/>} value="12" label={copy.studied} sub={copy.classes}/>
+        <Kpi tone="pink" icon={<MusicNoteIcon width={19} height={19}/>} value={String(hist.length)} label={copy.studied} sub={copy.classes}/>
         <Kpi tone="blue" icon={<BellIcon width={19} height={19}/>} value={next ? '1' : '0'} label={copy.upcoming} sub={next ? `${next.date} ${next.time}` : copy.none}/>
       </div>
 

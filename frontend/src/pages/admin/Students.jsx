@@ -23,10 +23,28 @@ function offerTone(status) {
     return 'gray';
 }
 
+function statusBadge(student, t) {
+    if (student.state === 'active') {
+        return <Badge tone="green">{t('studentsPage.active')}</Badge>;
+    }
+    if (student.state === 'new') {
+        return <Badge tone="blue">{t('studentsPage.new')}</Badge>;
+    }
+    if (student.state === 'away') {
+        const days = student.daysAway;
+        const label = days == null
+            ? t('studentsPage.away')
+            : t('studentsPage.awayDays').replace('{n}', String(days));
+        return <Badge tone="amber">{label}</Badge>;
+    }
+    return <Badge tone="gray">{t('studentsPage.expired')}</Badge>;
+}
+
 export default function Students() {
     const { language, t, toast } = useApp();
     const [rows, setRows] = useState(null);
     const [q, setQ] = useState('');
+    const [filter, setFilter] = useState('all');
     const [offerOpen, setOfferOpen] = useState(false);
     const [selected, setSelected] = useState(null);
     const [offers, setOffers] = useState([]);
@@ -39,14 +57,29 @@ export default function Students() {
         load();
     }, [language]);
 
+    const awayCount = useMemo(
+        () => (rows ?? []).filter((row) => row.state === 'away').length,
+        [rows],
+    );
+
     const filtered = useMemo(() => {
         const list = rows ?? [];
         const needle = q.trim().toLowerCase();
-        if (!needle) {
-            return list;
+        let next = list;
+        if (filter === 'away') {
+            next = next.filter((row) => row.state === 'away');
         }
-        return list.filter((row) => row.name.toLowerCase().includes(needle) || row.pkg.toLowerCase().includes(needle));
-    }, [rows, q]);
+        else if (filter === 'active') {
+            next = next.filter((row) => row.state === 'active');
+        }
+        if (needle) {
+            next = next.filter((row) => row.name.toLowerCase().includes(needle) || row.pkg.toLowerCase().includes(needle));
+        }
+        if (filter === 'away') {
+            next = [...next].sort((a, b) => (b.daysAway ?? -1) - (a.daysAway ?? -1));
+        }
+        return next;
+    }, [rows, q, filter]);
 
     const openOfferModal = async (student) => {
         setSelected(student);
@@ -135,19 +168,43 @@ export default function Students() {
           title={t('studentsPage.title')}
           action={<Input placeholder={t('studentsPage.search')} value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 230 }}/>}
         >
+          <div className="chip-row" style={{ marginBottom: 14 }}>
+            <button type="button" className={`dchip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>
+              {t('studentsPage.filterAll')}
+            </button>
+            <button type="button" className={`dchip ${filter === 'away' ? 'on' : ''}`} onClick={() => setFilter('away')}>
+              {t('studentsPage.filterAway')}{awayCount > 0 ? ` (${awayCount})` : ''}
+            </button>
+            <button type="button" className={`dchip ${filter === 'active' ? 'on' : ''}`} onClick={() => setFilter('active')}>
+              {t('studentsPage.filterActive')}
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: -6, marginBottom: 14, fontSize: 12.5 }}>
+            {t('studentsPage.awayHint')}
+          </p>
           <Table
-            heads={[t('studentsPage.student'), t('studentsPage.info'), t('studentsPage.package'), t('studentsPage.left'), t('studentsPage.done'), t('studentsPage.status'), '']}
+            heads={[
+              t('studentsPage.student'),
+              t('studentsPage.info'),
+              t('studentsPage.package'),
+              t('studentsPage.left'),
+              t('studentsPage.done'),
+              t('studentsPage.awayCol'),
+              t('studentsPage.status'),
+              '',
+            ]}
             rows={filtered.map((student) => [
               <Link key="n" to={`/teacher/students/${student.id}`} className="link"><b>{student.name}</b></Link>,
               student.info,
               student.pkg === '—' ? <span key="p" className="muted">—</span> : student.pkg,
               student.left > 0 ? <b key="l" className="accent">{student.left} {t('studentsPage.hours')}</b> : <span key="l" className="muted">0</span>,
               `${student.done} ${t('studentsPage.classes')}`,
-              student.state === 'active'
-                  ? <Badge key="st" tone="green">{t('studentsPage.active')}</Badge>
-                  : student.state === 'new'
-                      ? <Badge key="st" tone="blue">{t('studentsPage.new')}</Badge>
-                      : <Badge key="st" tone="gray">{t('studentsPage.expired')}</Badge>,
+              student.daysAway != null
+                  ? <b key="d" style={{ color: student.daysAway >= 14 ? 'var(--wine)' : undefined }}>
+                      {t('studentsPage.daysValue').replace('{n}', String(student.daysAway))}
+                    </b>
+                  : <span key="d" className="muted">—</span>,
+              statusBadge(student, t),
               <Button key="a" size="sm" pink onClick={() => openOfferModal(student)}>{t('studentsPage.addCourse')}</Button>,
             ])}
           />
@@ -190,7 +247,6 @@ export default function Students() {
           <Button pink style={{ width: '100%', marginBottom: 16 }} onClick={createOffer} disabled={busy}>
             {busy ? t('offers.creating') : t('offers.create')}
           </Button>
-
           {offers.length > 0 && (
             <div>
               <div className="grp">{t('offers.existing')}</div>
