@@ -16,9 +16,10 @@ const Receipts = lazy(() => import('./pages/student/Receipts'));
 const Profile = lazy(() => import('./pages/student/Profile'));
 const Schedule = lazy(() => import('./pages/admin/Schedule'));
 const Today = lazy(() => import('./pages/admin/Today'));
+const TeacherHomework = lazy(() => import('./pages/admin/TeacherHomework'));
+const TeacherSignatures = lazy(() => import('./pages/admin/TeacherSignatures'));
 const StudentProfile = lazy(() => import('./pages/admin/StudentProfile'));
 const PaymentLinks = lazy(() => import('./pages/admin/PaymentLinks'));
-const Requests = lazy(() => import('./pages/admin/Requests'));
 const Students = lazy(() => import('./pages/admin/Students'));
 const Sales = lazy(() => import('./pages/admin/Sales'));
 const Users = lazy(() => import('./pages/admin/Users'));
@@ -79,7 +80,9 @@ export default function App() {
             <Route path="/teacher" element={<AppLayout mode="teacher"/>}>
               <Route index element={<Today />}/>
               <Route path="calendar" element={<Schedule />}/>
-              <Route path="requests" element={<Requests />}/>
+              <Route path="homework" element={<TeacherHomework />}/>
+              <Route path="signatures" element={<TeacherSignatures />}/>
+              <Route path="requests" element={<Navigate to="/teacher/calendar#move-requests" replace/>}/>
               <Route path="students" element={<Students />}/>
               <Route path="students/:id" element={<StudentProfile />}/>
               <Route path="sales" element={<Sales />}/>
@@ -96,7 +99,7 @@ export default function App() {
 
         <Route path="/admin" element={<Navigate to="/teacher" replace/>}/>
         <Route path="/admin/sales" element={<Navigate to="/teacher/sales" replace/>}/>
-        <Route path="/admin/requests" element={<Navigate to="/teacher/requests" replace/>}/>
+        <Route path="/admin/requests" element={<Navigate to="/teacher/calendar#move-requests" replace/>}/>
         <Route path="/admin/users" element={<Navigate to="/teacher/users" replace/>}/>
         <Route path="/admin/students" element={<Navigate to="/teacher/students" replace/>}/>
         <Route path="/admin/vouchers" element={<Navigate to="/teacher/vouchers" replace/>}/>

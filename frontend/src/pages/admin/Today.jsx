@@ -83,9 +83,9 @@ export default function Today() {
 
     const stats = [
         { label: language === 'en' ? 'Pending confirm' : 'รอยืนยัน', value: data.pendingLessons, tone: 'amber', icon: <BellIcon width={18} height={18}/>, to: '/teacher/calendar' },
-        { label: language === 'en' ? 'Move requests' : 'คำขอเลื่อนนัด', value: data.moveRequests, tone: 'pink', icon: <RefreshIcon width={18} height={18}/>, to: '/teacher/requests' },
-        { label: language === 'en' ? 'Awaiting signature' : 'รอลงชื่อ', value: data.pendingSignatures, tone: 'blue', icon: <CheckIcon width={18} height={18}/>, to: '/teacher/calendar' },
-        { label: language === 'en' ? 'Homework audio' : 'เสียงการบ้าน', value: data.homeworkThisWeek, tone: 'violet', icon: <MusicNoteIcon width={18} height={18}/>, to: '/teacher/calendar' },
+        { label: language === 'en' ? 'Move requests' : 'คำขอเลื่อนนัด', value: data.moveRequests, tone: 'pink', icon: <RefreshIcon width={18} height={18}/>, to: '/teacher/calendar#move-requests' },
+        { label: language === 'en' ? 'Awaiting signature' : 'รอลงชื่อ', value: data.pendingSignatures, tone: 'blue', icon: <CheckIcon width={18} height={18}/>, to: '/teacher/signatures' },
+        { label: language === 'en' ? 'Homework audio' : 'เสียงการบ้าน', value: data.homeworkThisWeek, tone: 'violet', icon: <MusicNoteIcon width={18} height={18}/>, to: '/teacher/homework' },
         { label: language === 'en' ? 'Pending payments' : 'รอตรวจโอน', value: data.pendingPayments, tone: 'green', icon: <WalletIcon width={18} height={18}/>, to: '/teacher/payments' },
     ];
 
@@ -171,8 +171,10 @@ export default function Today() {
         </Card>
 
         <div className="quick-links" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <Button ghost onClick={() => navigate('/teacher/requests')}><RefreshIcon width={14} height={14}/> {t('nav.requests')}</Button>
+          <Button ghost onClick={() => navigate('/teacher/calendar#move-requests')}><RefreshIcon width={14} height={14}/> {t('nav.requests')}</Button>
           <Button ghost onClick={() => navigate('/teacher/students')}><GraduationIcon width={14} height={14}/> {t('nav.students')}</Button>
+          <Button ghost onClick={() => navigate('/teacher/homework')}><MusicNoteIcon width={14} height={14}/> {t('nav.teacherHomework')}</Button>
+          <Button ghost onClick={() => navigate('/teacher/signatures')}><CheckIcon width={14} height={14}/> {t('nav.teacherSignatures')}</Button>
           <Button ghost onClick={() => navigate('/teacher/payments')}><WalletIcon width={14} height={14}/> {t('nav.payments')}</Button>
           <Button ghost onClick={() => navigate('/teacher/payment-links')}><BellIcon width={14} height={14}/> {language === 'en' ? 'Payment links' : 'ลิงก์ชำระเงิน'}</Button>
         </div>

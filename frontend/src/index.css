@@ -4090,6 +4090,11 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
   border: 0;
   border-top: 1px solid var(--line);
 }
+.sched-move-requests {
+  margin-top: 20px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
 .sched-signatures {
   margin-top: 0;
 }

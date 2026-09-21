@@ -27,10 +27,13 @@ export function resolveNotificationLink(notification, mode) {
                 : '/teacher/payments';
         }
         if (includesAny(combined, ['คำขอเลื่อน', 'move request', 'ขอเลื่อนนัด'])) {
-            return '/teacher/requests';
+            return '/teacher/calendar#move-requests';
         }
         if (includesAny(title, ['การบ้าน', 'homework', 'Homework'])) {
-            return '/teacher/students';
+            return '/teacher/homework';
+        }
+        if (includesAny(combined, ['ลายเซ็น', 'signature', 'ลงชื่อ'])) {
+            return '/teacher/signatures';
         }
         if (includesAny(combined, ['นัด', 'lesson', 'Lesson', 'booking'])) {
             return '/teacher/calendar';

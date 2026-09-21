@@ -6,7 +6,7 @@ import { BrandLogo } from '../BrandLogo';
 import { ThemeToggle } from '../ThemeToggle';
 import { avatarSrc, profilePath } from '@app/utils/avatar';
 import { resolveNotificationLink } from '@app/utils/notificationLink';
-import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, ReceiptIcon, RefreshIcon, TicketIcon, UserIcon, WalletIcon } from '../icons';
+import { BellIcon, BookIcon, CalendarIcon, CartIcon, CheckIcon, ChartIcon, GearIcon, GraduationIcon, HomeIcon, LogoutIcon, MicIcon, MusicNoteIcon, ReceiptIcon, TicketIcon, UserIcon, WalletIcon } from '../icons';
 const NAV = {
     student: [
         {
@@ -29,11 +29,12 @@ const NAV = {
     ],
     teacher: [
         {
-            group: 'pages.scheduleTitle',
+            group: 'nav.teachingGroup',
             items: [
                 { to: '/teacher', icon: <HomeIcon width={18} height={18}/>, label: 'nav.today', end: true },
                 { to: '/teacher/calendar', icon: <CalendarIcon width={18} height={18}/>, label: 'nav.schedule' },
-                { to: '/teacher/requests', icon: <RefreshIcon width={18} height={18}/>, label: 'nav.requests' },
+                { to: '/teacher/homework', icon: <MusicNoteIcon width={18} height={18}/>, label: 'nav.teacherHomework' },
+                { to: '/teacher/signatures', icon: <CheckIcon width={18} height={18}/>, label: 'nav.teacherSignatures' },
                 { to: '/teacher/students', icon: <GraduationIcon width={18} height={18}/>, label: 'nav.students' },
             ],
         },
@@ -67,7 +68,8 @@ const PAGE_TITLES = {
     '/app/profile': { title: 'nav.profile', sub: 'pages.profileSub' },
     '/teacher': { title: 'nav.today', sub: 'pages.todaySub' },
     '/teacher/calendar': { title: 'pages.scheduleTitle', sub: 'pages.scheduleSub' },
-    '/teacher/requests': { title: 'nav.requests', sub: 'pages.requestsSub' },
+    '/teacher/homework': { title: 'nav.teacherHomework', sub: 'pages.teacherHomeworkSub' },
+    '/teacher/signatures': { title: 'nav.teacherSignatures', sub: 'pages.teacherSignaturesSub' },
     '/teacher/students': { title: 'nav.students', sub: 'pages.studentsSub' },
     '/teacher/sales': { title: 'nav.sales', sub: 'pages.salesSub' },
     '/teacher/payments': { title: 'nav.payments', sub: 'pages.paymentsSub' },
@@ -165,7 +167,7 @@ export function AppLayout({ mode }) {
     const renderGroup = (group) => {
         const isOpen = openGroup === group.group;
         const isActiveGroup = groupContainsPath(group, location.pathname);
-        const groupBadge = group.items.some((item) => item.to === '/teacher/requests') && reqCount > 0
+        const groupBadge = group.items.some((item) => item.to === '/teacher/calendar') && reqCount > 0
             ? reqCount
             : 0;
         return (
@@ -192,7 +194,7 @@ export function AppLayout({ mode }) {
                   >
                     <span className="ic">{item.icon}</span>
                     {t(item.label)}
-                    {item.to === '/teacher/requests' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
+                    {item.to === '/teacher/calendar' && reqCount > 0 && <span className="nav-badge">{reqCount}</span>}
                   </NavLink>
                 ))}
               </div>

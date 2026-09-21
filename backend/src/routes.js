@@ -2328,7 +2328,7 @@ export function registerRoutes(app) {
         const teacherId = await teacherScopeId(req);
         const result = await query(
             `SELECT cl.id, cl.student_audio_url, cl.lesson_title, cl.lesson_title_en, cl.created_at,
-                    u.nickname, u.nickname_en, u.name, u.name_en,
+                    u.id AS student_id, u.nickname, u.nickname_en, u.name, u.name_en,
                     CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
                     CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm
              FROM dbo.class_logs cl
@@ -2342,6 +2342,7 @@ export function registerRoutes(app) {
         );
         res.json(result.recordset.map((row) => ({
             id: row.id,
+            studentId: row.student_id,
             student: studentLabel(row, lang),
             date: chipLabel(parseIsoDate(row.slot_iso), lang),
             time: row.slot_hhmm,
