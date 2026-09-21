@@ -1,4 +1,4 @@
-import { getPool, sql } from './db.js';
+import { getPool, isConnectionError, resetPool, sql } from './db.js';
 import { canSignLesson, confirmDeadlineAt, isAllowedSlotTime, nextSlotStatus, SLOT_TIMES, slotStartAt } from './bookingPolicy.js';
 import { parseIsoDate, toIsoDate } from './dates.js';
 import { chipLabel, educationEn, formatDate, genresEn, methodEn, moveStatus, pick, relativeTime } from './lang.js';
@@ -7,7 +7,7 @@ import { formatLineNotifyMessage, findLineUserIdForAppUser, pushLineText } from 
 import { isHomeworkNote, packageHoursLeft, shouldNotifyLowHours } from './packagePolicy.js';
 import { nextInvoiceRef } from './invoiceRef.js';
 
-export async function query(text, params = {}) {
+async function runQuery(text, params = {}) {
     const pool = await getPool();
     const request = pool.request();
     for (const [key, value] of Object.entries(params)) {
@@ -16,30 +16,57 @@ export async function query(text, params = {}) {
     return request.query(text);
 }
 
-export async function withTransaction(work) {
-    const pool = await getPool();
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
-    const run = async (text, params = {}) => {
-        const request = new sql.Request(tx);
-        for (const [key, value] of Object.entries(params)) {
-            request.input(key, value);
-        }
-        return request.query(text);
-    };
+export async function query(text, params = {}) {
     try {
-        const result = await work(run);
-        await tx.commit();
-        return result;
+        return await runQuery(text, params);
     }
     catch (err) {
+        if (!isConnectionError(err)) {
+            throw err;
+        }
+        console.error('SQL query lost connection, reconnecting:', err.message);
+        await resetPool();
+        return runQuery(text, params);
+    }
+}
+
+export async function withTransaction(work) {
+    const attempt = async () => {
+        const pool = await getPool();
+        const tx = new sql.Transaction(pool);
+        await tx.begin();
+        const run = async (text, params = {}) => {
+            const request = new sql.Request(tx);
+            for (const [key, value] of Object.entries(params)) {
+                request.input(key, value);
+            }
+            return request.query(text);
+        };
         try {
-            await tx.rollback();
+            const result = await work(run);
+            await tx.commit();
+            return result;
         }
-        catch {
-            /* already rolled back */
+        catch (err) {
+            try {
+                await tx.rollback();
+            }
+            catch {
+                /* already rolled back */
+            }
+            throw err;
         }
-        throw err;
+    };
+    try {
+        return await attempt();
+    }
+    catch (err) {
+        if (!isConnectionError(err)) {
+            throw err;
+        }
+        console.error('SQL transaction lost connection, reconnecting:', err.message);
+        await resetPool();
+        return attempt();
     }
 }
 

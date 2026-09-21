@@ -5,11 +5,12 @@ import cors from 'cors';
 import express from 'express';
 import { registerRoutes } from './routes.js';
 import { createLineWebhookHandler } from './lineWebhook.js';
-import { getAuthMode, getPool } from './db.js';
+import { getAuthMode, getPool, isConnectionError, resetPool } from './db.js';
 import { runSchoolJobs } from './jobs.js';
 import { ensureEnrollmentSchema } from './store.js';
 import { ensureRecurringScheduleSchema } from './recurringSchedule.js';
 import { UPLOAD_ROOT } from './uploads.js';
+import { query } from './store.js';
 
 function corsOrigin(reqOrigin, callback) {
     const configured = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
@@ -51,8 +52,17 @@ app.use((req, _res, next) => {
 });
 
 app.get('/api/health', async (_req, res) => {
-    await getPool();
-    res.json({ ok: true, database: process.env.SQL_DATABASE || 'BD_AIR' });
+    try {
+        await query('SELECT 1 AS ok');
+        res.json({ ok: true, database: process.env.SQL_DATABASE || 'BD_AIR' });
+    }
+    catch (err) {
+        res.status(503).json({
+            ok: false,
+            database: process.env.SQL_DATABASE || 'BD_AIR',
+            error: err instanceof Error ? err.message : 'database unavailable',
+        });
+    }
 });
 
 registerRoutes(app);
@@ -76,8 +86,13 @@ if (existsSync(join(publicDir, 'index.html'))) {
     });
 }
 
-app.use((err, _req, res, _next) => {
+app.use(async (err, _req, res, _next) => {
     const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาด';
+    if (isConnectionError(err)) {
+        await resetPool().catch(() => {});
+        res.status(503).json({ error: 'การเชื่อมต่อฐานข้อมูลหลุดชั่วคราว กรุณาลองใหม่' });
+        return;
+    }
     const status = /เข้าสู่ระบบ|เซสชัน/.test(message) ? 401 : 400;
     res.status(status).json({ error: message });
 });
@@ -95,8 +110,11 @@ getPool()
             if (result.expired || result.reminded || result.homeworkReminded || result.lowHours || result.expiry) {
                 console.log('school jobs', result);
             }
-        }).catch((err) => {
+        }).catch(async (err) => {
             console.error('school jobs failed:', err.message);
+            if (isConnectionError(err)) {
+                await resetPool().catch(() => {});
+            }
         });
         tick();
         setInterval(tick, 5 * 60 * 1000);

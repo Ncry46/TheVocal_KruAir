@@ -45,6 +45,8 @@ function buildConnectionString() {
         `Database=${database}`,
         `Encrypt=${encrypt}`,
         `TrustServerCertificate=${trustCert}`,
+        'Connection Timeout=30',
+        'Login Timeout=30',
     ];
     if (user) {
         parts.push(`Uid=${user}`);
@@ -57,14 +59,17 @@ function buildConnectionString() {
 }
 
 function buildConfig() {
+    const poolOptions = {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000,
+    };
     if (useNative) {
         return {
             connectionString: buildConnectionString(),
-            pool: {
-                max: 10,
-                min: 0,
-                idleTimeoutMillis: 30000,
-            },
+            connectionTimeout: 30000,
+            requestTimeout: 30000,
+            pool: poolOptions,
         };
     }
     const parsed = parseSqlServer(server);
@@ -74,21 +79,20 @@ function buildConfig() {
         database,
         user,
         password,
+        connectionTimeout: 30000,
+        requestTimeout: 30000,
         options: {
             encrypt: flagYes(encrypt),
             trustServerCertificate: flagYes(trustCert),
             enableArithAbort: true,
         },
-        pool: {
-            max: 10,
-            min: 0,
-            idleTimeoutMillis: 30000,
-        },
+        pool: poolOptions,
     };
 }
 
 const config = buildConfig();
 let pool;
+let connecting;
 
 export function getAuthMode() {
     if (useNative && !user) {
@@ -97,20 +101,80 @@ export function getAuthMode() {
     return useNative ? 'SQL Authentication (ODBC)' : 'SQL Authentication';
 }
 
+export function isConnectionError(err) {
+    const message = String(err?.message || err || '').toLowerCase();
+    const code = String(err?.code || '').toUpperCase();
+    return [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'ESOCKET',
+        'ENOTOPEN',
+        'ETIMEOUT',
+        'ELOGIN',
+    ].includes(code)
+        || message.includes('connection is closed')
+        || message.includes('connection lost')
+        || message.includes('connection is not open')
+        || message.includes('not connected')
+        || message.includes('socket hang up')
+        || message.includes('timeout')
+        || message.includes('broken pipe')
+        || message.includes('server closed the connection')
+        || message.includes('unable to connect')
+        || message.includes('login failed');
+}
+
+function attachPoolHandlers(nextPool) {
+    nextPool.on('error', (err) => {
+        console.error('SQL pool error:', err.message);
+        if (pool === nextPool) {
+            pool = null;
+        }
+    });
+}
+
+export async function resetPool() {
+    const current = pool;
+    pool = null;
+    connecting = null;
+    if (!current) {
+        return;
+    }
+    try {
+        await current.close();
+    }
+    catch {
+        /* already closed */
+    }
+}
+
 export async function getPool() {
     if (pool?.connected) {
         return pool;
     }
-    pool = await sql.connect(config);
-    return pool;
+    if (connecting) {
+        return connecting;
+    }
+    connecting = (async () => {
+        if (pool && !pool.connected) {
+            await resetPool();
+        }
+        const nextPool = await new sql.ConnectionPool(config).connect();
+        attachPoolHandlers(nextPool);
+        pool = nextPool;
+        return nextPool;
+    })();
+    try {
+        return await connecting;
+    }
+    finally {
+        connecting = null;
+    }
 }
 
 export async function closePool() {
-    if (!pool) {
-        return;
-    }
-    await pool.close();
-    pool = null;
+    await resetPool();
 }
 
 export { sql };
