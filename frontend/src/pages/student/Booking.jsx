@@ -163,7 +163,7 @@ export default function Booking() {
         setStartDraft('');
         setEndDraft('');
         setSummary(null);
-        api.getSlots(selectedDayStr, teacherId).then(setSlots);
+        api.getSlots(selectedDayStr, teacherId).then(setSlots).catch(() => setSlots([]));
     }, [selectedDayStr, teacherId, language]);
 
     useEffect(() => {
@@ -287,7 +287,7 @@ export default function Booking() {
         }
         catch (err) {
             toast(err instanceof Error ? err.message : t('booking.failed'));
-            api.getSlots(selectedDayStr, teacherId).then(setSlots);
+            api.getSlots(selectedDayStr, teacherId).then(setSlots).catch(() => setSlots([]));
             loadDays();
         }
         finally {
