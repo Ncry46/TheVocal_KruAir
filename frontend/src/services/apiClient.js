@@ -1,6 +1,8 @@
 const TOKEN_KEY = 'kruaer-token';
 const REQUEST_TIMEOUT_MS = 25000;
 
+const unauthorizedListeners = new Set();
+
 export function getToken() {
     try {
         return localStorage.getItem(TOKEN_KEY);
@@ -21,6 +23,24 @@ export function setToken(token) {
     }
     catch {
         /* ignore quota/private-mode errors */
+    }
+}
+
+/** Clear the stale session when the API rejects the JWT. */
+export function onUnauthorized(listener) {
+    unauthorizedListeners.add(listener);
+    return () => unauthorizedListeners.delete(listener);
+}
+
+function notifyUnauthorized() {
+    setToken(null);
+    for (const listener of unauthorizedListeners) {
+        try {
+            listener();
+        }
+        catch {
+            /* ignore listener errors */
+        }
     }
 }
 
@@ -79,11 +99,16 @@ async function requestOnce(path, options = {}) {
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
+            if (response.status === 401) {
+                notifyUnauthorized();
+            }
             const fallback = response.status === 404
                 ? `ไม่พบ API (${path})`
-                : response.status === 503
-                    ? 'การเชื่อมต่อฐานข้อมูลหลุดชั่วคราว กรุณาลองใหม่'
-                    : 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์';
+                : response.status === 401
+                    ? 'กรุณาเข้าสู่ระบบใหม่'
+                    : response.status === 503
+                        ? 'การเชื่อมต่อฐานข้อมูลหลุดชั่วคราว กรุณาลองใหม่'
+                        : 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์';
             const err = new Error(data.error || fallback);
             err.status = response.status;
             throw err;

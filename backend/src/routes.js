@@ -2049,54 +2049,74 @@ export function registerRoutes(app) {
     app.get('/api/teacher/today', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
         const teacherId = await teacherScopeId(req);
+        if (!teacherId) {
+            throw new Error(lang === 'en' ? 'No teacher account found' : 'ไม่พบบัญชีครูในระบบ');
+        }
         const todayIso = bangkokDateIso();
         const now = new Date();
         const lessons = await listTeacherDayLessons(teacherId, todayIso);
         const pendingCount = lessons.filter((row) => row.booking_status === 'pending').length;
-        const moveResult = await query(
-            `SELECT COUNT(*) AS n
-             FROM dbo.move_requests m
-             JOIN dbo.bookings b ON b.id = m.booking_id
-             JOIN dbo.teacher_availability s ON s.id = b.slot_id
-             WHERE m.status = N'pending' AND s.teacher_id = @teacherId`,
-            { teacherId },
-        );
-        const homeworkResult = await query(
-            `SELECT COUNT(*) AS n
-             FROM dbo.class_logs cl
-             JOIN dbo.bookings b ON b.id = cl.booking_id
-             JOIN dbo.teacher_availability s ON s.id = b.slot_id
-             WHERE cl.student_audio_url IS NOT NULL
-               AND cl.created_at >= DATEADD(day, -7, SYSUTCDATETIME())
-               AND s.teacher_id = @teacherId`,
-            { teacherId },
-        );
-        const pendingPayments = await listPendingPayments();
-        const pendingSignatures = await countPendingTeacherSignatures(teacherId);
+
+        const settled = await Promise.allSettled([
+            query(
+                `SELECT COUNT(*) AS n
+                 FROM dbo.move_requests m
+                 JOIN dbo.bookings b ON b.id = m.booking_id
+                 JOIN dbo.teacher_availability s ON s.id = b.slot_id
+                 WHERE m.status = N'pending' AND s.teacher_id = @teacherId`,
+                { teacherId },
+            ),
+            query(
+                `SELECT COUNT(*) AS n
+                 FROM dbo.class_logs cl
+                 JOIN dbo.bookings b ON b.id = cl.booking_id
+                 JOIN dbo.teacher_availability s ON s.id = b.slot_id
+                 WHERE cl.student_audio_url IS NOT NULL
+                   AND cl.created_at >= DATEADD(day, -7, SYSUTCDATETIME())
+                   AND s.teacher_id = @teacherId`,
+                { teacherId },
+            ),
+            listPendingPayments(),
+            countPendingTeacherSignatures(teacherId),
+        ]);
+
+        const moveResult = settled[0].status === 'fulfilled' ? settled[0].value : null;
+        const homeworkResult = settled[1].status === 'fulfilled' ? settled[1].value : null;
+        const pendingPayments = settled[2].status === 'fulfilled' ? settled[2].value : [];
+        const pendingSignatures = settled[3].status === 'fulfilled' ? settled[3].value : 0;
+
+        for (const [index, item] of settled.entries()) {
+            if (item.status === 'rejected') {
+                console.error(`teacher/today secondary query ${index} failed:`, item.reason?.message || item.reason);
+            }
+        }
+
         res.json({
             date: chipLabel(parseIsoDate(todayIso), lang),
             pendingLessons: pendingCount,
-            moveRequests: Number(moveResult.recordset[0]?.n || 0),
-            homeworkThisWeek: Number(homeworkResult.recordset[0]?.n || 0),
+            moveRequests: Number(moveResult?.recordset?.[0]?.n || 0),
+            homeworkThisWeek: Number(homeworkResult?.recordset?.[0]?.n || 0),
             pendingSignatures,
             pendingPayments: pendingPayments.length,
-            lessons: lessons.map((row) => {
-                const attendance = mapLessonAttendance(row, now);
-                return {
-                    bookingId: row.booking_id,
-                    time: row.slot_hhmm,
-                    timeRange: lessonTimeRange(row.slot_hhmm, lang, Number(row.duration_hours) || 1),
-                    student: studentLabel(row, lang),
-                    studentId: row.student_id,
-                    lesson: pick(row, 'topic', lang) || (lang === 'en' ? 'Vocal lesson' : 'คอร์สร้อง'),
-                    status: attendance.status,
-                    studentCheckedIn: attendance.studentCheckedIn,
-                    studentSigned: attendance.studentSigned,
-                    teacherCheckedIn: attendance.teacherCheckedIn,
-                    teacherCheckedInAt: attendance.teacherCheckedInAt,
-                    canCheckIn: attendance.canCheckIn,
-                };
-            }),
+            lessons: lessons
+                .filter((row) => row.booking_status !== 'done' || !row.student_signature)
+                .map((row) => {
+                    const attendance = mapLessonAttendance(row, now);
+                    return {
+                        bookingId: row.booking_id,
+                        time: row.slot_hhmm,
+                        timeRange: lessonTimeRange(row.slot_hhmm, lang, Number(row.duration_hours) || 1),
+                        student: studentLabel(row, lang),
+                        studentId: row.student_id,
+                        lesson: pick(row, 'topic', lang) || (lang === 'en' ? 'Vocal lesson' : 'คอร์สร้อง'),
+                        status: attendance.status,
+                        studentCheckedIn: attendance.studentCheckedIn,
+                        studentSigned: attendance.studentSigned,
+                        teacherCheckedIn: attendance.teacherCheckedIn,
+                        teacherCheckedInAt: attendance.teacherCheckedInAt,
+                        canCheckIn: attendance.canCheckIn,
+                    };
+                }),
         });
     }));
 

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { translations } from '../i18n/translations';
-import { api, getToken } from '../services/apiClient';
+import { api, getToken, onUnauthorized } from '../services/apiClient';
 const AppContext = createContext(null);
 const STORAGE_KEY = 'kruaer-session';
 const LANGUAGE_KEY = 'kruaer-language';
@@ -49,6 +49,17 @@ export function AppProvider({ children }) {
     const [theme, setThemeState] = useState(() => loadPreference(THEME_KEY, 'light'));
     const timer = useRef(null);
     useEffect(() => {
+        return onUnauthorized(() => {
+            setUser(null);
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+            }
+            catch {
+                /* ignore */
+            }
+        });
+    }, []);
+    useEffect(() => {
         document.documentElement.lang = language;
         try {
             localStorage.setItem(LANGUAGE_KEY, language);
@@ -80,7 +91,17 @@ export function AppProvider({ children }) {
                     return next;
                 });
             }
-        }).catch(() => {});
+        }).catch((err) => {
+            if (err?.status === 401) {
+                setUser(null);
+                try {
+                    localStorage.removeItem(STORAGE_KEY);
+                }
+                catch {
+                    /* ignore */
+                }
+            }
+        });
     }, []);
     useEffect(() => {
         document.documentElement.dataset.theme = theme;

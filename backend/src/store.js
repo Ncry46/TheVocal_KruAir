@@ -424,15 +424,18 @@ export async function listTeacherDayLessons(teacherId, dayIso) {
     const result = await query(
         `SELECT b.public_id AS booking_id, b.status AS booking_status, b.topic, b.topic_en,
                 COALESCE(b.duration_hours, 1) AS duration_hours,
+                b.teacher_checked_in_at,
                 CONVERT(varchar(10), s.slot_date, 23) AS slot_iso,
                 CONVERT(varchar(5), s.slot_time, 108) AS slot_hhmm,
-                u.nickname, u.nickname_en, u.name, u.name_en, u.id AS student_id
+                u.nickname, u.nickname_en, u.name, u.name_en, u.id AS student_id,
+                cl.student_signature, cl.student_checkin_signature, cl.outcome AS log_outcome
          FROM dbo.bookings b
          JOIN dbo.teacher_availability s ON s.id = b.slot_id
          JOIN dbo.users u ON u.id = b.user_id
+         LEFT JOIN dbo.class_logs cl ON cl.booking_id = b.id
          WHERE s.teacher_id = @teacherId
            AND CONVERT(varchar(10), s.slot_date, 23) = @dayIso
-           AND b.status IN (N'pending', N'confirmed', N'moved')
+           AND b.status IN (N'pending', N'confirmed', N'moved', N'done')
            AND b.slot_id = s.id
          ORDER BY s.slot_time`,
         { teacherId, dayIso },
@@ -792,9 +795,11 @@ export async function ensureEnrollmentSchema() {
     await ensureColumn('bookings', 'cancel_reason', 'cancel_reason NVARCHAR(200) NULL');
     await ensureColumn('bookings', 'reminder_sent_at', 'reminder_sent_at DATETIME2 NULL');
     await ensureColumn('bookings', 'updated_at', 'updated_at DATETIME2 NOT NULL CONSTRAINT DF_bookings_updated DEFAULT SYSUTCDATETIME()');
+    await ensureColumn('bookings', 'teacher_checked_in_at', 'teacher_checked_in_at DATETIME2 NULL');
     await ensureColumn('class_logs', 'feedback_audio_url', 'feedback_audio_url NVARCHAR(500) NULL');
     await ensureColumn('class_logs', 'student_audio_url', 'student_audio_url NVARCHAR(500) NULL');
     await ensureColumn('class_logs', 'student_signature', 'student_signature NVARCHAR(MAX) NULL');
+    await ensureColumn('class_logs', 'student_checkin_signature', 'student_checkin_signature NVARCHAR(MAX) NULL');
     await ensureColumn('class_logs', 'signed_at', 'signed_at DATETIME2 NULL');
     await ensureColumn('class_logs', 'hours_charged_at', 'hours_charged_at DATETIME2 NULL');
     await ensureColumn('user_packages', 'low_hours_notified_at', 'low_hours_notified_at DATETIME2 NULL');

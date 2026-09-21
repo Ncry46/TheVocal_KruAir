@@ -9,22 +9,27 @@ export default function Today() {
     const { language, t, toast } = useApp();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
+    const [loadError, setLoadError] = useState('');
     const [checkInBusy, setCheckInBusy] = useState('');
 
-    const load = () => api.getTeacherToday().then(setData).catch((err) => {
-        setData({
-            date: '—',
-            pendingLessons: 0,
-            moveRequests: 0,
-            homeworkThisWeek: 0,
-            pendingSignatures: 0,
-            pendingPayments: 0,
-            lessons: [],
+    const load = () => {
+        setLoadError('');
+        return api.getTeacherToday().then((next) => {
+            setData(next);
+            setLoadError('');
+        }).catch((err) => {
+            const message = err instanceof Error
+                ? err.message
+                : (language === 'en' ? 'Could not load today' : 'โหลดหน้าวันนี้ไม่สำเร็จ');
+            setLoadError(message);
+            // Keep previous good data if we have it; otherwise leave spinner→error UI.
+            setData((current) => current);
+            toast(message);
         });
-        toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not load today' : 'โหลดหน้าวันนี้ไม่สำเร็จ'));
-    });
+    };
 
     useEffect(() => {
+        setData(null);
         load();
     }, [language]);
 
@@ -46,8 +51,24 @@ export default function Today() {
         }
     };
 
-    if (!data) {
+    if (!data && !loadError) {
         return <Spinner />;
+    }
+
+    if (!data && loadError) {
+        return (
+          <Card title={language === 'en' ? 'Today' : 'วันนี้'}>
+            <div className="empty" style={{ marginBottom: 12 }}>
+              {language === 'en'
+                  ? 'Could not load data from the database.'
+                  : 'โหลดข้อมูลจากฐานข้อมูลไม่สำเร็จ'}
+            </div>
+            <p className="muted" style={{ marginTop: 0 }}>{loadError}</p>
+            <Button pink onClick={() => { setData(null); load(); }}>
+              {language === 'en' ? 'Retry' : 'ลองใหม่'}
+            </Button>
+          </Card>
+        );
     }
 
     const statusLabel = (status) => {
@@ -73,7 +94,18 @@ export default function Today() {
         <div className="alertbar">
           <CalendarIcon width={16} height={16}/>
           <b>{language === 'en' ? 'Today' : 'วันนี้'} · {data.date}</b>
+          {loadError && (
+            <Button ghost size="sm" style={{ marginLeft: 'auto' }} onClick={() => load()}>
+              {language === 'en' ? 'Retry' : 'ลองใหม่'}
+            </Button>
+          )}
         </div>
+        {loadError && (
+          <div className="alertbar" style={{ background: 'rgba(220, 38, 38, 0.08)' }}>
+            <b>{language === 'en' ? 'Database load failed' : 'โหลดฐานข้อมูลไม่สำเร็จ'}</b>
+            <span className="muted" style={{ marginLeft: 8 }}>{loadError}</span>
+          </div>
+        )}
 
         <div className="kpi-grid kpi-grid-5">
           {stats.map((item) => (
