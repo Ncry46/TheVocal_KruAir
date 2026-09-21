@@ -12,14 +12,17 @@ export default function Sales() {
     const [salesPeriod, setSalesPeriod] = useState('monthly');
     const [salesPage, setSalesPage] = useState(1);
     useEffect(() => {
-        api.getSalesReport().then(setReport).catch(() => setReport({
-            revenue: 0,
-            orders: 0,
-            vouchersUsed: 0,
-            newStudents: 0,
-            analytics: { daily: [], monthly: [], yearly: [] },
-            sales: [],
-        }));
+        api.getSalesReport().then(setReport).catch((err) => {
+            setReport({
+                revenue: 0,
+                orders: 0,
+                vouchersUsed: 0,
+                newStudents: 0,
+                analytics: { daily: [], monthly: [], yearly: [] },
+                sales: [],
+            });
+            toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not load sales' : 'โหลดยอดขายไม่สำเร็จ'));
+        });
     }, [language]);
     useEffect(() => {
         setSalesPage(1);

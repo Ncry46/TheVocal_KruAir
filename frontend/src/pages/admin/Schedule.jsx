@@ -196,7 +196,10 @@ export default function Schedule() {
 
     const loadSignatures = () => api.getTeacherSignatures()
         .then(setSignatureRows)
-        .catch(() => setSignatureRows({ pending: [], signed: [] }));
+        .catch((err) => {
+            setSignatureRows({ pending: [], signed: [] });
+            toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not load signatures' : 'โหลดลายเซ็นไม่สำเร็จ'));
+        });
 
     useEffect(() => {
         api.getTeacherHomeworkSubmissions()

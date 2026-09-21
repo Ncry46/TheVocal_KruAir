@@ -51,7 +51,10 @@ export default function Students() {
     const [form, setForm] = useState(EMPTY_OFFER);
     const [busy, setBusy] = useState(false);
 
-    const load = () => api.getStudents().then(setRows).catch(() => setRows([]));
+    const load = () => api.getStudents().then(setRows).catch((err) => {
+        setRows([]);
+        toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not load students' : 'โหลดรายชื่อนักเรียนไม่สำเร็จ'));
+    });
 
     useEffect(() => {
         load();

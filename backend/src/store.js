@@ -7,13 +7,33 @@ import { formatLineNotifyMessage, findLineUserIdForAppUser, pushLineText } from 
 import { isHomeworkNote, packageHoursLeft, shouldNotifyLowHours } from './packagePolicy.js';
 import { nextInvoiceRef } from './invoiceRef.js';
 
+const QUERY_TIMEOUT_MS = 20000;
+
+function timeoutError(label, ms) {
+    const err = new Error(`SQL ${label} timed out after ${ms}ms`);
+    err.code = 'ETIMEOUT';
+    return err;
+}
+
+function withTimeout(promise, ms, label) {
+    let timer;
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            timer = setTimeout(() => reject(timeoutError(label, ms)), ms);
+        }),
+    ]).finally(() => {
+        clearTimeout(timer);
+    });
+}
+
 async function runQuery(text, params = {}) {
     const pool = await getPool();
     const request = pool.request();
     for (const [key, value] of Object.entries(params)) {
         request.input(key, value);
     }
-    return request.query(text);
+    return withTimeout(request.query(text), QUERY_TIMEOUT_MS, 'query');
 }
 
 export async function query(text, params = {}) {
@@ -34,17 +54,17 @@ export async function withTransaction(work) {
     const attempt = async () => {
         const pool = await getPool();
         const tx = new sql.Transaction(pool);
-        await tx.begin();
+        await withTimeout(tx.begin(), QUERY_TIMEOUT_MS, 'begin');
         const run = async (text, params = {}) => {
             const request = new sql.Request(tx);
             for (const [key, value] of Object.entries(params)) {
                 request.input(key, value);
             }
-            return request.query(text);
+            return withTimeout(request.query(text), QUERY_TIMEOUT_MS, 'query');
         };
         try {
             const result = await work(run);
-            await tx.commit();
+            await withTimeout(tx.commit(), QUERY_TIMEOUT_MS, 'commit');
             return result;
         }
         catch (err) {

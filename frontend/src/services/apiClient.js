@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'kruaer-token';
+const REQUEST_TIMEOUT_MS = 25000;
 
 export function getToken() {
     try {
@@ -23,7 +24,25 @@ export function setToken(token) {
     }
 }
 
-async function request(path, options = {}) {
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
+function isRetryableFailure(status, err) {
+    if (status === 503 || status === 502 || status === 504) {
+        return true;
+    }
+    const message = String(err?.message || err || '').toLowerCase();
+    return err?.name === 'AbortError'
+        || message.includes('failed to fetch')
+        || message.includes('network')
+        || message.includes('timed out')
+        || message.includes('หลุดชั่วคราว');
+}
+
+async function requestOnce(path, options = {}) {
     const headers = {
         'Content-Type': 'application/json',
         ...(options.headers ?? {}),
@@ -38,15 +57,66 @@ async function request(path, options = {}) {
     if (token) {
         headers.Authorization = `Bearer ${token}`;
     }
-    const response = await fetch(`/api${path}`, { ...options, headers });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        const fallback = response.status === 404
-            ? `ไม่พบ API (${path})`
-            : 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์';
-        throw new Error(data.error || fallback);
+
+    const controller = new AbortController();
+    const externalSignal = options.signal;
+    const onExternalAbort = () => controller.abort(externalSignal?.reason);
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            controller.abort(externalSignal.reason);
+        }
+        else {
+            externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+        }
     }
-    return data;
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+        const { signal: _ignored, ...rest } = options;
+        const response = await fetch(`/api${path}`, {
+            ...rest,
+            headers,
+            signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const fallback = response.status === 404
+                ? `ไม่พบ API (${path})`
+                : response.status === 503
+                    ? 'การเชื่อมต่อฐานข้อมูลหลุดชั่วคราว กรุณาลองใหม่'
+                    : 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์';
+            const err = new Error(data.error || fallback);
+            err.status = response.status;
+            throw err;
+        }
+        return data;
+    }
+    catch (err) {
+        if (err?.name === 'AbortError') {
+            const timeout = new Error('เซิร์ฟเวอร์ตอบช้า กรุณาลองใหม่');
+            timeout.status = 504;
+            throw timeout;
+        }
+        throw err;
+    }
+    finally {
+        clearTimeout(timer);
+        if (externalSignal) {
+            externalSignal.removeEventListener('abort', onExternalAbort);
+        }
+    }
+}
+
+async function request(path, options = {}, { retries = 1 } = {}) {
+    try {
+        return await requestOnce(path, options);
+    }
+    catch (err) {
+        if (retries > 0 && isRetryableFailure(err?.status, err)) {
+            await sleep(900);
+            return request(path, options, { retries: retries - 1 });
+        }
+        throw err;
+    }
 }
 
 export const api = {

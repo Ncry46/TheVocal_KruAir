@@ -11,15 +11,18 @@ export default function Today() {
     const [data, setData] = useState(null);
     const [checkInBusy, setCheckInBusy] = useState('');
 
-    const load = () => api.getTeacherToday().then(setData).catch(() => setData({
-        date: '—',
-        pendingLessons: 0,
-        moveRequests: 0,
-        homeworkThisWeek: 0,
-        pendingSignatures: 0,
-        pendingPayments: 0,
-        lessons: [],
-    }));
+    const load = () => api.getTeacherToday().then(setData).catch((err) => {
+        setData({
+            date: '—',
+            pendingLessons: 0,
+            moveRequests: 0,
+            homeworkThisWeek: 0,
+            pendingSignatures: 0,
+            pendingPayments: 0,
+            lessons: [],
+        });
+        toast(err instanceof Error ? err.message : (language === 'en' ? 'Could not load today' : 'โหลดหน้าวันนี้ไม่สำเร็จ'));
+    });
 
     useEffect(() => {
         load();
