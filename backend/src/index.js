@@ -5,7 +5,7 @@ import cors from 'cors';
 import express from 'express';
 import { registerRoutes } from './routes.js';
 import { createLineWebhookHandler } from './lineWebhook.js';
-import { getAuthMode, getPool, isConnectionError, resetPool } from './db.js';
+import { getAuthMode, getPool, isConnectionError, keepPoolAlive, resetPool } from './db.js';
 import { runSchoolJobs } from './jobs.js';
 import { ensureEnrollmentSchema } from './store.js';
 import { ensureRecurringScheduleSchema } from './recurringSchedule.js';
@@ -118,6 +118,12 @@ getPool()
         });
         tick();
         setInterval(tick, 5 * 60 * 1000);
+        // Keep ODBC sockets warm; SQL Server / NAT often drop idle links after a few minutes.
+        setInterval(() => {
+            keepPoolAlive().catch((err) => {
+                console.error('SQL keepalive tick failed:', err.message);
+            });
+        }, 45 * 1000);
     })
     .catch((err) => {
         console.error('SQL Server connection failed:', err.message);

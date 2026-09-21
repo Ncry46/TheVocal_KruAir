@@ -12,6 +12,24 @@ describe('isConnectionError', () => {
         assert.equal(isConnectionError(new Error('socket hang up')), true);
     });
 
+    it('detects ODBC idle / TCP drop messages', () => {
+        assert.equal(
+            isConnectionError(new Error('[Microsoft][ODBC Driver 17 for SQL Server]Communication link failure')),
+            true,
+        );
+        assert.equal(
+            isConnectionError(new Error('TCP Provider: An existing connection was forcibly closed by the remote host')),
+            true,
+        );
+        assert.equal(
+            isConnectionError({
+                message: 'Failed request',
+                originalError: { message: 'Physical connection is not usable', code: '08S01' },
+            }),
+            true,
+        );
+    });
+
     it('ignores normal application errors', () => {
         assert.equal(isConnectionError(new Error('อีเมล/เบอร์ หรือรหัสผ่านไม่ถูกต้อง')), false);
         assert.equal(isConnectionError(new Error('กรุณาเข้าสู่ระบบ')), false);
