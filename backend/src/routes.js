@@ -49,7 +49,7 @@ import { chipLabel, educationEn, formatDate, genresEn, lessonTimeRange, localize
 import { defaultAvatar, isAllowedPresetAvatar } from './avatar.js';
 import { parseIsoDate, plusOneHour, toIsoDate } from './dates.js';
 import { bangkokDateIso, bangkokDateTimeParts, canStudentCancel, canStudentCheckIn, canStudentCheckOut, canTeacherCheckIn, hoursUntilSlot, lessonEndsAt, CANCEL_MIN_HOURS, SLOT_TIMES } from './bookingPolicy.js';
-import { isHomeworkNote, packageHoursLeft } from './packagePolicy.js';
+import { daysSinceHoursDepleted, isHomeworkNote, packageHoursLeft } from './packagePolicy.js';
 import { jobState } from './jobs.js';
 import {
     createRecurringSchedule,
@@ -99,6 +99,7 @@ import {
     mapMoveRequest,
     mapNotification,
     mapStudentOffer,
+    markPackageHoursDepleted,
     maybeNotifyPackageHours,
     normalizePhone,
     notifyHomeworkAssigned,
@@ -1412,11 +1413,12 @@ export function registerRoutes(app) {
 
     app.get('/api/admin/students', requireAuth, requireRole(['teacher', 'admin']), asyncHandler(async (req, res) => {
         const lang = resolveLang(req);
+        const now = new Date();
         const result = await query(
             `SELECT u.id, u.name, u.name_en, u.nickname, u.nickname_en, u.age, u.birth_date, u.education, u.education_en,
                     u.singing_experience, u.instruments, u.goals, u.address_province, u.phone, u.emergency_contact, u.created_at,
                     p.name AS pkg_name, p.name_en AS pkg_name_en, p.hours AS pkg_hours,
-                    up.hours_total, up.hours_used, up.expires_at, up.status AS pkg_status,
+                    up.hours_total, up.hours_used, up.expires_at, up.status AS pkg_status, up.hours_depleted_at,
                     (SELECT COUNT(*) FROM dbo.class_logs cl WHERE cl.user_id = u.id AND cl.outcome = 'done') AS done
              FROM dbo.users u
              LEFT JOIN dbo.user_packages up ON up.id = (
@@ -1429,9 +1431,12 @@ export function registerRoutes(app) {
         res.json(result.recordset.map((row) => {
             const left = row.hours_total == null ? 0 : Math.max(0, row.hours_total - row.hours_used);
             const expired = row.expires_at && new Date(row.expires_at) < new Date();
+            const daysAway = left === 0 && Number(row.done) > 0
+                ? daysSinceHoursDepleted(row.hours_depleted_at, now)
+                : null;
             let state = 'active';
             if (!row.pkg_name || expired || left === 0) {
-                state = row.done > 0 ? 'expired' : 'new';
+                state = row.done > 0 ? 'away' : 'new';
             }
             if (row.pkg_name && left > 0 && !expired && row.done === 0) {
                 state = 'new';
@@ -1450,6 +1455,8 @@ export function registerRoutes(app) {
                 left,
                 done: row.done,
                 state,
+                daysAway,
+                hoursDepletedAt: row.hours_depleted_at ? new Date(row.hours_depleted_at).toISOString() : null,
             };
         }));
     }));
@@ -2688,6 +2695,7 @@ export function registerRoutes(app) {
                 hours: deductHours,
             });
             const hoursAfter = Math.max(0, hoursBefore - deductHours);
+            await markPackageHoursDepleted(query, pkg.id, hoursBefore, hoursAfter);
             await maybeNotifyPackageHours(booking.user_id, pkg.id, hoursBefore, hoursAfter);
         }
         await query(`DELETE FROM dbo.booking_slots WHERE booking_id = @id`, { id: booking.id });

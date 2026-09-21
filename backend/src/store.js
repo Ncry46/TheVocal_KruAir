@@ -140,7 +140,8 @@ export async function activePackage(userId) {
         `SELECT TOP 1 up.*, p.name AS package_name, p.name_en AS package_name_en, p.hours AS catalog_hours
          FROM dbo.user_packages up
          JOIN dbo.packages p ON p.id = up.package_id
-         WHERE up.user_id = @userId AND up.status = 'active' AND up.expires_at > SYSUTCDATETIME()
+         WHERE up.user_id = @userId AND up.status = 'active'
+           AND (up.expires_at IS NULL OR up.expires_at > SYSUTCDATETIME())
          ORDER BY up.created_at DESC`,
         { userId },
     );
@@ -149,19 +150,38 @@ export async function activePackage(userId) {
 
 export function packageStatusFromRow(row, lang = 'th') {
     if (!row) {
-        return { name: '—', hours: 0, used: 0, left: 0, expiresAt: '—' };
+        return { name: '—', hours: 0, used: 0, left: 0, expiresAt: '—', neverExpires: true };
     }
-    const expires = new Date(row.expires_at);
-    const monthsTh = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const months = lang === 'en' ? monthsEn : monthsTh;
+    const neverExpires = !row.expires_at;
+    let expiresAt = lang === 'en' ? 'No expiry' : 'ไม่มีหมดอายุ';
+    if (!neverExpires) {
+        const expires = new Date(row.expires_at);
+        const monthsTh = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+        const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const months = lang === 'en' ? monthsEn : monthsTh;
+        expiresAt = `${expires.getDate()} ${months[expires.getMonth()]} ${expires.getFullYear()}`;
+    }
     return {
         name: pick(row, 'package_name', lang),
         hours: row.hours_total,
         used: row.hours_used,
         left: Math.max(0, row.hours_total - row.hours_used),
-        expiresAt: `${expires.getDate()} ${months[expires.getMonth()]} ${expires.getFullYear()}`,
+        expiresAt,
+        neverExpires,
     };
+}
+
+/** Stamp when package hours hit zero (keep first stamp). */
+export async function markPackageHoursDepleted(runOrQuery, pkgId, hoursBefore, hoursAfter) {
+    if (!(Number(hoursBefore) > 0 && Number(hoursAfter) <= 0) || !pkgId) {
+        return;
+    }
+    await runOrQuery(
+        `UPDATE dbo.user_packages
+         SET hours_depleted_at = COALESCE(hours_depleted_at, SYSUTCDATETIME())
+         WHERE id = @pkgId`,
+        { pkgId },
+    );
 }
 
 export async function addNotification(userId, title, body, tone = 'blue', titleEn = null, bodyEn = null, linkPath = null, options = {}) {
@@ -732,6 +752,31 @@ export async function ensureEnrollmentSchema() {
     await ensureColumn('class_logs', 'hours_charged_at', 'hours_charged_at DATETIME2 NULL');
     await ensureColumn('user_packages', 'low_hours_notified_at', 'low_hours_notified_at DATETIME2 NULL');
     await ensureColumn('user_packages', 'expiry_notified_at', 'expiry_notified_at DATETIME2 NULL');
+    await ensureColumn('user_packages', 'hours_depleted_at', 'hours_depleted_at DATETIME2 NULL');
+    await query(`
+        IF COL_LENGTH(N'dbo.user_packages', N'expires_at') IS NOT NULL
+           AND COLUMNPROPERTY(OBJECT_ID(N'dbo.user_packages'), N'expires_at', N'AllowsNull') = 0
+            ALTER TABLE dbo.user_packages ALTER COLUMN expires_at DATETIME2 NULL`);
+    await query(`
+        UPDATE dbo.user_packages
+        SET expires_at = NULL
+        WHERE status = N'active' AND expires_at IS NOT NULL`);
+    await query(`
+        UPDATE up
+        SET hours_depleted_at = COALESCE(
+                (
+                    SELECT MAX(cl.hours_charged_at)
+                    FROM dbo.class_logs cl
+                    WHERE cl.user_id = up.user_id
+                      AND cl.hours_deducted > 0
+                      AND cl.hours_charged_at IS NOT NULL
+                ),
+                up.created_at
+            )
+        FROM dbo.user_packages up
+        WHERE up.hours_depleted_at IS NULL
+          AND up.hours_total > 0
+          AND up.hours_used >= up.hours_total`);
     await ensureColumn('users', 'birth_date', 'birth_date DATE NULL');
     await ensureColumn('users', 'singing_experience', 'singing_experience NVARCHAR(200) NULL');
     await ensureColumn('users', 'instruments', 'instruments NVARCHAR(MAX) NULL');
@@ -1188,8 +1233,9 @@ export async function signLessonAndDeductHours({ bookingPublicId, userId, signat
                 const active = await run(
                     `SELECT TOP 1 id, hours_total, hours_used
                      FROM dbo.user_packages
-                     WHERE user_id = @userId AND status = N'active' AND expires_at > SYSUTCDATETIME()
-                     ORDER BY expires_at ASC`,
+                     WHERE user_id = @userId AND status = N'active'
+                       AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME())
+                     ORDER BY created_at ASC`,
                     { userId: row.booking_user_id },
                 );
                 pkg = active.recordset[0] ?? null;
@@ -1205,6 +1251,7 @@ export async function signLessonAndDeductHours({ bookingPublicId, userId, signat
                     { id: logId },
                 );
                 const hoursAfter = Math.max(0, hoursBefore - deductHours);
+                await markPackageHoursDepleted(run, pkg.id, hoursBefore, hoursAfter);
                 await maybeNotifyPackageHours(row.booking_user_id, pkg.id, hoursBefore, hoursAfter);
                 hoursDeducted = deductHours;
             }
@@ -1309,7 +1356,8 @@ export async function createLessonBooking({
         const pkgResult = await run(
             `SELECT TOP 1 up.id, up.hours_total, up.hours_used
              FROM dbo.user_packages up
-             WHERE up.user_id = @userId AND up.status = N'active' AND up.expires_at > SYSUTCDATETIME()
+             WHERE up.user_id = @userId AND up.status = N'active'
+               AND (up.expires_at IS NULL OR up.expires_at > SYSUTCDATETIME())
              ORDER BY up.created_at DESC`,
             { userId },
         );
@@ -1474,7 +1522,7 @@ export async function createPackagePurchase({
         );
         await run(
             `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status, transaction_id)
-             VALUES (@userId, @pkgId, @hours, 0, DATEADD(month, 6, SYSUTCDATETIME()), N'active', @txId)`,
+             VALUES (@userId, @pkgId, @hours, 0, NULL, N'active', @txId)`,
             { userId, pkgId, hours: pkg.hours, txId: transaction.id },
         );
         await run(
@@ -1557,7 +1605,7 @@ export async function createStudentOffer({
             const pkgInsert = await run(
                 `INSERT INTO dbo.user_packages (user_id, package_id, hours_total, hours_used, expires_at, status)
                  OUTPUT INSERTED.id
-                 VALUES (@userId, N'offer', @hours, 0, DATEADD(month, 6, SYSUTCDATETIME()), N'active')`,
+                 VALUES (@userId, N'offer', @hours, 0, NULL, N'active')`,
                 { userId, hours },
             );
             userPackageId = pkgInsert.recordset[0]?.id ?? null;
