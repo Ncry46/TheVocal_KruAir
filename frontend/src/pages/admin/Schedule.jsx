@@ -1069,17 +1069,20 @@ export default function Schedule() {
       </Modal>
 
       {homeworkSubmissions.length > 0 && (
-        <Card title={language === 'en' ? 'Student homework audio' : 'เสียงการบ้านจากนักเรียน'} style={{ marginTop: 16 }}>
-          {homeworkSubmissions.slice(0, 8).map((row) => (
-            <div key={row.id} className="toggle-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{row.student} · {row.date}</div>
-              <div className="muted" style={{ fontSize: 12 }}>{row.lesson}</div>
-              <a href={row.audioUrl} target="_blank" rel="noreferrer" className="link" style={{ fontSize: 12 }}>
-                {language === 'en' ? 'Listen' : 'ฟังเสียง'}
-              </a>
-            </div>
-          ))}
-        </Card>
+        <>
+          <Card className="sched-homework-audio" title={language === 'en' ? 'Student homework audio' : 'เสียงการบ้านจากนักเรียน'}>
+            {homeworkSubmissions.slice(0, 8).map((row) => (
+              <div key={row.id} className="toggle-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{row.student} · {row.date}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{row.lesson}</div>
+                <a href={row.audioUrl} target="_blank" rel="noreferrer" className="link" style={{ fontSize: 12 }}>
+                  {language === 'en' ? 'Listen' : 'ฟังเสียง'}
+                </a>
+              </div>
+            ))}
+          </Card>
+          <hr className="sched-section-divider" />
+        </>
       )}
 
       <Card

@@ -4079,6 +4079,17 @@ footer .brand .bt-academy, footer .brand .bt-by { color: rgba(255, 255, 255, 0.6
   justify-content: center;
   min-height: 180px;
 }
+.sched-homework-audio {
+  margin-top: 16px;
+}
+.sched-section-divider {
+  display: block;
+  width: 100%;
+  height: 0;
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
 .sched-signatures {
   margin-top: 0;
 }
